@@ -1,0 +1,11 @@
+{
+  "name": "sukhi-fedi-deno",
+  "version": "0.1.0",
+  "imports": {
+    "@fedify/fedify": "jsr:@fedify/fedify@^1.0.0",
+    "nats": "jsr:@nats-io/transport-deno"
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read --unstable-temporal main.ts"
+  }
+}
