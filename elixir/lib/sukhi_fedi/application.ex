@@ -19,10 +19,13 @@ defmodule SukhiFedi.Application do
   end
 
   defp nats_connection_settings do
+    nats_cfg = Application.get_env(:sukhi_fedi, :nats, [])
+    host = Keyword.get(nats_cfg, :host, "127.0.0.1")
+    port = Keyword.get(nats_cfg, :port, 4222)
     %{
       name: :gnat,
       connection_settings: [
-        %{host: "127.0.0.1", port: 4222}
+        %{host: host, port: port}
       ]
     }
   end

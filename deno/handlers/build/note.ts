@@ -1,5 +1,6 @@
 import { Create, Note, fetchDocumentLoader, signObject } from "@fedify/fedify";
 import { getOrCreateKey } from "../../fedify/keys.ts";
+import { injectDefined } from "../../fedify/utils.ts";
 
 export interface BuildNotePayload {
   actor: string;
@@ -37,7 +38,13 @@ export async function handleBuildNote(
     documentLoader,
   });
 
-  const noteJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const noteJson = await signed.toJsonLd({ contextLoader: documentLoader }) as Record<string, unknown>;
+  // Inject _misskey_content so Misskey can render the plain-text/MFM content
+  if (noteJson["object"] && typeof noteJson["object"] === "object") {
+    injectDefined(noteJson["object"] as Record<string, unknown>, {
+      _misskey_content: payload.content,
+    });
+  }
 
   return {
     note: noteJson,

@@ -5,6 +5,12 @@ import { handleInbox } from "./handlers/inbox.ts";
 import { handleBuildNote } from "./handlers/build/note.ts";
 import { handleBuildFollow } from "./handlers/build/follow.ts";
 import { handleBuildAccept } from "./handlers/build/accept.ts";
+import { handleBuildAnnounce } from "./handlers/build/announce.ts";
+import { handleBuildActor } from "./handlers/build/actor.ts";
+import { handleCreateAccount } from "./handlers/account.ts";
+import { handleCreateToken } from "./handlers/token.ts";
+import { registerMisskeyHandlers } from "./handlers/extensions/misskey.ts";
+import { registerMastodonHandlers } from "./handlers/extensions/mastodon.ts";
 import { handleWebFinger } from "./handlers/wellknown/webfinger.ts";
 import { handleNodeInfo } from "./handlers/wellknown/nodeinfo.ts";
 
@@ -34,8 +40,14 @@ await Promise.all([
   subscribe("ap.build.note", handleBuildNote),
   subscribe("ap.build.follow", handleBuildFollow),
   subscribe("ap.build.accept", handleBuildAccept),
+  subscribe("ap.build.announce", handleBuildAnnounce),
+  subscribe("ap.build.actor", handleBuildActor),
+  subscribe("ap.account.create", handleCreateAccount),
+  subscribe("ap.token.create", handleCreateToken),
   subscribe("ap.webfinger", handleWebFinger),
   subscribe("ap.nodeinfo", () => handleNodeInfo()),
+  ...registerMisskeyHandlers(subscribe),
+  ...registerMastodonHandlers(subscribe),
 ]);
 
 console.log("Deno NATS worker started");

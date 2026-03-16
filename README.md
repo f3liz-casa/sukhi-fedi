@@ -183,7 +183,118 @@ POST /inbox  { Follow activity }
   Oban: deliver Accept to requester inbox
 ```
 
-### 4. WebFinger / NodeInfo
+### 4. Outbound Post with Fan-out — Mastodon-compatible
+
+```
+POST /api/notes  { content, token }          (or note_cw / note_hashtag / note_emoji / note_media / mastodon_quote)
+  │
+  ▼ Elixir (ApiController)
+  NATS: ap.auth { token }
+  │
+  ▼ Deno
+  verify token → resolve actor → return actor JSON
+  │
+  ▼ Elixir
+  NATS: ap.build.note  (or ap.build.note_cw / ap.build.note_hashtag / …)
+        { actor, content, [summary, sensitive, hashtags, emoji, media, quoteUrl, …] }
+  │
+  ▼ Deno (registerMastodonHandlers → mastodon/*)
+  build Note/Create → sign with actor private key
+  → return { signed JSON-LD, recipientInboxes: [...] }
+  │
+  ▼ Elixir
+  PostgreSQL: INSERT objects (ap_id, type="Note", raw_json)
+  FanOut.enqueue(object, recipientInboxes)
+  │
+  ▼ Oban workers (one job per inbox, parallel, up to 10 retries)
+  HTTP POST signed JSON-LD → each Mastodon inbox
+  │
+  ▼ Mastodon server
+  receives Create{Note} activity
+```
+
+### 5. Outbound Post with Fan-out — Misskey-compatible
+
+```
+POST /api/notes  { content, token }          (or quote / poll / react / renote / talk)
+  │
+  ▼ Elixir (ApiController)
+  NATS: ap.auth { token }
+  │
+  ▼ Deno
+  verify token → resolve actor → return actor JSON
+  │
+  ▼ Elixir
+  NATS: ap.build.note  (or ap.build.quote / ap.build.poll / ap.build.react /
+                         ap.build.renote / ap.build.talk / ap.build.misskey_actor / …)
+        { actor, content, [choices, multiple, endTime, quoteUrl, emoji, …] }
+  │
+  ▼ Deno (registerMisskeyHandlers → misskey/*)
+  build Note/Create/Question/EmojiReact/Announce → sign with actor private key
+  MFM → HTML conversion applied where needed (ap.mfm.to_html)
+  → return { signed JSON-LD, recipientInboxes: [...] }
+  │
+  ▼ Elixir
+  PostgreSQL: INSERT objects (ap_id, type="Note"/"Question"/"EmojiReact"/…, raw_json)
+  FanOut.enqueue(object, recipientInboxes)
+  │
+  ▼ Oban workers (one job per inbox, parallel, up to 10 retries)
+  HTTP POST signed JSON-LD → each Misskey inbox
+  │
+  ▼ Misskey server
+  receives the activity
+```
+
+### 6. Inbound Post — Mastodon server sends to sukhi
+
+```
+POST /users/:name/inbox  { signed Create{Note} from Mastodon }
+  │
+  ▼ Elixir (InboxController)
+  NATS: ap.verify { raw JSON-LD }
+  │
+  ▼ Deno (handlers/verify.ts)
+  fetch actor public key → verify HTTP Signature → return ok | ng
+  │
+  ▼ Elixir (if ok)
+  NATS: ap.inbox { raw JSON-LD }
+  │
+  ▼ Deno (handlers/inbox.ts)
+  type == "Create" →
+    Create.fromJsonLd → toJsonLd
+    return { action: "save", object: normalized JSON-LD }
+  │
+  ▼ Elixir (Instructions.execute)
+  PostgreSQL: INSERT objects (ap_id, type, actor_id, raw_json)
+  respond 202 Accepted
+```
+
+### 7. Inbound Post — Misskey server sends to sukhi
+
+```
+POST /users/:name/inbox  (or /inbox)  { signed Create{Note} from Misskey }
+  │
+  ▼ Elixir (InboxController)
+  NATS: ap.verify { raw JSON-LD }
+  │
+  ▼ Deno (handlers/verify.ts)
+  fetch actor public key → verify HTTP Signature → return ok | ng
+  │
+  ▼ Elixir (if ok)
+  NATS: ap.inbox { raw JSON-LD }
+  │
+  ▼ Deno (handlers/inbox.ts)
+  type == "Create" →
+    Create.fromJsonLd → toJsonLd
+    return { action: "save", object: normalized JSON-LD }
+    (Misskey-specific extensions such as MFM are preserved in raw_json as-is)
+  │
+  ▼ Elixir (Instructions.execute)
+  PostgreSQL: INSERT objects (ap_id, type, actor_id, raw_json)
+  respond 202 Accepted
+```
+
+### 8. WebFinger / NodeInfo
 
 ```
 GET /.well-known/webfinger?resource=acct:user@domain
@@ -314,6 +425,199 @@ deno/
 ├── fedify/
 │   └── context.ts            # fedify setup, key loading
 └── deno.json
+```
+
+---
+
+## API Endpoints
+
+All endpoints accept and return `application/json`. Authentication for user-facing API is done via a `token` field in the request body.
+
+### GET /.well-known/webfinger
+
+WebFinger endpoint for actor discovery.
+
+| Query Param | Type | Required | Description |
+|---|---|---|---|
+| `resource` | string | ✅ | Resource identifier (e.g., `acct:alice@example.com`) |
+
+```bash
+curl -X GET "http://localhost:4000/.well-known/webfinger?resource=acct:alice@example.com"
+```
+
+### POST /inbox (Shared) or /users/:name/inbox
+
+ActivityPub inbox for receiving activities from other actors.
+
+```bash
+curl -X POST http://localhost:4000/inbox \
+  -H "Content-Type: application/activity+json" \
+  -d '{
+    "@context": "https://www.w3.org/ns/activitystreams",
+    "id": "https://example.com/activities/1",
+    "type": "Follow",
+    "actor": "https://example.com/users/bob",
+    "object": "https://your.domain/users/alice"
+  }'
+```
+
+### POST /api/accounts
+
+Create a new account. Generates an Ed25519 key pair via the Deno worker and stores the account in the database.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `username` | string | ✅ | Unique username for the account |
+| `display_name` | string | ❌ | Display name shown on the profile |
+| `summary` | string | ❌ | Profile bio / description |
+
+**Response (201):**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer | Internal account ID |
+| `username` | string | The created username |
+| `actor_uri` | string | Full ActivityPub actor URI |
+
+```bash
+curl -X POST http://localhost:4000/api/accounts \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","display_name":"Alice","summary":"Hello!"}'
+```
+
+---
+
+### POST /api/tokens
+
+Issue an authentication token for an existing account. The token is stored on the account and used to authenticate subsequent API requests.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `username` | string | ✅ | Username of the account to issue a token for |
+
+**Response (201):**
+
+| Field | Type | Description |
+|---|---|---|
+| `token` | string | Bearer token to use in subsequent API calls |
+
+```bash
+curl -X POST http://localhost:4000/api/tokens \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice"}'
+```
+
+---
+
+### POST /api/notes
+
+Create a plain note.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `content` | string | ✅ | Note text (MFM supported) |
+
+```bash
+curl -X POST http://localhost:4000/api/notes \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","content":"Hello, Fediverse!"}'
+```
+
+### POST /api/notes/cw
+
+Create a note with a content warning.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `content` | string | ✅ | Note text |
+| `summary` | string | ✅ | CW summary (shown before expanding) |
+| `sensitive` | boolean | ❌ | Mark as sensitive (default: `true`) |
+
+```bash
+curl -X POST http://localhost:4000/api/notes/cw \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","content":"spoiler body","summary":"CW: spoiler"}'
+```
+
+### POST /api/boosts
+
+Boost (Announce) an existing AP object.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `object` | string | ✅ | URL of the AP object to boost |
+
+```bash
+curl -X POST http://localhost:4000/api/boosts \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","object":"https://example.com/users/alice/notes/123"}'
+```
+
+### POST /api/reacts
+
+React to an AP object with an emoji.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `object` | string | ✅ | URL of the AP object to react to |
+| `emoji` | string | ✅ | Emoji character or shortcode |
+
+```bash
+curl -X POST http://localhost:4000/api/reacts \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","object":"https://example.com/users/alice/notes/123","emoji":"👍"}'
+```
+
+### POST /api/quotes
+
+Create a note that quotes another AP object.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `content` | string | ✅ | Note text |
+| `quote_url` | string | ✅ | URL of the AP object to quote |
+
+```bash
+curl -X POST http://localhost:4000/api/quotes \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","content":"Interesting!","quote_url":"https://example.com/users/alice/notes/123"}'
+```
+
+### POST /api/polls
+
+Create a poll.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | ✅ | Auth token |
+| `content` | string | ✅ | Poll question text |
+| `choices` | string[] | ✅ | Array of choice strings |
+| `multiple` | boolean | ❌ | Allow multiple votes (default: `false`) |
+| `end_time` | string | ❌ | ISO 8601 expiry datetime |
+
+```bash
+curl -X POST http://localhost:4000/api/polls \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN","content":"Favorite language?","choices":["Elixir","TypeScript","Other"]}'
+```
+
+### Response
+
+All endpoints return `201 Created` on success:
+
+```json
+{ "id": "https://your.domain/notes/<uuid>" }
+```
+
+On error, `400 Bad Request` is returned:
+
+```json
+{ "error": "<reason>" }
 ```
 
 ---
