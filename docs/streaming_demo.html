@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sukhi Fedi - Real-Time Streaming Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { margin-bottom: 20px; }
+        .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .controls input { padding: 8px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .controls button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .controls button:hover { background: #0056b3; }
+        .controls button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { padding: 10px; margin-top: 10px; border-radius: 4px; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .feed { background: white; border-radius: 8px; padding: 20px; }
+        .post { padding: 15px; border-bottom: 1px solid #eee; }
+        .post:last-child { border-bottom: none; }
+        .post-meta { color: #666; font-size: 0.9em; margin-bottom: 5px; }
+        .post-content { line-height: 1.5; }
+        .empty { text-align: center; color: #999; padding: 40px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Sukhi Fedi - Real-Time Streaming</h1>
+        
+        <div class="controls">
+            <h2>Connection</h2>
+            <div style="margin-top: 10px;">
+                <label>
+                    <input type="radio" name="feed" value="local" checked> Local Feed (Public)
+                </label>
+                <label style="margin-left: 20px;">
+                    <input type="radio" name="feed" value="home"> Home Feed (Auth Required)
+                </label>
+            </div>
+            <div style="margin-top: 10px;">
+                <input type="text" id="token" placeholder="Bearer token (for home feed)" style="width: 300px;">
+                <button id="connect">Connect</button>
+                <button id="disconnect" disabled>Disconnect</button>
+            </div>
+            <div id="status" class="status disconnected">Disconnected</div>
+        </div>
+
+        <div class="feed">
+            <h2>Live Feed</h2>
+            <div id="posts" class="empty">Connect to start receiving posts...</div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        const postsContainer = document.getElementById('posts');
+        const statusDiv = document.getElementById('status');
+        const connectBtn = document.getElementById('connect');
+        const disconnectBtn = document.getElementById('disconnect');
+        const tokenInput = document.getElementById('token');
+
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+
+        function connect() {
+            const feedType = document.querySelector('input[name="feed"]:checked').value;
+            const token = tokenInput.value.trim();
+            
+            if (feedType === 'home' && !token) {
+                alert('Bearer token required for home feed');
+                return;
+            }
+
+            const url = `http://localhost:4000/api/streaming/${feedType}`;
+            
+            try {
+                if (feedType === 'home') {
+                    // For authenticated streams, we need to use fetch with EventSource polyfill
+                    // or use a proxy. For demo purposes, we'll show the limitation.
+                    alert('Note: Browser EventSource does not support custom headers.\nUse curl or a proper client:\n\ncurl -N -H "Authorization: Bearer ' + token + '" ' + url);
+                    return;
+                }
+                
+                eventSource = new EventSource(url);
+                
+                eventSource.addEventListener('update', (event) => {
+                    const post = JSON.parse(event.data);
+                    addPost(post);
+                });
+
+                eventSource.onopen = () => {
+                    statusDiv.textContent = `Connected to ${feedType} feed`;
+                    statusDiv.className = 'status connected';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    
+                    if (postsContainer.classList.contains('empty')) {
+                        postsContainer.innerHTML = '<div class="empty">Waiting for posts...</div>';
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    console.error('SSE error:', error);
+                    disconnect();
+                };
+            } catch (error) {
+                alert('Connection failed: ' + error.message);
+            }
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            
+            statusDiv.textContent = 'Disconnected';
+            statusDiv.className = 'status disconnected';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        }
+
+        function addPost(post) {
+            // Remove empty message
+            const emptyMsg = postsContainer.querySelector('.empty');
+            if (emptyMsg) {
+                emptyMsg.remove();
+            }
+
+            const postEl = document.createElement('div');
+            postEl.className = 'post';
+            
+            const time = new Date(post.created_at || Date.now()).toLocaleString();
+            
+            postEl.innerHTML = `
+                <div class="post-meta">
+                    <strong>Post #${post.id || 'unknown'}</strong> • ${time}
+                </div>
+                <div class="post-content">${escapeHtml(post.content || JSON.stringify(post))}</div>
+            `;
+            
+            // Add to top of feed
+            postsContainer.insertBefore(postEl, postsContainer.firstChild);
+            
+            // Limit to 50 posts
+            while (postsContainer.children.length > 50) {
+                postsContainer.removeChild(postsContainer.lastChild);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', disconnect);
+    </script>
+</body>
+</html>

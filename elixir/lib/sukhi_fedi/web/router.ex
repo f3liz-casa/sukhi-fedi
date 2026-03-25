@@ -5,11 +5,14 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.ApiController
   alias SukhiFedi.Web.InboxController
   alias SukhiFedi.Web.WebfingerController
+  alias SukhiFedi.Web.ProxyPlug
 
-  plug Plug.Logger
-  plug :match
-  plug Plug.Parsers, parsers: [:json], json_decoder: Jason
-  plug :dispatch
+  plug(Plug.Logger)
+  plug(:match)
+  plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
+  plug(:dispatch)
+
+  # ── ActivityPub / well-known (handled natively by Elixir) ────────────────
 
   get "/.well-known/webfinger" do
     WebfingerController.call(conn, [])
@@ -23,34 +26,19 @@ defmodule SukhiFedi.Web.Router do
     InboxController.shared_inbox(conn, [])
   end
 
-  post "/api/accounts" do
-    ApiController.create_account(conn, [])
-  end
-  post "/api/tokens" do
-    ApiController.create_token(conn, [])
-  end
-  post "/api/notes" do
-    ApiController.create_note(conn, [])
+  # ── REST API v1 + admin — proxied to Deno ────────────────────────────────
+  #
+  # Deno's Hono server handles auth, business logic, and NATS RPC.
+  # For streaming endpoints Deno responds with X-Delegate-To: Streaming
+  # and ProxyPlug hands the socket to StreamingController instead of
+  # forwarding the response.
+
+  match "/api/v1/*_" do
+    ProxyPlug.call(conn, [])
   end
 
-  post "/api/notes/cw" do
-    ApiController.create_note_cw(conn, [])
-  end
-
-  post "/api/boosts" do
-    ApiController.create_boost(conn, [])
-  end
-
-  post "/api/reacts" do
-    ApiController.create_react(conn, [])
-  end
-
-  post "/api/quotes" do
-    ApiController.create_quote(conn, [])
-  end
-
-  post "/api/polls" do
-    ApiController.create_poll(conn, [])
+  match "/api/admin/*_" do
+    ProxyPlug.call(conn, [])
   end
 
   match _ do

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: MPL-2.0
+defmodule SukhiFedi.Schema.PushSubscription do
+  use Ecto.Schema
+
+  schema "push_subscriptions" do
+    belongs_to :account, SukhiFedi.Schema.Account
+    field :endpoint, :string
+    field :p256dh_key, :string
+    field :auth_key, :string
+    field :alerts, :map
+    timestamps()
+  end
+end

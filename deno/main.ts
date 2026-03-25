@@ -13,6 +13,7 @@ import { registerMisskeyHandlers } from "./handlers/extensions/misskey.ts";
 import { registerMastodonHandlers } from "./handlers/extensions/mastodon.ts";
 import { handleWebFinger } from "./handlers/wellknown/webfinger.ts";
 import { handleNodeInfo } from "./handlers/wellknown/nodeinfo.ts";
+import { createApi } from "./api.ts";
 
 const nc = await connect({ servers: Deno.env.get("NATS_URL") ?? "nats://localhost:4222" });
 
@@ -33,6 +34,7 @@ async function subscribe<T>(subject: string, handler: (payload: T) => Promise<un
   }
 }
 
+// ── NATS workers (ap.* subjects) ─────────────────────────────────────────────
 await Promise.all([
   subscribe("ap.auth", handleAuth),
   subscribe("ap.verify", handleVerify),
@@ -50,4 +52,9 @@ await Promise.all([
   ...registerMastodonHandlers(subscribe),
 ]);
 
-console.log("Deno NATS worker started");
+// ── HTTP server (proxied from Elixir via ProxyPlug) ───────────────────────────
+const port = parseInt(Deno.env.get("PORT") ?? "8000");
+const api = createApi(nc);
+Deno.serve({ port }, api.fetch);
+
+console.log(`Deno worker started — HTTP on :${port}, NATS connected`);
