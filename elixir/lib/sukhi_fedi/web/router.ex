@@ -6,7 +6,11 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.InboxController
   alias SukhiFedi.Web.WebfingerController
   alias SukhiFedi.Web.ProxyPlug
+  alias SukhiFedi.Web.ActorController
+  alias SukhiFedi.Web.FeaturedController
+  alias SukhiFedi.Web.CollectionController
 
+  plug(OpentelemetryPlug.PropagationPlug)
   plug(Plug.Logger)
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
@@ -16,6 +20,22 @@ defmodule SukhiFedi.Web.Router do
 
   get "/.well-known/webfinger" do
     WebfingerController.call(conn, [])
+  end
+
+  get "/users/:name" do
+    ActorController.show(conn, [])
+  end
+
+  get "/users/:name/featured" do
+    FeaturedController.show(conn, [])
+  end
+
+  get "/users/:name/followers" do
+    CollectionController.followers(conn, [])
+  end
+
+  get "/users/:name/following" do
+    CollectionController.following(conn, [])
   end
 
   post "/users/:name/inbox" do
@@ -39,6 +59,10 @@ defmodule SukhiFedi.Web.Router do
 
   match "/api/admin/*_" do
     ProxyPlug.call(conn, [])
+  end
+
+  get "/metrics" do
+    PromEx.Plug.call(conn, PromEx.Plug.init(prom_ex_module: SukhiFedi.PromEx))
   end
 
   match _ do

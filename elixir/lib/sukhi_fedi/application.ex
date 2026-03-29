@@ -6,7 +6,12 @@ defmodule SukhiFedi.Application do
 
   @impl true
   def start(_type, _args) do
+    OpentelemetryEcto.setup([:sukhi_fedi, :repo])
+    OpentelemetryOban.setup()
+    OpentelemetryPlug.setup()
+
     children = [
+      SukhiFedi.PromEx,
       SukhiFedi.Repo,
       {Bandit, plug: SukhiFedi.Web.Router, port: 4000},
       {Gnat.ConnectionSupervisor, nats_connection_settings()},

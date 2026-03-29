@@ -2,7 +2,8 @@
 defmodule SukhiFedi.Web.DbNatsListener do
   use GenServer
   require Logger
-  alias SukhiFedi.{Accounts, Auth, Notes, Social, Repo, Schema, AP, Feeds, Articles, Media, Bookmarks, Moderation}
+  alias SukhiFedi.{Accounts, Auth, Notes, Social, Repo, Schema, AP, Feeds, Articles, Media, Bookmarks, Moderation, Relays, PinnedNotes}
+  alias SukhiFedi.Schema.ConversationParticipant
   import Ecto.Query
 
   def start_link(_) do
@@ -11,19 +12,22 @@ defmodule SukhiFedi.Web.DbNatsListener do
 
   @impl true
   def init(_) do
-    {:ok, _sub} = Gnat.sub(:gnat, self(), "db.*")
+    # Use db.> (multi-level wildcard) so topics like db.admin.report.list are caught
+    {:ok, _sub} = Gnat.sub(:gnat, self(), "db.>")
     {:ok, %{}}
   end
 
   @impl true
   def handle_info({:msg, %{topic: topic, reply_to: reply_to, body: body}}, state) do
-    case Jason.decode(body) do
-      {:ok, %{"request_id" => _req_id, "payload" => payload}} ->
-        result = handle_topic(topic, payload)
-        Gnat.pub(:gnat, reply_to, Jason.encode!(result))
-      _ ->
-        :ok
-    end
+    Task.start(fn ->
+      case Jason.decode(body) do
+        {:ok, %{"request_id" => _req_id, "payload" => payload}} ->
+          result = handle_topic(topic, payload)
+          Gnat.pub(:gnat, reply_to, Jason.encode!(result))
+        _ ->
+          :ok
+      end
+    end)
     {:noreply, state}
   end
 
@@ -66,7 +70,10 @@ defmodule SukhiFedi.Web.DbNatsListener do
       "content" => params["text"],
       "visibility" => params["visibility"] || "public",
       "cw" => params["cw"],
-      "mfm" => params["mfm"]
+      "mfm" => params["mfm"],
+      "in_reply_to_ap_id" => params["in_reply_to_ap_id"],
+      "conversation_ap_id" => params["conversation_ap_id"],
+      "quote_of_ap_id" => params["quote_of_ap_id"]
     }
 
     case Notes.create_note(attrs) do
@@ -392,9 +399,157 @@ defmodule SukhiFedi.Web.DbNatsListener do
     end
   end
 
+  # ── Direct Messages / Conversations ───────────────────────────────────────
+
+  defp handle_topic("db.dm.create", %{"account_id" => account_id} = params) do
+    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    conversation_ap_id =
+      params["conversation_ap_id"] ||
+        "https://#{domain}/conversations/#{:crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)}"
+
+    attrs = %{
+      "account_id" => account_id,
+      "content" => params["text"] || params["content"],
+      "visibility" => "direct",
+      "cw" => params["cw"],
+      "in_reply_to_ap_id" => params["in_reply_to_ap_id"],
+      "conversation_ap_id" => conversation_ap_id
+    }
+
+    case Notes.create_note(attrs) do
+      {:ok, note} ->
+        # Record the sender as a conversation participant
+        %ConversationParticipant{}
+        |> ConversationParticipant.changeset(%{
+          conversation_ap_id: conversation_ap_id,
+          account_id: account_id
+        })
+        |> Repo.insert(on_conflict: :nothing)
+
+        # Record each recipient
+        Enum.each(params["recipient_ids"] || [], fn rid ->
+          %ConversationParticipant{}
+          |> ConversationParticipant.changeset(%{
+            conversation_ap_id: conversation_ap_id,
+            account_id: rid
+          })
+          |> Repo.insert(on_conflict: :nothing)
+        end)
+
+        ok_resp(Map.put(serialize_note(note), :conversation_ap_id, conversation_ap_id))
+
+      {:error, changeset} ->
+        error_resp("Failed to create DM: #{inspect(changeset.errors)}")
+    end
+  end
+
+  defp handle_topic("db.dm.list", %{"account_id" => account_id} = params) do
+    limit = parse_int(params["limit"], 20)
+
+    conversations =
+      from(cp in ConversationParticipant,
+        where: cp.account_id == ^account_id,
+        order_by: [desc: cp.created_at],
+        limit: ^limit,
+        select: cp.conversation_ap_id
+      )
+      |> Repo.all()
+
+    ok_resp(%{conversations: conversations})
+  end
+
+  defp handle_topic("db.dm.conversation.get", %{"account_id" => account_id, "conversation_ap_id" => conv_id} = params) do
+    # Verify the account is a participant
+    is_participant =
+      Repo.exists?(
+        from(cp in ConversationParticipant,
+          where: cp.account_id == ^account_id and cp.conversation_ap_id == ^conv_id
+        )
+      )
+
+    if is_participant do
+      limit = parse_int(params["limit"], 20)
+
+      notes =
+        from(n in Schema.Note,
+          where: n.conversation_ap_id == ^conv_id,
+          order_by: [asc: n.created_at],
+          limit: ^limit
+        )
+        |> Repo.all()
+
+      ok_resp(%{notes: Enum.map(notes, &serialize_note/1)})
+    else
+      error_resp("Forbidden")
+    end
+  end
+
+  # ── Pinned Notes (Featured Collection) ────────────────────────────────────
+
+  defp handle_topic("db.note.pin", %{"account_id" => account_id, "note_id" => note_id}) do
+    case PinnedNotes.pin(account_id, note_id) do
+      {:ok, _} -> ok_resp(%{success: true})
+      _ -> error_resp("Failed to pin note")
+    end
+  end
+
+  defp handle_topic("db.note.unpin", %{"account_id" => account_id, "note_id" => note_id}) do
+    PinnedNotes.unpin(account_id, note_id)
+    ok_resp(%{success: true})
+  end
+
+  # ── Relay Management (Admin) ───────────────────────────────────────────────
+
+  defp handle_topic("db.admin.relay.subscribe", %{"actor_uri" => actor_uri, "admin_id" => admin_id} = params) do
+    inbox_uri = params["inbox_uri"] || derive_inbox_uri(actor_uri)
+
+    case Relays.subscribe(actor_uri, inbox_uri, admin_id) do
+      {:ok, relay} ->
+        # Build and send a Follow activity to the relay
+        domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+        instance_actor = "https://#{domain}/actor"
+        follow_id = "https://#{domain}/follows/#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
+
+        AP.Client.request("ap.build.follow", %{
+          actor: instance_actor,
+          object: actor_uri,
+          followId: follow_id,
+          recipientInboxes: [inbox_uri]
+        })
+
+        ok_resp(%{id: relay.id, actor_uri: relay.actor_uri, state: relay.state})
+
+      {:error, _} ->
+        error_resp("Failed to subscribe to relay")
+    end
+  end
+
+  defp handle_topic("db.admin.relay.unsubscribe", %{"id" => id, "admin_id" => _admin_id}) do
+    case Relays.unsubscribe(parse_int(id, 0)) do
+      {:ok, _} -> ok_resp(%{success: true})
+      {:error, :not_found} -> error_resp("Relay not found")
+      _ -> error_resp("Failed to unsubscribe")
+    end
+  end
+
+  defp handle_topic("db.admin.relay.list", _) do
+    relays =
+      Relays.list()
+      |> Enum.map(fn r ->
+        %{id: r.id, actor_uri: r.actor_uri, inbox_uri: r.inbox_uri, state: r.state}
+      end)
+
+    ok_resp(%{relays: relays})
+  end
+
   defp handle_topic(topic, _) do
     Logger.warning("Unhandled NATS db topic: #{topic}")
     error_resp("Unknown topic")
+  end
+
+  defp derive_inbox_uri(actor_uri) do
+    # Guess inbox URI — real implementation would fetch the actor profile
+    "#{actor_uri}/inbox"
   end
 
   defp ok_resp(data), do: %{ok: true, data: data}
@@ -453,7 +608,10 @@ defmodule SukhiFedi.Web.DbNatsListener do
       cw: note.cw,
       mfm: note.mfm,
       created_at: note.created_at,
-      account_id: note.account_id
+      account_id: note.account_id,
+      in_reply_to_ap_id: note.in_reply_to_ap_id,
+      conversation_ap_id: note.conversation_ap_id,
+      quote_of_ap_id: note.quote_of_ap_id
     }
   end
 end

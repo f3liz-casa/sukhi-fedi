@@ -9,6 +9,9 @@ defmodule SukhiFedi.Schema.Note do
     field :ap_id, :string
     field :cw, :string
     field :mfm, :string
+    field :in_reply_to_ap_id, :string
+    field :conversation_ap_id, :string
+    field :quote_of_ap_id, :string
     belongs_to :account, SukhiFedi.Schema.Account
     many_to_many :media, SukhiFedi.Schema.Media, join_through: "note_media"
     has_one :poll, SukhiFedi.Schema.Poll
@@ -19,8 +22,8 @@ defmodule SukhiFedi.Schema.Note do
 
   def changeset(note, attrs) do
     note
-    |> cast(attrs, [:content, :visibility, :account_id, :cw, :mfm])
+    |> cast(attrs, [:content, :visibility, :account_id, :cw, :mfm, :in_reply_to_ap_id, :conversation_ap_id, :quote_of_ap_id])
     |> validate_required([:content, :account_id])
-    |> validate_inclusion(:visibility, ["public", "followers"])
+    |> validate_inclusion(:visibility, ["public", "followers", "direct"])
   end
 end

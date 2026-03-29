@@ -1,0 +1,36 @@
+# Kamal 2.x — Deno image build and push only
+#
+# This file does NOT deploy anything. It exists solely to build the Deno image
+# and push it to OCIR so config/deploy.yml can reference it as an accessory.
+#
+# Usage:
+#   kamal build push --config-file config/deploy_deno.yml
+#
+# After pushing, reload the accessory on the server:
+#   kamal accessory reboot deno
+
+service: sukhi-fedi-deno
+
+image: <region>.ocir.io/<tenancy-namespace>/sukhi-fedi-deno
+
+# Kamal requires at least one server entry even for build-only configs
+servers:
+  - <INSTANCE_PUBLIC_IP>
+
+registry:
+  server: <region>.ocir.io
+  username:
+    - OCIR_USERNAME
+  password:
+    - OCIR_AUTH_TOKEN
+
+builder:
+  arch: arm64
+  context: deno
+  dockerfile: deno/Dockerfile
+  remote:
+    arch: arm64
+    host: ssh://deploy@<INSTANCE_PUBLIC_IP>
+
+ssh:
+  user: deploy

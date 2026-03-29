@@ -1,4 +1,5 @@
-import { Accept, Follow, fetchDocumentLoader, signObject } from "@fedify/fedify";
+import { Accept, Follow, signObject } from "@fedify/fedify";
+import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
 import { getOrCreateKey } from "../../fedify/keys.ts";
 
 export interface BuildAcceptPayload {

@@ -15,8 +15,8 @@ import {
   Remove,
   Undo,
   Update,
-  fetchDocumentLoader,
 } from "@fedify/fedify";
+import { cachedDocumentLoader as fetchDocumentLoader } from "../fedify/context.ts";
 
 export interface InboxPayload {
   raw: Record<string, unknown>;
@@ -37,12 +37,17 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
     const actorId = follow.actorId;
     if (actorId == null) return { action: "ignore" };
 
+    const remoteActor = await follow.getActor({ documentLoader });
+    if (remoteActor == null || remoteActor.inboxId == null) return { action: "ignore" };
+    const inboxUrl = remoteActor.inboxId.href;
+
+    const followeeUri = follow.objectId?.href;
     const followJson = await follow.toJsonLd({ contextLoader: documentLoader });
     return {
       action: "save_and_reply",
-      save: { follow: followJson },
+      save: { follow: followJson, followeeUri },
       reply: followJson,
-      inbox: actorId.href,
+      inbox: inboxUrl,
     };
   }
 

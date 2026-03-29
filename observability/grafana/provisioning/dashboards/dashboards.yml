@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MPL-2.0
+# Dashboard file provider — drop JSON files into /etc/grafana/dashboards.
+# Recommended community dashboards to import from grafana.com:
+#   - 14637  PromEx BEAM (Erlang VM)
+#   - 17871  PromEx Ecto
+#   - 17872  PromEx Oban
+#   - 14057  NATS Server
+apiVersion: 1
+
+providers:
+  - name: sukhi-fedi
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

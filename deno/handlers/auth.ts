@@ -1,4 +1,5 @@
-import { lookupObject, isActor, fetchDocumentLoader } from "@fedify/fedify";
+import { lookupObject, isActor } from "@fedify/fedify";
+import { cachedDocumentLoader as fetchDocumentLoader } from "../fedify/context.ts";
 
 export interface AuthPayload {
   token: string;

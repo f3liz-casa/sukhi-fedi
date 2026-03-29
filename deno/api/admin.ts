@@ -70,5 +70,25 @@ export function createAdminRouter(callElixir: CallElixir) {
     h("db.admin.emoji.delete", (c) => ({ id: c.req.param("id") }), { status: 204 })
   );
 
+  // ── Relay Management ───────────────────────────────────────────────────────
+
+  app.post("/relays",
+    h("db.admin.relay.subscribe", async (c) => ({
+      admin_id: c.get("account").id,
+      ...(await c.req.json()),
+    }), { status: 201 })
+  );
+
+  app.delete("/relays/:id",
+    h("db.admin.relay.unsubscribe", (c) => ({
+      id: c.req.param("id"),
+      admin_id: c.get("account").id,
+    }), { status: 204 })
+  );
+
+  app.get("/relays",
+    h("db.admin.relay.list", () => ({}))
+  );
+
   return app;
 }

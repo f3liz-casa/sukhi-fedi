@@ -16,7 +16,11 @@ defmodule SukhiFedi.Web.ActorController do
         actor_uri = "https://#{domain}/users/#{username}"
         
         actor = %{
-          "@context" => ["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"],
+          "@context" => [
+            "https://www.w3.org/ns/activitystreams",
+            "https://w3id.org/security/v1",
+            %{"featured" => %{"@id" => "toot:featured", "@type" => "@id"}, "toot" => "http://joinmastodon.org/ns#"}
+          ],
           "id" => actor_uri,
           "type" => "Person",
           "preferredUsername" => username,
@@ -26,6 +30,7 @@ defmodule SukhiFedi.Web.ActorController do
           "outbox" => "#{actor_uri}/outbox",
           "followers" => "#{actor_uri}/followers",
           "following" => "#{actor_uri}/following",
+          "featured" => "#{actor_uri}/featured",
           "publicKey" => %{
             "id" => "#{actor_uri}#main-key",
             "owner" => actor_uri,

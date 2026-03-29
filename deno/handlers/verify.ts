@@ -1,4 +1,5 @@
-import { verifyRequest, fetchDocumentLoader } from "@fedify/fedify";
+import { verifyRequest } from "@fedify/fedify";
+import { cachedDocumentLoader as fetchDocumentLoader } from "../fedify/context.ts";
 
 export interface VerifyPayload {
   raw: string;

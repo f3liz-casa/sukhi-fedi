@@ -23,6 +23,79 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Observability ────────────────────────────────────────────────────────────
+
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - jaeger
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:13133/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128m
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256m
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otelcol
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256m
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - jaeger
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128m
+
+  # ── Application ──────────────────────────────────────────────────────────────
+
   elixir:
     build:
       context: ./elixir
@@ -36,10 +109,13 @@ services:
       DB_POOL_SIZE: "10"
       NATS_HOST: nats
       NATS_PORT: "4222"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318
     depends_on:
       postgres:
         condition: service_healthy
       nats:
+        condition: service_healthy
+      otelcol:
         condition: service_healthy
 
   deno:
@@ -47,9 +123,16 @@ services:
       context: ./deno
     environment:
       NATS_URL: nats://nats:4222
+      OTEL_DENO: "1"
+      OTEL_SERVICE_NAME: sukhi-fedi-deno
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318
     depends_on:
       nats:
+        condition: service_healthy
+      otelcol:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:

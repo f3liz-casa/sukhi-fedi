@@ -1,5 +1,6 @@
-import { fetchDocumentLoader, signObject } from "@fedify/fedify";
+import { signObject } from "@fedify/fedify";
 import { getOrCreateKey } from "./keys.ts";
+import { cachedDocumentLoader as fetchDocumentLoader } from "./context.ts";
 
 export async function serialize(
   obj: { toJsonLd(opts: { contextLoader: typeof fetchDocumentLoader }): Promise<unknown> },

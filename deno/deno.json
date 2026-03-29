@@ -4,9 +4,11 @@
   "imports": {
     "@fedify/fedify": "jsr:@fedify/fedify@^1.0.0",
     "nats": "jsr:@nats-io/transport-deno",
-    "hono": "npm:hono@^4"
+    "hono": "npm:hono@^4",
+    "@opentelemetry/api": "npm:@opentelemetry/api@^1.9.0"
   },
   "tasks": {
-    "start": "deno run --allow-net --allow-env --allow-read --unstable-temporal main.ts"
+    "start": "deno run --allow-net --allow-env --allow-read --unstable-temporal --unstable-otel main.ts",
+    "test": "deno test --allow-net --allow-env --allow-read --unstable-temporal --unstable-otel"
   }
 }

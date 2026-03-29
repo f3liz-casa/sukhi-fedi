@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MPL-2.0
+# OpenTelemetry Collector — receives OTLP from Elixir & Deno,
+# forwards traces to Jaeger and exposes metrics for Prometheus scraping.
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 100
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  # Forward traces to Jaeger via OTLP gRPC
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Expose metrics as a Prometheus scrape endpoint on :8889
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: sukhi_fedi
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

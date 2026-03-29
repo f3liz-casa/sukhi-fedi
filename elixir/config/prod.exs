@@ -9,3 +9,9 @@ config :sukhi_fedi, SukhiFedi.Repo,
 config :sukhi_fedi, :nats,
   host: System.get_env("NATS_HOST", "127.0.0.1"),
   port: String.to_integer(System.get_env("NATS_PORT", "4222"))
+
+config :sukhi_fedi, :deno_url, System.get_env("DENO_URL", "http://localhost:8000")
+
+config :opentelemetry_exporter,
+  otlp_protocol: :http_protobuf,
+  otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")

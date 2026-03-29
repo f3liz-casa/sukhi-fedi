@@ -42,7 +42,20 @@ defmodule SukhiFedi.MixProject do
       # HTTP client (for Oban delivery worker)
       {:req, "~> 0.5"},
 
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
-]
+      # Metrics (Prometheus)
+      {:prom_ex, "~> 1.9"},
+
+      # OpenTelemetry
+      {:opentelemetry_api, "~> 1.4"},
+      {:opentelemetry, "~> 1.5"},
+      {:opentelemetry_exporter, "~> 1.8"},
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:opentelemetry_oban, "~> 1.1"},
+      {:opentelemetry_plug, "~> 2.0"},
+
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:bypass, "~> 2.1", only: :test},
+      {:mox, "~> 1.0", only: :test}
+    ]
   end
 end

@@ -100,5 +100,19 @@ export function createNotesRouter(callElixir: CallElixir) {
     }), { status: 201 })
   );
 
+  app.post("/v1/notes/:id/pin",
+    h("db.note.pin", (c) => ({
+      account_id: c.get("account").id,
+      note_id: c.req.param("id"),
+    }), { status: 200 })
+  );
+
+  app.delete("/v1/notes/:id/pin",
+    h("db.note.unpin", (c) => ({
+      account_id: c.get("account").id,
+      note_id: c.req.param("id"),
+    }), { status: 204 })
+  );
+
   return app;
 }

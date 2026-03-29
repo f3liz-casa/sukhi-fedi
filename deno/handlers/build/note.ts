@@ -1,4 +1,5 @@
-import { Create, Note, fetchDocumentLoader, signObject } from "@fedify/fedify";
+import { Create, Note, signObject } from "@fedify/fedify";
+import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
 import { getOrCreateKey } from "../../fedify/keys.ts";
 import { injectDefined } from "../../fedify/utils.ts";
 

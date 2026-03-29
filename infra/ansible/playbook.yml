@@ -1,0 +1,12 @@
+---
+- name: Configure sukhi-fedi production server
+  hosts: sukhi_fedi
+  become: true
+  vars:
+    deploy_user: deploy
+    deploy_home: /home/deploy
+    data_mount: /mnt/data
+    # Paravirtualized OCI block volume — typically /dev/sdb on Ubuntu 22.04
+    data_device: /dev/sdb
+  roles:
+    - server_setup

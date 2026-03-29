@@ -31,6 +31,7 @@ import { createFeedsRouter } from "./api/feeds.ts";
 import { createMediaRouter } from "./api/media.ts";
 import { createSocialRouter } from "./api/social.ts";
 import { createAdminRouter } from "./api/admin.ts";
+import { createConversationsRouter } from "./api/conversations.ts";
 
 export function createApi(nc: NatsConnection) {
   const { callElixir, createElixirHandler } = makeNats(nc);
@@ -87,6 +88,7 @@ export function createApi(nc: NatsConnection) {
   protectedApp.route("/", createNotesRouter(callElixir));   // POST/DELETE notes, likes, reactions, votes
   protectedApp.route("/", createMediaRouter(callElixir));
   protectedApp.route("/", createSocialRouter(callElixir));
+  protectedApp.route("/", createConversationsRouter(callElixir));
 
   app.route("/", protectedApp);
 
