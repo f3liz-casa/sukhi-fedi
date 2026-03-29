@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Release do
   @moduledoc """
   Tasks for running inside an Elixir release (no Mix available).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { signRequest, importJwk } from "@fedify/fedify";
 
 export interface SignDeliveryPayload {

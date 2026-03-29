@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Test Priority 5: Moderation & Extended UX
 
 set -e

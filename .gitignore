@@ -9,5 +9,7 @@ infra/terraform/.terraform.lock.hcl
 # Ansible
 infra/ansible/inventory.ini
 
-# Kamal secrets
+# Kamal secrets and generated configs
 .kamal/secrets
+config/deploy.yml
+config/deploy_deno.yml

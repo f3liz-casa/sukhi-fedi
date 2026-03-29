@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.PromEx do
   use PromEx, otp_app: :sukhi_fedi
 

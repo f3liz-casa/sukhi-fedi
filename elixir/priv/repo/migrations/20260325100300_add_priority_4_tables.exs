@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Repo.Migrations.AddPriority4Tables do
   use Ecto.Migration
 

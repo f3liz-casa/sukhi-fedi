@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Application do
   @moduledoc false
 
@@ -8,7 +8,6 @@ defmodule SukhiFedi.Application do
   def start(_type, _args) do
     OpentelemetryEcto.setup([:sukhi_fedi, :repo])
     OpentelemetryOban.setup()
-    OpentelemetryPlug.setup()
 
     children = [
       SukhiFedi.PromEx,

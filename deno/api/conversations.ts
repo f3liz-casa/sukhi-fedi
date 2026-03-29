@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Hono } from "hono";
 import type { AppEnv } from "../lib/types.ts";
 import type { CallElixir } from "../lib/nats.ts";

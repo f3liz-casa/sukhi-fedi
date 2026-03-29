@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.FeaturedController do
   @moduledoc """
   Serves the featured (pinned posts) OrderedCollection for an actor.

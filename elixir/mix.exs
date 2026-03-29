@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 defmodule SukhiFedi.MixProject do
   use Mix.Project
@@ -9,6 +9,11 @@ defmodule SukhiFedi.MixProject do
       version: "0.1.0",
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
+      releases: [
+        sukhi_fedi: [
+          applications: [opentelemetry: :temporary]
+        ]
+      ],
       deps: deps()
     ]
   end
@@ -51,7 +56,7 @@ defmodule SukhiFedi.MixProject do
       {:opentelemetry_exporter, "~> 1.8"},
       {:opentelemetry_ecto, "~> 1.2"},
       {:opentelemetry_oban, "~> 1.1"},
-      {:opentelemetry_plug, "~> 2.0"},
+      {:teleplug, "~> 2.1"},
 
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:bypass, "~> 2.1", only: :test},

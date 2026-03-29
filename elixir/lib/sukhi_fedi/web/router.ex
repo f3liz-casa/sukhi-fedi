@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.Router do
   use Plug.Router
 
@@ -10,7 +10,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
 
-  plug(OpentelemetryPlug.PropagationPlug)
+  plug(Teleplug)
   plug(Plug.Logger)
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
@@ -59,6 +59,10 @@ defmodule SukhiFedi.Web.Router do
 
   match "/api/admin/*_" do
     ProxyPlug.call(conn, [])
+  end
+
+  get "/up" do
+    send_resp(conn, 200, "ok")
   end
 
   get "/metrics" do

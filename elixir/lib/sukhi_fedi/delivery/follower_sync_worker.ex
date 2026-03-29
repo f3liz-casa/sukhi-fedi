@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Delivery.FollowerSyncWorker do
   @moduledoc """
   FEP-8fcf: Background Oban worker that fetches a remote actor's followers

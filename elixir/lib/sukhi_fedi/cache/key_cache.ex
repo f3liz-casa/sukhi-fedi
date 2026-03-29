@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Cache.KeyCache do
   @moduledoc """
   Public key cache backed by ETS. TTL: 1 hour.

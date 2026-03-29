@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Delivery.Worker do
   @moduledoc """
   Oban worker that HTTP POSTs a signed Activity JSON-LD to a remote inbox.

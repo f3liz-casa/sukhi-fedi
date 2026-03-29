@@ -4,6 +4,10 @@ terraform {
       source  = "oracle/oci"
       version = "~> 5.0"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
   required_version = ">= 1.5"
 }
@@ -163,4 +167,29 @@ resource "oci_core_volume_attachment" "sukhi_data_attach" {
   instance_id      = oci_core_instance.sukhi_vm.id
   volume_id        = oci_core_volume.sukhi_data_vol.id
   display_name     = "sukhi-fedi-data-attach"
+}
+
+# ── OCIR IAM (instance principal) ────────────────────────────────────────────
+
+resource "oci_identity_dynamic_group" "sukhi_instances" {
+  compartment_id = var.tenancy_ocid
+  name           = "sukhi-fedi-instances"
+  description    = "All compute instances in the sukhi-fedi compartment"
+  matching_rule  = "instance.compartment.id = '${var.compartment_ocid}'"
+}
+
+resource "oci_identity_policy" "ocir_push" {
+  compartment_id = var.tenancy_ocid
+  name           = "sukhi-fedi-ocir-push"
+  description    = "Allow sukhi-fedi instances to push/pull images from OCIR"
+
+  statements = [
+    "Allow dynamic-group sukhi-fedi-instances to manage repos in tenancy",
+  ]
+}
+
+resource "oci_artifacts_container_repository" "deno_repo" {
+  compartment_id = var.compartment_ocid
+  display_name   = "sukhi-fedi-deno"
+  is_public      = false
 }

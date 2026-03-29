@@ -68,3 +68,13 @@ variable "block_volume_size_gb" {
   type        = number
   default     = 50
 }
+
+variable "tenancy_namespace" {
+  description = "OCI tenancy namespace used in OCIR image paths (e.g. axyz1234abc)"
+  type        = string
+}
+
+variable "domain" {
+  description = "Public domain name for the app (used in Kamal proxy host and Grafana URL)"
+  type        = string
+}

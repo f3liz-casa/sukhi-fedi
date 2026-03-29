@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Dashboard file provider — drop JSON files into /etc/grafana/dashboards.
 # Recommended community dashboards to import from grafana.com:
 #   - 14637  PromEx BEAM (Erlang VM)

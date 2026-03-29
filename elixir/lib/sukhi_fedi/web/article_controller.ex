@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.ArticleController do
   import Plug.Conn
   alias SukhiFedi.{Articles, Auth}

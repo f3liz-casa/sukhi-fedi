@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.AP.Client do
   @moduledoc """
   NATS request/reply wrapper for communicating with Deno workers.

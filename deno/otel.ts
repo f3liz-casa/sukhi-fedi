@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // OpenTelemetry helpers for the Deno worker.
 // Deno 2.x provides built-in OTEL support when started with --unstable-otel.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { NatsConnection } from "nats";
 
 export async function handleBlock(nc: NatsConnection, data: any) {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: MPL-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Test script for Priority 3: ActivityPub Federation
 
 set -e

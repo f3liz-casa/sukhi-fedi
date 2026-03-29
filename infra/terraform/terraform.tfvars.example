@@ -7,6 +7,8 @@ fingerprint         = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
 private_key_path    = "/home/you/.oci/oci_api_key.pem"
 region              = "ap-mumbai-1"
 compartment_ocid    = "ocid1.compartment.oc1..aaaa..."
+tenancy_namespace   = "axyz1234abc"
+domain              = "fedi.example.com"
 availability_domain = "kWfj:AP-MUMBAI-1-AD-1"
 ssh_public_key_path = "/home/you/.ssh/id_ed25519.pub"
 

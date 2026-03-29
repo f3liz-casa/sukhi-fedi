@@ -4,14 +4,14 @@
 
 ## Requirements
 
-| Tool | Version |
-|---|---|
-| Elixir | ~> 1.16 |
-| OTP | 26+ (bundled with Elixir 1.16) |
-| Deno | 2.3.1 |
-| PostgreSQL | 16 |
-| NATS | 2 (JetStream enabled) |
-| Docker + Compose | any recent version |
+| Tool             | Version                        |
+| ---------------- | ------------------------------ |
+| Elixir           | ~> 1.16                        |
+| OTP              | 26+ (bundled with Elixir 1.16) |
+| Deno             | 2.3.1                          |
+| PostgreSQL       | 16                             |
+| NATS             | 2 (JetStream enabled)          |
+| Docker + Compose | any recent version             |
 
 ---
 
@@ -66,7 +66,8 @@ deno install
 deno task start
 ```
 
-Deno connects to NATS at `nats://localhost:4222` by default and listens on port `8000`.
+Deno connects to NATS at `nats://localhost:4222` by default and listens on port
+`8000`.
 
 ---
 
@@ -74,43 +75,43 @@ Deno connects to NATS at `nats://localhost:4222` by default and listens on port 
 
 ### Elixir
 
-| Variable | Description | Default (dev) |
-|---|---|---|
-| `DB_HOST` | PostgreSQL host | `localhost` |
-| `DB_USER` | PostgreSQL user | `postgres` |
-| `DB_PASS` | PostgreSQL password | `postgres` |
-| `DB_NAME` | Database name | `sukhi_fedi` |
-| `DB_POOL_SIZE` | Connection pool size | `10` |
-| `NATS_HOST` | NATS host | `127.0.0.1` |
-| `NATS_PORT` | NATS port | `4222` |
-| `PORT` | HTTP listen port | `4000` |
+| Variable                      | Description                 | Default (dev)           |
+| ----------------------------- | --------------------------- | ----------------------- |
+| `DB_HOST`                     | PostgreSQL host             | `localhost`             |
+| `DB_USER`                     | PostgreSQL user             | `postgres`              |
+| `DB_PASS`                     | PostgreSQL password         | `postgres`              |
+| `DB_NAME`                     | Database name               | `sukhi_fedi`            |
+| `DB_POOL_SIZE`                | Connection pool size        | `10`                    |
+| `NATS_HOST`                   | NATS host                   | `127.0.0.1`             |
+| `NATS_PORT`                   | NATS port                   | `4222`                  |
+| `PORT`                        | HTTP listen port            | `4000`                  |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | `http://localhost:4318` |
 
 ### Deno
 
-| Variable | Description | Default (dev) |
-|---|---|---|
-| `NATS_URL` | NATS broker URL | `nats://localhost:4222` |
-| `PORT` | HTTP listen port | `8000` |
-| `OTEL_DENO` | Enable OpenTelemetry | `1` |
-| `OTEL_SERVICE_NAME` | Service name in traces | `sukhi-fedi-deno` |
+| Variable                      | Description                 | Default (dev)           |
+| ----------------------------- | --------------------------- | ----------------------- |
+| `NATS_URL`                    | NATS broker URL             | `nats://localhost:4222` |
+| `PORT`                        | HTTP listen port            | `8000`                  |
+| `OTEL_DENO`                   | Enable OpenTelemetry        | `1`                     |
+| `OTEL_SERVICE_NAME`           | Service name in traces      | `sukhi-fedi-deno`       |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | `http://localhost:4318` |
 
 ---
 
 ## Ports
 
-| Service | Port | Exposure |
-|---|---|---|
-| Elixir web | 4000 | Public |
-| Deno HTTP | 8000 | Internal only (Docker network) |
-| PostgreSQL | 5432 | Loopback only |
-| NATS | 4222 | Internal |
-| NATS HTTP API | 8222 | Internal |
-| OpenTelemetry collector (OTLP) | 4318 | Internal |
-| Jaeger UI | 16686 | Loopback only |
-| Prometheus | 9090 | Loopback only |
-| Grafana | 3000 | Loopback only |
+| Service                        | Port  | Exposure                       |
+| ------------------------------ | ----- | ------------------------------ |
+| Elixir web                     | 4000  | Public                         |
+| Deno HTTP                      | 8000  | Internal only (Docker network) |
+| PostgreSQL                     | 5432  | Loopback only                  |
+| NATS                           | 4222  | Internal                       |
+| NATS HTTP API                  | 8222  | Internal                       |
+| OpenTelemetry collector (OTLP) | 4318  | Internal                       |
+| Jaeger UI                      | 16686 | Loopback only                  |
+| Prometheus                     | 9090  | Loopback only                  |
+| Grafana                        | 3000  | Loopback only                  |
 
 ---
 
@@ -139,25 +140,30 @@ The Docker Compose stack includes a full observability setup:
 
 Elixir exposes a Prometheus scrape endpoint at `GET /metrics`.
 
-Deno emits OTLP traces when `OTEL_DENO=1` and `--unstable-otel` is passed (included in `deno task start`).
+Deno emits OTLP traces when `OTEL_DENO=1` and `--unstable-otel` is passed
+(included in `deno task start`).
 
 ---
 
 ## Production Deployment
 
-Deployment is three steps: **Terraform** provisions the OCI server → **Ansible** configures it → **Kamal** deploys the app.
+Deployment is three steps: **Terraform** provisions the OCI server → **Ansible**
+configures it → **Kamal** deploys the app.
 
 ### Step 1 — Provision with Terraform
 
-Terraform creates the OCI VM (ARM64 `VM.Standard.A1.Flex`), VCN/subnet, and a block volume mounted at `/mnt/data` (used by PostgreSQL and NATS JetStream).
+Terraform creates the OCI VM (ARM64 `VM.Standard.A1.Flex`), VCN/subnet, and a
+block volume mounted at `/mnt/data` (used by PostgreSQL and NATS JetStream).
 
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
-# fill in tenancy_ocid, user_ocid, fingerprint, private_key_path, etc.
+# fill in tenancy_ocid, user_ocid, fingerprint, private_key_path,
+# tenancy_namespace, domain, etc.
 terraform init
 terraform apply
-# note the public IP from outputs
+# outputs: instance_public_ip
+# also generates: infra/ansible/inventory.ini, config/deploy.yml, config/deploy_deno.yml
 ```
 
 ### Step 2 — Configure with Ansible
@@ -166,6 +172,7 @@ Ansible mounts the block volume, creates the `deploy` user, and installs Docker.
 
 ```bash
 cd infra/ansible
+ansible-galaxy collection install community.general ansible.posix
 # update inventory.ini with the IP from terraform output
 ansible-playbook -i inventory.ini playbook.yml
 ```
@@ -238,7 +245,8 @@ kamal accessory logs deno
 
 ## Adding Deno Workers
 
-To scale AP processing, add more Deno workers. NATS distributes the queue automatically — no config changes required:
+To scale AP processing, add more Deno workers. NATS distributes the queue
+automatically — no config changes required:
 
 ```bash
 # Docker Compose
