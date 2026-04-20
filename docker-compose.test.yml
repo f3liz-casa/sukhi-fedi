@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Compose file for integration / E2E tests.
+#
+# Brings up an isolated Postgres, NATS (with OUTBOX + DOMAIN_EVENTS streams),
+# and the Deno fedify NATS Micro service. Elixir tests run on the host via
+# `mix test --only integration` and connect to these services on the ports
+# below.
+#
+# Ports are offset from the dev stack so both can run concurrently.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   (cd elixir && MIX_ENV=test mix test --only integration)
+#   docker compose -f docker-compose.test.yml down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sukhi_fedi_test
+    ports:
+      - "15432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data  # ephemeral for test speed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  nats:
+    image: nats:2-alpine
+    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    ports:
+      - "14222:4222"
+      - "18222:8222"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  nats-bootstrap:
+    image: natsio/nats-box:latest
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+    volumes:
+      - ./infra/nats/bootstrap.sh:/bootstrap.sh:ro
+    command: ["sh", "/bootstrap.sh"]
+    restart: "no"
+
+  fedify-service:
+    build:
+      context: ./deno
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      NATS_URL: nats://nats:4222
+    command: ["task", "fedify-service"]

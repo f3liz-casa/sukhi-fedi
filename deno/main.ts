@@ -1,5 +1,14 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Legacy NATS worker. Listens on the `ap.*` subject prefixes for
+// operations not yet migrated to `services/fedify_service.ts` (NATS
+// Micro). Deletion of these subscribes is scheduled once every Elixir
+// caller has been switched over to FedifyClient.
+//
+// This process no longer runs an HTTP server — WebFinger and NodeInfo
+// are served directly by Elixir, and the Mastodon/Misskey API is the
+// responsibility of the Elixir gateway (stage 3-b ongoing).
 import { connect } from "nats";
-import { tracer, SpanStatusCode } from "./otel.ts";
 import { handleAuth } from "./handlers/auth.ts";
 import { handleVerify } from "./handlers/verify.ts";
 import { handleInbox } from "./handlers/inbox.ts";
@@ -12,13 +21,10 @@ import { handleCreateAccount } from "./handlers/account.ts";
 import { handleCreateToken } from "./handlers/token.ts";
 import { registerMisskeyHandlers } from "./handlers/extensions/misskey.ts";
 import { registerMastodonHandlers } from "./handlers/extensions/mastodon.ts";
-import { handleWebFinger } from "./handlers/wellknown/webfinger.ts";
-import { handleNodeInfo } from "./handlers/wellknown/nodeinfo.ts";
 import { handleSignDelivery } from "./handlers/sign_delivery.ts";
 import { handleBuildDm } from "./handlers/build/dm.ts";
 import { handleBuildAdd, handleBuildRemove } from "./handlers/build/collection_op.ts";
 import { handleBuildIntegrityProof } from "./handlers/build/integrity_proof.ts";
-import { createApi } from "./api.ts";
 
 const nc = await connect({ servers: Deno.env.get("NATS_URL") ?? "nats://localhost:4222" });
 
@@ -29,27 +35,18 @@ async function subscribe<T>(subject: string, handler: (payload: T) => Promise<un
       request_id: string;
       payload: T;
     };
-    await tracer.startActiveSpan(`nats ${subject}`, async (span) => {
-      span.setAttributes({
-        "messaging.system": "nats",
-        "messaging.destination": subject,
-        "messaging.message_id": envelope.request_id,
-      });
-      try {
-        const data = await handler(envelope.payload);
-        msg.respond(new TextEncoder().encode(JSON.stringify({ ok: true, data })));
-        span.setStatus({ code: SpanStatusCode.OK });
-      } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error });
-        span.recordException(err instanceof Error ? err : new Error(error));
-        msg.respond(new TextEncoder().encode(JSON.stringify({ ok: false, error })));
-      } finally {
-        span.end();
-      }
-    });
+    try {
+      const data = await handler(envelope.payload);
+      msg.respond(new TextEncoder().encode(JSON.stringify({ ok: true, data })));
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(`[${subject}] ${envelope.request_id} error: ${error}`);
+      msg.respond(new TextEncoder().encode(JSON.stringify({ ok: false, error })));
+    }
   }
 }
+
+console.log("Deno legacy ap.* worker started (no HTTP server).");
 
 // ── NATS workers (ap.* subjects) ─────────────────────────────────────────────
 await Promise.all([
@@ -64,8 +61,6 @@ await Promise.all([
   subscribe("ap.account.create", handleCreateAccount),
   subscribe("ap.token.create", handleCreateToken),
   subscribe("ap.sign_delivery", handleSignDelivery),
-  subscribe("ap.webfinger", handleWebFinger),
-  subscribe("ap.nodeinfo", () => handleNodeInfo()),
   // DMs / Conversations
   subscribe("ap.build.dm", handleBuildDm as (payload: unknown) => Promise<unknown>),
   // Featured collection (pinned posts) — FEP-e232
@@ -76,10 +71,3 @@ await Promise.all([
   ...registerMisskeyHandlers(subscribe),
   ...registerMastodonHandlers(subscribe),
 ]);
-
-// ── HTTP server (proxied from Elixir via ProxyPlug) ───────────────────────────
-const port = parseInt(Deno.env.get("PORT") ?? "8000");
-const api = createApi(nc);
-Deno.serve({ port }, api.fetch);
-
-console.log(`Deno worker started — HTTP on :${port}, NATS connected`);

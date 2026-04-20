@@ -1,34 +1,99 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.WebfingerController do
+  @moduledoc """
+  `/.well-known/webfinger` handler.
+
+  Elixir-native implementation — replaces the prior 3-hop round trip
+  (Elixir → Deno → Elixir → ETS → response). Now it's Accounts lookup
+  + JRD build + single ETS write.
+  """
+
   import Plug.Conn
 
-  alias SukhiFedi.AP.Client
-  alias SukhiFedi.Cache.Ets
+  alias SukhiFedi.{Accounts, Cache.Ets}
 
   @ttl_seconds 600
 
   def call(conn, _opts) do
-    acct = conn.params["resource"]
+    case conn.params["resource"] do
+      nil ->
+        send_resp(conn, 400, Jason.encode!(%{error: "missing 'resource' query parameter"}))
 
-    case Ets.get(:webfinger, acct) do
-      {:ok, json} ->
-        send_json(conn, json)
+      resource ->
+        handle_resource(conn, resource)
+    end
+  end
+
+  defp handle_resource(conn, resource) do
+    case Ets.get(:webfinger, resource) do
+      {:ok, cached} ->
+        send_jrd(conn, 200, cached)
 
       :miss ->
-        case Client.request("ap.webfinger", %{payload: %{acct: acct}}) do
-          {:ok, json} ->
-            Ets.put(:webfinger, acct, json, @ttl_seconds)
-            send_json(conn, json)
+        case build_jrd(resource) do
+          {:ok, jrd} ->
+            Ets.put(:webfinger, resource, jrd, @ttl_seconds)
+            send_jrd(conn, 200, jrd)
+
+          {:error, :not_found} ->
+            send_resp(conn, 404, Jason.encode!(%{error: "not_found"}))
 
           {:error, reason} ->
-            send_resp(conn, 404, Jason.encode!(%{error: reason}))
+            send_resp(conn, 400, Jason.encode!(%{error: inspect(reason)}))
         end
     end
   end
 
-  defp send_json(conn, json) do
+  # Only responds for acct:USER@OUR_DOMAIN. Foreign webfingers aren't proxied.
+  defp build_jrd("acct:" <> rest) do
+    case String.split(rest, "@", parts: 2) do
+      [user, domain] ->
+        our_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+        if domain == our_domain do
+          lookup_local_actor(user, domain)
+        else
+          {:error, :not_found}
+        end
+
+      _ ->
+        {:error, :invalid_resource}
+    end
+  end
+
+  defp build_jrd(_), do: {:error, :invalid_resource}
+
+  defp lookup_local_actor(username, domain) do
+    case Accounts.get_account_by_username(username) do
+      nil ->
+        {:error, :not_found}
+
+      account ->
+        actor_url = "https://#{domain}/users/#{account.username}"
+
+        {:ok,
+         %{
+           subject: "acct:#{username}@#{domain}",
+           aliases: [actor_url],
+           links: [
+             %{
+               rel: "self",
+               type: "application/activity+json",
+               href: actor_url
+             },
+             %{
+               rel: "http://webfinger.net/rel/profile-page",
+               type: "text/html",
+               href: actor_url
+             }
+           ]
+         }}
+    end
+  end
+
+  defp send_jrd(conn, status, jrd) do
     conn
     |> put_resp_content_type("application/jrd+json")
-    |> send_resp(200, Jason.encode!(json))
+    |> send_resp(status, Jason.encode!(jrd))
   end
 end

@@ -1,5 +1,5 @@
 import { Create, Hashtag, Note } from "@fedify/fedify";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize } from "../../../fedify/utils.ts";
 
 export interface HashtagItem {
   name: string;

@@ -7,8 +7,11 @@
     "jsr:@nats-io/nats-core@3.3.1": "3.3.1",
     "jsr:@nats-io/nkeys@2.0.3": "2.0.3",
     "jsr:@nats-io/nuid@2.0.3": "2.0.3",
+    "jsr:@nats-io/services@*": "3.3.1",
     "jsr:@nats-io/transport-deno@*": "3.3.1",
+    "jsr:@std/assert@*": "1.0.19",
     "jsr:@std/bytes@^1.0.5": "1.0.6",
+    "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/io@0.225.2": "0.225.2",
     "npm:@cloudflare/workers-types@^4.20250529.0": "4.20260329.1",
     "npm:@multiformats/base-x@^4.0.1": "4.0.1",
@@ -19,7 +22,6 @@
     "npm:@phensley/language-tag@^1.9.0": "1.14.0",
     "npm:asn1js@^3.0.5": "3.0.7",
     "npm:byte-encodings@^1.0.11": "1.0.11",
-    "npm:hono@4": "4.12.9",
     "npm:json-canon@^1.0.1": "1.0.1",
     "npm:jsonld@9": "9.0.0",
     "npm:multicodec@^3.2.1": "3.2.1",
@@ -75,6 +77,12 @@
     "@nats-io/nuid@2.0.3": {
       "integrity": "c1069446e43dfa4f5e599c398a1bfc1be0c8dab1c839b6d2b9c3617cc1998306"
     },
+    "@nats-io/services@3.3.1": {
+      "integrity": "9831705a5a460cc8011395286de0cca61258fbff1d2e5c11269a8b4fa34a789b",
+      "dependencies": [
+        "jsr:@nats-io/nats-core"
+      ]
+    },
     "@nats-io/transport-deno@3.3.1": {
       "integrity": "414e7b31e48f0baf8d6bc9803b9b4effd620c7e44a672f33ed0bae2028f0d885",
       "dependencies": [
@@ -82,8 +90,17 @@
         "jsr:@std/io"
       ]
     },
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
+    },
     "@std/bytes@1.0.6": {
       "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
+    },
+    "@std/internal@1.0.12": {
+      "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
     },
     "@std/io@0.225.2": {
       "integrity": "3c740cd4ee4c082e6cfc86458f47e2ab7cb353dc6234d5e9b1f91a2de5f4d6c7",
@@ -162,9 +179,6 @@
     "canonicalize@2.1.0": {
       "integrity": "sha512-F705O3xrsUtgt98j7leetNhTWPe+5S72rlL5O4jA1pKqBVQ/dT1O1D6PFxmSXvc0SUOinWS57DKx0I3CHrXJHQ==",
       "bin": true
-    },
-    "hono@4.12.9": {
-      "integrity": "sha512-wy3T8Zm2bsEvxKZM5w21VdHDDcwVS1yUFFY6i8UobSsKfFceT7TOwhbhfKsDyx7tYQlmRM5FLpIuYvNFyjctiA=="
     },
     "json-canon@1.0.1": {
       "integrity": "sha512-PQcj4PFOTAQxE8PgoQ4KrM0DcKWZd7S3ELOON8rmysl9I8JuFMgxu1H9v+oZsTPjjkpeS3IHPwLjr7d+gKygnw=="
@@ -328,9 +342,8 @@
   "workspace": {
     "dependencies": [
       "jsr:@fedify/fedify@1",
-      "jsr:@nats-io/transport-deno@*",
-      "npm:@opentelemetry/api@^1.9.0",
-      "npm:hono@4"
+      "jsr:@nats-io/services@*",
+      "jsr:@nats-io/transport-deno@*"
     ]
   }
 }

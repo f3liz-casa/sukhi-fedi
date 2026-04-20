@@ -1,5 +1,5 @@
 import { EmojiReact } from "@fedify/fedify";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize } from "../../../fedify/utils.ts";
 
 export interface BuildReactPayload {
   actor: string;

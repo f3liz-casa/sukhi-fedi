@@ -19,11 +19,13 @@ config :sukhi_fedi, SukhiFedi.PromEx,
   grafana: :disabled,
   metrics_server: :disabled
 
-config :opentelemetry,
-  resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
-  resource: %{service: %{name: "sukhi-fedi-elixir", version: "0.1.0"}}
-
-config :opentelemetry, :processors,
-  otel_batch_processor: %{exporter: {:opentelemetry_exporter, %{}}}
+# Rate limiter (per-peer ETS buckets).
+config :hammer,
+  backend:
+    {Hammer.Backend.ETS,
+     [
+       expiry_ms: 60_000 * 60 * 4,
+       cleanup_interval_ms: 60_000 * 10
+     ]}
 
 import_config "#{config_env()}.exs"

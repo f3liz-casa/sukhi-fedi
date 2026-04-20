@@ -13,9 +13,12 @@ if config_env() == :prod do
     host: System.get_env("NATS_HOST", "127.0.0.1"),
     port: String.to_integer(System.get_env("NATS_PORT", "4222"))
 
-  config :sukhi_fedi, :deno_url, System.get_env("DENO_URL", "http://localhost:8000")
-
-  config :opentelemetry_exporter,
-    otlp_protocol: :http_protobuf,
-    otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+  # Distributed-Erlang plugin nodes reachable via `:rpc`.
+  # Comma-separated list of `<name>@<host>` atoms. Nodes not reachable at
+  # request time are skipped; if none are reachable, `/api/v1/*` returns
+  # 503. Example: `PLUGIN_NODES=api@api,api_admin@api-admin`.
+  config :sukhi_fedi, :plugin_nodes,
+    System.get_env("PLUGIN_NODES", "")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.to_atom/1)
 end

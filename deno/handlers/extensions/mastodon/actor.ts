@@ -1,5 +1,5 @@
 import { Move, Person } from "@fedify/fedify";
-import { serialize, signAndSerialize } from "../../fedify/utils.ts";
+import { serialize, signAndSerialize } from "../../../fedify/utils.ts";
 
 export interface BuildActorPayload {
   actor: string;

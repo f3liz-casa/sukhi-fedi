@@ -1,5 +1,5 @@
 import { Person } from "@fedify/fedify";
-import { serialize, injectDefined } from "../../fedify/utils.ts";
+import { serialize, injectDefined } from "../../../fedify/utils.ts";
 
 export interface BuildMisskeyActorPayload {
   actor: string;

@@ -16,44 +16,31 @@ services:
 
   nats:
     image: nats:2-alpine
-    command: ["--jetstream", "--http_port", "8222"]
+    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    volumes:
+      - nats_data:/data
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # ── Observability ────────────────────────────────────────────────────────────
-
-  otelcol:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    volumes:
-      - ./observability/otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+  nats-bootstrap:
+    image: natsio/nats-box:latest
     depends_on:
-      - jaeger
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:13133/ || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128m
-
-  jaeger:
-    image: jaegertracing/all-in-one:latest
+      nats:
+        condition: service_healthy
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"   # Jaeger UI
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256m
+      NATS_URL: nats://nats:4222
+    volumes:
+      - ./infra/nats/bootstrap.sh:/bootstrap.sh:ro
+    command: ["sh", "/bootstrap.sh"]
+    restart: "no"
+
+  # ── Observability (Prometheus + Grafana, Elixir-native telemetry only) ───────
+  #
+  # OpenTelemetry / Jaeger were removed in favor of PromEx + telemetry_metrics
+  # for lighter weight. Structured logs cover what traces used to.
 
   prometheus:
     image: prom/prometheus:latest
@@ -66,8 +53,6 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
-    depends_on:
-      - otelcol
     deploy:
       resources:
         limits:
@@ -87,7 +72,6 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
-      - jaeger
     deploy:
       resources:
         limits:
@@ -99,6 +83,7 @@ services:
   elixir:
     build:
       context: ./elixir
+    hostname: elixir
     ports:
       - "4000:4000"
     environment:
@@ -109,30 +94,48 @@ services:
       DB_POOL_SIZE: "10"
       NATS_HOST: nats
       NATS_PORT: "4222"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318
+      # Distributed Erlang — cluster with api for plugin :rpc.
+      RELEASE_DISTRIBUTION: name
+      RELEASE_NODE: gateway@elixir
+      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      PLUGIN_NODES: api@api
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
-      otelcol:
-        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
 
   deno:
     build:
       context: ./deno
     environment:
       NATS_URL: nats://nats:4222
-      OTEL_DENO: "1"
-      OTEL_SERVICE_NAME: sukhi-fedi-deno
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318
     depends_on:
       nats:
         condition: service_healthy
-      otelcol:
-        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  # ── Plugin API node (distributed Erlang) ─────────────────────────────────
+  # Hosts Mastodon / Misskey REST endpoints as SukhiApi capabilities.
+  # Scale capability coverage by adding files under api/lib/sukhi_api/
+  # capabilities/, or by running additional specialised nodes with
+  # narrower ENABLED_CAPABILITIES.
+  api:
+    build:
+      context: ./api
+    hostname: api
+    environment:
+      RELEASE_DISTRIBUTION: name
+      RELEASE_NODE: api@api
+      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      DOMAIN: localhost:4000
+      INSTANCE_TITLE: sukhi-fedi
 
 volumes:
   postgres_data:
+  nats_data:
   prometheus_data:
   grafana_data:

@@ -10,12 +10,3 @@ datasources:
     isDefault: true
     jsonData:
       timeInterval: 15s
-
-  - name: Jaeger
-    type: jaeger
-    uid: jaeger
-    url: http://jaeger:16686
-    access: proxy
-    jsonData:
-      tracesToLogsV2:
-        datasourceUid: prometheus

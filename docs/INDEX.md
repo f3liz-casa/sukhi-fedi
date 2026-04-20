@@ -1,74 +1,30 @@
 # Documentation Index
 
-## Quick Start
-- [README.md](../README.md) - Project overview and quick start
-- [ARCHITECTURE_SPEC.md](ARCHITECTURE_SPEC.md) - Detailed architecture specification
+## Canonical reference
 
-## Priority 2: Real-time Feeds & Streaming
-- [PRIORITY_2_SUMMARY.md](PRIORITY_2_SUMMARY.md) - Implementation summary
-- [STREAMING.md](STREAMING.md) - Detailed streaming guide
-- [STREAMING_QUICKREF.md](STREAMING_QUICKREF.md) - Quick reference
-- [test_streaming.sh](test_streaming.sh) - Test script
-- [streaming_demo.html](streaming_demo.html) - Browser demo
+- **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — the one document that
+  describes the current system. If anything else contradicts it, this
+  one wins.
 
-## Priority 3: ActivityPub Federation
-- [PRIORITY_3_FEDERATION.md](PRIORITY_3_FEDERATION.md) - Comprehensive implementation guide
-- [FEDERATION_QUICKREF.md](FEDERATION_QUICKREF.md) - Quick reference
-- [FEDERATION_DEPLOYMENT.md](FEDERATION_DEPLOYMENT.md) - Production deployment guide
-- [PRIORITY_3_COMPLETE.md](PRIORITY_3_COMPLETE.md) - Completion summary
-- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Technical implementation details
-- [test_federation.sh](test_federation.sh) - Test script
+## Active reference material
 
-## Priority 4: Misskey Features & Media
-- [PRIORITY_4_MISSKEY.md](PRIORITY_4_MISSKEY.md) - Media, emojis, reactions, MFM, polls
+- [`API_REFERENCE.md`](API_REFERENCE.md) — REST API endpoints
+- [`FEDERATION_QUICKREF.md`](FEDERATION_QUICKREF.md) — ActivityPub cheatsheet
+- [`FEDERATION_DEPLOYMENT.md`](FEDERATION_DEPLOYMENT.md) — production deployment
+- [`STREAMING.md`](STREAMING.md) / [`STREAMING_QUICKREF.md`](STREAMING_QUICKREF.md) — WebSocket streaming
+- [`MVP.md`](MVP.md) — product scope
+- [`API_V1_MIGRATION.md`](API_V1_MIGRATION.md) / [`API_REMOVED_ENDPOINTS.md`](API_REMOVED_ENDPOINTS.md) — API history
 
-## Priority 5: Moderation & Extended UX
-- [PRIORITY_5_MODERATION.md](PRIORITY_5_MODERATION.md) - Moderation, bookmarks, push, articles
+## Removed during the 2026-04 refactor
 
-## Implementation Details
-- [IMPLEMENTATION_TREE.md](IMPLEMENTATION_TREE.md) - File structure overview
-- [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) - Priority 2 completion details
-- [MVP.md](MVP.md) - MVP specification
+The following files were removed because they were either superseded by
+`ARCHITECTURE.md` or represented ephemeral progress reports:
 
-## Testing
+- `COMPLETE_ARCHITECTURE.md`, `ARCHITECTURE_SPEC.md`
+- `CLEANUP_SUMMARY.md`
+- `IMPLEMENTATION_COMPLETE.md`, `IMPLEMENTATION_SUMMARY.md`, `IMPLEMENTATION_TREE.md`
+- `PRIORITY_2_SUMMARY.md`, `PRIORITY_3_COMPLETE.md`, `PRIORITY_3_FEDERATION.md`,
+  `PRIORITY_4_MISSKEY.md`, `PRIORITY_5_CHECKLIST.md`, `PRIORITY_5_COMPLETE.md`,
+  `PRIORITY_5_FILES.md`, `PRIORITY_5_MODERATION.md`, `PRIORITY_5_QUICKSTART.md`
 
-### Priority 2 (Streaming)
-```bash
-cd docs
-./test_streaming.sh
-# Open streaming_demo.html in browser
-```
-
-### Priority 3 (Federation)
-```bash
-cd docs
-./test_federation.sh
-```
-
-## Quick Reference
-
-### API Endpoints
-- WebFinger: `GET /.well-known/webfinger`
-- Actor: `GET /users/:name`
-- Inbox: `POST /users/:name/inbox`
-- Outbox: `GET /users/:name/outbox`
-- Feeds: `GET /api/feeds/{home,local}`
-- Streaming: `GET /api/streaming/{home,local}`
-- Like: `POST /api/likes`
-- Boost: `POST /api/boosts`
-- Undo: `POST /api/undo`
-- Reactions: `POST /api/reactions`
-- Polls: `POST /api/polls/vote`
-- Mute/Block: `POST /api/{mute,block}`
-- Reports: `POST /api/reports`
-- Bookmarks: `POST /api/bookmarks`
-- Articles: `POST /api/articles`
-
-### Key Directories
-- Elixir: `elixir/lib/sukhi_fedi/`
-- Deno: `deno/handlers/`
-- Config: `elixir/config/config.exs`
-- Migrations: `elixir/priv/repo/migrations/`
-
-## License
-All code is licensed under MPL-2.0.
+Git history retains them if needed for archaeology.

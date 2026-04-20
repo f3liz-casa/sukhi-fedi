@@ -1,5 +1,5 @@
 import { Create, Note } from "@fedify/fedify";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize } from "../../../fedify/utils.ts";
 
 export interface BuildNoteCwPayload {
   actor: string;

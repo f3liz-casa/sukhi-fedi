@@ -2,16 +2,18 @@
 defmodule SukhiFedi.Web.Router do
   use Plug.Router
 
-  alias SukhiFedi.Web.ApiController
   alias SukhiFedi.Web.InboxController
   alias SukhiFedi.Web.WebfingerController
-  alias SukhiFedi.Web.ProxyPlug
+  alias SukhiFedi.Web.NodeinfoController
   alias SukhiFedi.Web.ActorController
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
 
-  plug(Teleplug)
   plug(Plug.Logger)
+  # Global per-peer rate limit. Conservative ceiling; internal probes
+  # like /up from k8s LBs still fit easily. Tighten per-endpoint via
+  # dedicated forwarders when needed.
+  plug(SukhiFedi.Web.RateLimitPlug, bucket: "global", limit: 500, scale_ms: 60_000)
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
   plug(:dispatch)
@@ -46,20 +48,17 @@ defmodule SukhiFedi.Web.Router do
     InboxController.shared_inbox(conn, [])
   end
 
-  # ── REST API v1 + admin — proxied to Deno ────────────────────────────────
-  #
-  # Deno's Hono server handles auth, business logic, and NATS RPC.
-  # For streaming endpoints Deno responds with X-Delegate-To: Streaming
-  # and ProxyPlug hands the socket to StreamingController instead of
-  # forwarding the response.
+  # ── NodeInfo (Elixir-native) ─────────────────────────────────────────────
 
-  match "/api/v1/*_" do
-    ProxyPlug.call(conn, [])
+  get "/.well-known/nodeinfo" do
+    NodeinfoController.discovery(conn, [])
   end
 
-  match "/api/admin/*_" do
-    ProxyPlug.call(conn, [])
+  get "/nodeinfo/2.1" do
+    NodeinfoController.v2_1(conn, [])
   end
+
+  # ── Health + metrics ─────────────────────────────────────────────────────
 
   get "/up" do
     send_resp(conn, 200, "ok")
@@ -67,6 +66,22 @@ defmodule SukhiFedi.Web.Router do
 
   get "/metrics" do
     PromEx.Plug.call(conn, PromEx.Plug.init(prom_ex_module: SukhiFedi.PromEx))
+  end
+
+  # ── Mastodon/Misskey REST API — dispatched to plugin nodes ───────────────
+  #
+  # `SukhiFedi.Web.PluginPlug` forwards the request to one of the plugin
+  # Erlang nodes listed in `config :sukhi_fedi, :plugin_nodes`. Each
+  # plugin node runs the `:sukhi_api` application (see the top-level
+  # `api/` directory) and exposes capabilities via `:rpc`. If no plugin
+  # node is reachable the client gets a 503.
+
+  match "/api/v1/*_" do
+    SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))
+  end
+
+  match "/api/admin/*_" do
+    SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))
   end
 
   match _ do

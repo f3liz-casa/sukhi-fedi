@@ -1,5 +1,5 @@
 import { Emoji, Image } from "@fedify/fedify";
-import { serialize, injectDefined } from "../../fedify/utils.ts";
+import { serialize, injectDefined } from "../../../fedify/utils.ts";
 
 export interface BuildMisskeyEmojiPayload {
   name: string;

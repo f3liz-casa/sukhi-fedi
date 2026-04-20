@@ -68,7 +68,11 @@ export async function handleBuildIntegrityProof(
   const signature = await crypto.subtle.sign(
     { name: "Ed25519" },
     privateKey,
-    toSign,
+    // Deno's `concat` returns Uint8Array<ArrayBufferLike>, but WebCrypto
+    // `sign` wants a BufferSource (ArrayBufferView | ArrayBuffer). The
+    // runtime values are compatible; this cast just satisfies the
+    // post-TS-5.7 stricter narrowing.
+    toSign as BufferSource,
   );
 
   const proofValue = encodeBase58btc(new Uint8Array(signature));

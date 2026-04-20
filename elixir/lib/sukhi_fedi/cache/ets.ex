@@ -7,7 +7,7 @@ defmodule SukhiFedi.Cache.Ets do
 
   use GenServer
 
-  @tables [:key_cache, :webfinger, :follower_list, :session]
+  @tables [:key_cache, :webfinger, :follower_list, :session, :actor_remote]
   @sweep_interval_ms 60_000
 
   def start_link(_opts) do

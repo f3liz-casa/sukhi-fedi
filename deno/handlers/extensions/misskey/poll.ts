@@ -1,5 +1,5 @@
 import { Create, Note, Question } from "@fedify/fedify";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize } from "../../../fedify/utils.ts";
 
 export interface PollChoice {
   name: string;

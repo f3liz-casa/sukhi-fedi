@@ -8,12 +8,8 @@ defmodule SukhiFedi.MixProject do
       app: :sukhi_fedi,
       version: "0.1.0",
       elixir: "~> 1.16",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      releases: [
-        sukhi_fedi: [
-          applications: [opentelemetry: :temporary]
-        ]
-      ],
       deps: deps()
     ]
   end
@@ -24,6 +20,9 @@ defmodule SukhiFedi.MixProject do
       mod: {SukhiFedi.Application, []}
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [
@@ -44,19 +43,19 @@ defmodule SukhiFedi.MixProject do
       # NATS client
       {:gnat, "~> 1.8"},
 
-      # HTTP client (for Oban delivery worker)
+      # HTTP client
       {:req, "~> 0.5"},
 
-      # Metrics (Prometheus)
+      # Lightweight observability: telemetry + PromEx (Prometheus).
+      # Distributed tracing is intentionally omitted — use structured
+      # Logger messages and Prometheus histograms instead.
+      {:telemetry, "~> 1.2"},
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.1"},
       {:prom_ex, "~> 1.9"},
 
-      # OpenTelemetry
-      {:opentelemetry_api, "~> 1.4"},
-      {:opentelemetry, "~> 1.5"},
-      {:opentelemetry_exporter, "~> 1.8"},
-      {:opentelemetry_ecto, "~> 1.2"},
-      {:opentelemetry_oban, "~> 1.1"},
-      {:teleplug, "~> 2.1"},
+      # Rate limiting (ETS-backed, node-local).
+      {:hammer, "~> 6.1"},
 
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:bypass, "~> 2.1", only: :test},
