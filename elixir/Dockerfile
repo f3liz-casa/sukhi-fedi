@@ -23,8 +23,10 @@ WORKDIR /app
 RUN apk add --no-cache libstdc++ openssl ncurses-libs
 
 COPY --from=build /app/_build/prod/rel/sukhi_fedi ./
+COPY rel/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 ENV MIX_ENV=prod
 EXPOSE 4000
 
-CMD ["bin/sukhi_fedi", "start"]
+CMD ["/app/entrypoint.sh"]

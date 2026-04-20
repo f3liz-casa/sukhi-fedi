@@ -6,7 +6,7 @@ defmodule SukhiFedi.Web.FeaturedController do
   """
 
   import Plug.Conn
-  alias SukhiFedi.PinnedNotes
+  alias SukhiFedi.Addons.PinnedNotes
 
   def show(conn, _opts) do
     username = conn.path_params["name"]

@@ -1,4 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Self-hosted stack. Pulls pinned images from GHCR; Watchtower watches
+# the `:v1` rolling tag (or whatever SUKHI_VERSION resolves to) and
+# redeploys app containers when a new image lands. Stateful services
+# (postgres, nats) are *not* labelled — Watchtower leaves them alone.
+#
+# Operators may set SUKHI_VERSION to a stricter pin (`:v1.2`, `:v1.2.3`)
+# to slow the update stream. Dev users can still override any service
+# with a local `build:` by supplying a docker-compose.override.yml.
 services:
   postgres:
     image: postgres:16-alpine
@@ -26,63 +35,18 @@ services:
       retries: 5
 
   nats-bootstrap:
-    image: natsio/nats-box:latest
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-nats-bootstrap:${SUKHI_VERSION:-v1}
     depends_on:
       nats:
         condition: service_healthy
     environment:
       NATS_URL: nats://nats:4222
-    volumes:
-      - ./infra/nats/bootstrap.sh:/bootstrap.sh:ro
-    command: ["sh", "/bootstrap.sh"]
     restart: "no"
-
-  # ── Observability (Prometheus + Grafana, Elixir-native telemetry only) ───────
-  #
-  # OpenTelemetry / Jaeger were removed in favor of PromEx + telemetry_metrics
-  # for lighter weight. Structured logs cover what traces used to.
-
-  prometheus:
-    image: prom/prometheus:latest
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.enable-lifecycle"
-    volumes:
-      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256m
-
-  grafana:
-    image: grafana/grafana:latest
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
-    volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - grafana_data:/var/lib/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128m
 
   # ── Application ──────────────────────────────────────────────────────────────
 
-  elixir:
-    build:
-      context: ./elixir
+  gateway:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-gateway:${SUKHI_VERSION:-v1}
     hostname: elixir
     ports:
       - "4000:4000"
@@ -94,11 +58,15 @@ services:
       DB_POOL_SIZE: "10"
       NATS_HOST: nats
       NATS_PORT: "4222"
-      # Distributed Erlang — cluster with api for plugin :rpc.
       RELEASE_DISTRIBUTION: name
       RELEASE_NODE: gateway@elixir
       RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
       PLUGIN_NODES: api@api
+      # Addon selection. Comma list of ids, or "all". See docs/ADDONS.md.
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,17 +74,22 @@ services:
         condition: service_healthy
       nats-bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
 
-  deno:
-    build:
-      context: ./deno
+  bun:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-bun:${SUKHI_VERSION:-v1}
     environment:
       NATS_URL: nats://nats:4222
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     depends_on:
       nats:
         condition: service_healthy
       nats-bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
 
   # ── Plugin API node (distributed Erlang) ─────────────────────────────────
   # Hosts Mastodon / Misskey REST endpoints as SukhiApi capabilities.
@@ -124,18 +97,35 @@ services:
   # capabilities/, or by running additional specialised nodes with
   # narrower ENABLED_CAPABILITIES.
   api:
-    build:
-      context: ./api
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-api:${SUKHI_VERSION:-v1}
     hostname: api
     environment:
       RELEASE_DISTRIBUTION: name
       RELEASE_NODE: api@api
       RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
-      DOMAIN: localhost:4000
-      INSTANCE_TITLE: sukhi-fedi
+      DOMAIN: ${DOMAIN:-localhost:4000}
+      INSTANCE_TITLE: ${INSTANCE_TITLE:-sukhi-fedi}
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    restart: unless-stopped
+
+  # ── Watchtower: drop-in image upgrades ───────────────────────────────────
+  # Polls GHCR for new images on the pinned tag; recreates containers
+  # on change. Only services with the watchtower label are touched —
+  # postgres and nats are explicitly left alone.
+  watchtower:
+    image: containrrr/watchtower:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-3600}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   nats_data:
-  prometheus_data:
-  grafana_data:

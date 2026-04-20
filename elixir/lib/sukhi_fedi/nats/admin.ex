@@ -7,7 +7,8 @@ defmodule SukhiFedi.Nats.Admin do
 
   import SukhiFedi.Nats.Helpers
 
-  alias SukhiFedi.{Moderation, Relays, Repo, Schema}
+  alias SukhiFedi.{Relays, Repo, Schema}
+  alias SukhiFedi.Addons.Moderation
   alias SukhiFedi.Delivery.FedifyClient
 
   # ── Moderation / Reports ───────────────────────────────────────────────────

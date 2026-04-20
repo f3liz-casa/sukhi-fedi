@@ -1,6 +1,23 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import Config
 
+# Addon selection. ENABLED_ADDONS: comma list of ids, or "all" (default).
+# DISABLE_ADDONS: comma list of ids to always exclude.
+enabled_addons =
+  case System.get_env("ENABLED_ADDONS", "all") do
+    "all" -> :all
+    "" -> :all
+    csv -> csv |> String.split(",", trim: true) |> Enum.map(&String.to_atom/1)
+  end
+
+disabled_addons =
+  System.get_env("DISABLE_ADDONS", "")
+  |> String.split(",", trim: true)
+  |> Enum.map(&String.to_atom/1)
+
+config :sukhi_fedi, :enabled_addons, enabled_addons
+config :sukhi_fedi, :disabled_addons, disabled_addons
+
 if config_env() == :prod do
   config :sukhi_fedi, SukhiFedi.Repo,
     database: System.get_env("DB_NAME", "sukhi_fedi"),

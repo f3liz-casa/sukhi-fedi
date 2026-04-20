@@ -16,7 +16,7 @@
 Misskey-compatible APIs. Users sign in locally, publish Notes, follow
 remote actors, and receive posts from any compatible fediverse server.
 
-Design north star: **one Elixir gateway + one stateless Deno worker fleet**,
+Design north star: **one Elixir gateway + one stateless Bun worker fleet**,
 coordinated by **PostgreSQL (system of record) + NATS (event plane)**.
 Nothing else is a hard dependency.
 
@@ -47,7 +47,7 @@ Nothing else is a hard dependency.
                                    │
                                    ▼
  ╔══════════════════════════════════════════════╗
- ║        Deno — 翻訳家 + 印鑑職人               ║
+ ║        Bun — 翻訳家 + 印鑑職人                ║
  ║  NATS Micro service "fedify"                  ║
  ║    fedify.translate.v1  (JSON-LD build)       ║
  ║    fedify.sign.v1       (HTTP Signature)      ║
@@ -61,12 +61,12 @@ Nothing else is a hard dependency.
 Rules enforced by this split:
 
 1. **Only Elixir speaks HTTP to the outside world** (both users and remote
-   servers). No Deno HTTP server in the target state.
-2. **Only Elixir writes to Postgres.** Deno is stateless.
-3. **All outbound deliveries flow through Oban on Elixir**, never Deno.
+   servers). No Bun HTTP server in the target state.
+2. **Only Elixir writes to Postgres.** Bun is stateless.
+3. **All outbound deliveries flow through Oban on Elixir**, never Bun.
    BEAM's lightweight processes handle fan-out to thousands of followers
-   without breaking a sweat; Deno's V8 single thread would choke.
-4. **Deno owns JSON-LD + HTTP Signature only.** Fedify's
+   without breaking a sweat; Bun's single-thread event loop would choke.
+4. **Bun owns JSON-LD + HTTP Signature only.** Fedify's
    opinionated ActivityPub handling is exactly this slice, so we lean on
    it where it wins.
 
@@ -123,7 +123,7 @@ sukhi-fedi/
 │   ├── mix.exs / mix.lock
 │   └── Dockerfile
 │
-├── deno/                                  # 翻訳家 + 印鑑職人 (NATS-only, no HTTP)
+├── bun/                                   # 翻訳家 + 印鑑職人 (NATS-only, no HTTP; Bun runtime)
 │   ├── services/fedify_service.ts         # ★ NATS Micro service
 │   ├── handlers/                          # pure functions, no HTTP
 │   │   ├── build/{note,follow,accept,announce,actor,dm,collection_op,…}.ts
@@ -131,8 +131,9 @@ sukhi-fedi/
 │   │   └── sign_delivery.ts               # HTTP Signature sign
 │   ├── fedify/{context,keys,utils}.ts     # Fedify glue
 │   ├── main.ts                            # legacy ap.* subscribes (being phased out)
-│   ├── deno.json                          # imports + tasks
-│   └── Dockerfile
+│   ├── package.json                       # npm deps incl. `nats` → @nats-io/transport-node
+│   ├── tsconfig.json
+│   └── Dockerfile                         # oven/bun:1-alpine
 │
 ├── api/                                   # ★ Mastodon/Misskey REST plugin (separate BEAM node)
 │   ├── mix.exs                            # independent :sukhi_api app
@@ -150,9 +151,7 @@ sukhi-fedi/
 │   ├── nats/bootstrap.sh                  # JetStream stream bootstrap
 │   ├── terraform/ · ansible/              # infra-as-code (OCI)
 │
-├── observability/
-│   ├── prometheus/prometheus.yml
-│   └── grafana/provisioning/…             # PromEx-only, no Jaeger
+├── (observability stack removed — PromEx exposes /metrics, external scrape)
 │
 ├── docker-compose.yml                     # dev stack
 ├── docker-compose.test.yml                # hermetic test stack
@@ -188,10 +187,10 @@ sns.<context>.<aggregate>.<op>[.<variant>]
 | `sns.events.timeline.home.updated` | pub       | timeline-updater  | streaming-fanout             |
 | `sns.events.notification.mention`  | pub       | inbox handler     | streaming-fanout             |
 
-### 4.3 NATS Micro services (Deno-side)
+### 4.3 NATS Micro services (Bun-side)
 
 Service name: `fedify`, version `0.2.0`, queue group `fedify-workers`.
-Multiple Deno replicas auto-share load.
+Multiple Bun replicas auto-share load.
 
 | Endpoint              | Request                                    | Response                                 |
 | --------------------- | ------------------------------------------ | ---------------------------------------- |
@@ -388,12 +387,15 @@ Not part of the refactor scope.
 
 ## 7. Observability (Elixir-native, OpenTelemetry-free)
 
-- **Metrics**: `PromEx` exposes `/metrics` on port 4000 for Prometheus
-  scrape. Out of the box: Ecto / Oban / Plug / BEAM system metrics.
-  Custom metrics add via `:telemetry.execute` + `telemetry_metrics`.
-- **Dashboards**: `observability/grafana/provisioning/datasources/`
-  wires Grafana to Prometheus only. Grafana on `:3000`, anonymous admin
-  (dev only).
+- **Metrics**: `PromEx` exposes `/metrics` on port 4000. External
+  scraper (self-hosted Prometheus on a larger box, Grafana Cloud Free,
+  etc.) pulls from there. Out of the box: Ecto / Oban / Plug / BEAM
+  system metrics; custom metrics via `:telemetry.execute` +
+  `telemetry_metrics`.
+- **Dashboards**: not provided in-repo. Point a Grafana instance
+  (local or managed) at the Prometheus scraper that consumes
+  `http://<host>:4000/metrics`. The gateway stack stays ~550 MB
+  without an in-container Grafana/Prometheus.
 - **Traces**: deliberately **not** instrumented. We rejected OpenTelemetry
   / Jaeger / otelcol because (a) the Deno / Fedify side's OTel support
   is expensive (needs `--unstable-otel`), (b) the operational tax doesn't
@@ -421,7 +423,7 @@ Custom metrics to emit as we build each stage:
 | `DB_HOST` / `USER` / `PASS` / `NAME` | Elixir | (required in prod)  | Postgres connection                |
 | `DB_POOL_SIZE`             | Elixir   | `10`                    | Ecto pool size                     |
 | `NATS_HOST` / `NATS_PORT`  | Elixir   | `127.0.0.1:4222`        | NATS client                        |
-| `NATS_URL`                 | Deno     | `nats://localhost:4222` | NATS client (both main.ts & svc)   |
+| `NATS_URL`                 | Bun      | `nats://localhost:4222` | NATS client (both main.ts & svc)   |
 | `DENO_URL`                 | Elixir   | `http://localhost:8000` | Legacy proxy target (phased out)   |
 | `PORT`                     | Deno     | `8000`                  | Legacy HTTP server (phased out)    |
 | `SUKHI_ROLE` *(planned)*   | Elixir   | `all`                   | `inbox` / `api` / `worker` / `all` |
@@ -430,10 +432,9 @@ Custom metrics to emit as we build each stage:
 
 ### Dev stack
 ```bash
-docker-compose up -d        # postgres + nats + bootstrap + prometheus + grafana + elixir + deno
-# http://localhost:4000   — Elixir
-# http://localhost:9090   — Prometheus
-# http://localhost:3000   — Grafana (anonymous admin)
+docker-compose up -d        # postgres + nats + nats-bootstrap + elixir + bun + api
+# http://localhost:4000            — Elixir gateway
+# http://localhost:4000/metrics    — PromEx (scrape with external Prometheus)
 ```
 
 ### Test stack (hermetic, distinct ports)
@@ -453,18 +454,18 @@ cd elixir && mix test --no-start
 # Elixir integration tests (needs docker-compose.test.yml up):
 cd elixir && mix test --only integration
 
-# Deno tests:
-cd deno && deno task test
+# Bun tests:
+cd bun && bun test
 
-# Type check the fedify Micro service:
-cd deno && deno check services/fedify_service.ts
+# Type check the whole bun surface (tsc, invoked via bun):
+cd bun && bun run check
 ```
 
 ## 10. Horizontal scale posture
 
-- Both Elixir and Deno are designed to be **stateless** — all state is in
-  Postgres or NATS. `mix release` + Kamal `scale: N` adds Elixir
-  replicas; identical Deno containers running the fedify service
+- Both Elixir and Bun are designed to be **stateless** — all state is in
+  Postgres or NATS. `mix release` + `docker compose up --scale gateway=N` adds Elixir
+  replicas; identical Bun containers running the fedify service
   auto-load-balance via the NATS Micro queue group `fedify-workers`.
 - The `Outbox.Relay`'s `FOR UPDATE SKIP LOCKED` makes running multiple
   relay instances safe — each claims a disjoint batch.
@@ -479,7 +480,7 @@ cd deno && deno check services/fedify_service.ts
 
 Refactor from the current mixed state to the target architecture in
 small, always-mergeable, always-running steps. Stages 0–6 are the
-checkpoints; every stage keeps `mix test` + `deno task test` green and
+checkpoints; every stage keeps `mix test` + `bun test` green and
 can ship independently.
 
 ```

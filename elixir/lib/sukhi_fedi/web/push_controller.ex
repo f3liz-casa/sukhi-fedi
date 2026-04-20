@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.PushController do
   import Plug.Conn
-  alias SukhiFedi.{WebPush, Auth}
+  alias SukhiFedi.Auth
+  alias SukhiFedi.Addons.WebPush
 
   def subscribe(conn) do
     with {:ok, account} <- Auth.current_account(conn),

@@ -7,7 +7,8 @@ defmodule SukhiFedi.AP.Instructions do
   alias SukhiFedi.Delivery.Worker
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account}
-  alias SukhiFedi.{Relays, PinnedNotes}
+  alias SukhiFedi.Relays
+  alias SukhiFedi.Addons.PinnedNotes
 
   @public_ns "https://www.w3.org/ns/activitystreams#Public"
   @as_public "Public"

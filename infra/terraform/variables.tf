@@ -75,6 +75,6 @@ variable "tenancy_namespace" {
 }
 
 variable "domain" {
-  description = "Public domain name for the app (used in Kamal proxy host and Grafana URL)"
+  description = "Public domain name for the app (actor URIs, WebFinger, ACME)"
   type        = string
 }

@@ -2,13 +2,14 @@
 defmodule SukhiApi.Registry do
   @moduledoc """
   Discovers modules that `use SukhiApi.Capability` within the
-  `:sukhi_api` application, optionally filtered by the
-  `:enabled_capabilities` config key.
+  `:sukhi_api` application. Filtered by:
 
-  `:enabled_capabilities` values:
-
-    * `:all` (default) — every compiled capability is active
-    * `[Mod1, Mod2]`   — explicit allowlist (others are ignored)
+    * `:enabled_capabilities` — `:all` (default) or a module allowlist
+    * `:enabled_addons` — `:all` (default) or a list of addon ids; a
+      capability bound via `use SukhiApi.Capability, addon: :id` is
+      kept only when its id is in the list. Capabilities declared
+      without `:addon` are treated as core and always active.
+    * `:disabled_addons` — ids to always exclude (deny-list)
   """
 
   @spec capabilities() :: [module()]
@@ -18,6 +19,7 @@ defmodule SukhiApi.Registry do
         modules
         |> Enum.filter(&capability?/1)
         |> filter_enabled()
+        |> filter_by_addon()
 
       _ ->
         []
@@ -25,9 +27,7 @@ defmodule SukhiApi.Registry do
   end
 
   @spec routes() :: [SukhiApi.Capability.route()]
-  def routes do
-    Enum.flat_map(capabilities(), & &1.routes())
-  end
+  def routes, do: Enum.flat_map(capabilities(), & &1.routes())
 
   defp capability?(mod) do
     try do
@@ -42,5 +42,33 @@ defmodule SukhiApi.Registry do
       :all -> mods
       list when is_list(list) -> Enum.filter(mods, &(&1 in list))
     end
+  end
+
+  defp filter_by_addon(mods) do
+    enabled = Application.get_env(:sukhi_api, :enabled_addons, :all)
+    disabled = Application.get_env(:sukhi_api, :disabled_addons, [])
+
+    Enum.filter(mods, fn mod ->
+      case addon_id(mod) do
+        nil ->
+          true
+
+        id ->
+          cond do
+            id in disabled -> false
+            enabled == :all -> true
+            is_list(enabled) -> id in enabled
+            true -> true
+          end
+      end
+    end)
+  end
+
+  defp addon_id(mod) do
+    mod.module_info(:attributes)
+    |> Keyword.get(:sukhi_api_capability_addon, [nil])
+    |> List.first()
+  rescue
+    _ -> nil
   end
 end

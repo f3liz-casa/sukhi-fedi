@@ -57,11 +57,23 @@ defmodule SukhiApi.Capability do
 
   @callback routes() :: [route()]
 
-  defmacro __using__(_opts) do
-    quote do
+  @doc """
+  `use SukhiApi.Capability` registers the module for discovery.
+
+  Pass `addon: :some_id` to bind the capability to a specific gateway
+  addon — when `ENABLED_ADDONS` does not include that id, the
+  capability's routes are skipped. Capabilities without `:addon` are
+  treated as core (always active).
+  """
+  defmacro __using__(opts) do
+    addon = Keyword.get(opts, :addon)
+
+    quote bind_quoted: [addon: addon] do
       @behaviour SukhiApi.Capability
       Module.register_attribute(__MODULE__, :sukhi_api_capability, persist: true)
+      Module.register_attribute(__MODULE__, :sukhi_api_capability_addon, persist: true)
       @sukhi_api_capability true
+      @sukhi_api_capability_addon addon
     end
   end
 end

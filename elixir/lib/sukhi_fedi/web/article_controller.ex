@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.ArticleController do
   import Plug.Conn
-  alias SukhiFedi.{Articles, Auth}
+  alias SukhiFedi.Auth
+  alias SukhiFedi.Addons.Articles
 
   def create(conn) do
     with {:ok, account} <- authenticate(conn),

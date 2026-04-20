@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.BookmarkController do
   import Plug.Conn
-  alias SukhiFedi.{Bookmarks, Auth}
+  alias SukhiFedi.Auth
+  alias SukhiFedi.Addons.Bookmarks
 
   def create(conn) do
     with {:ok, account} <- authenticate(conn),

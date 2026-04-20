@@ -4,6 +4,9 @@ import Config
 config :sukhi_api,
   domain: "localhost:4000",
   title: "sukhi-fedi",
+  # Gateway Erlang node for capabilities that reach back for DB access
+  # via `SukhiApi.GatewayRpc`. Overridden by GATEWAY_NODE env in prod.
+  gateway_node: :"gateway@elixir",
   # :all (default) activates every compiled capability. Swap in a list
   # of module names to narrow the node's surface — useful when running
   # multiple specialised plugin nodes (e.g. admin-only) under different

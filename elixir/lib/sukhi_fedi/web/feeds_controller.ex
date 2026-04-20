@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.FeedsController do
   import Plug.Conn
-  alias SukhiFedi.{Feeds, Auth}
+  alias SukhiFedi.Auth
+  alias SukhiFedi.Addons.Feeds
 
   def show(conn) do
     urn = conn.path_params["urn"]

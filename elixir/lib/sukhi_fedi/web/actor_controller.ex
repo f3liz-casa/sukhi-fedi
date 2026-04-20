@@ -34,7 +34,7 @@ defmodule SukhiFedi.Web.ActorController do
           "publicKey" => %{
             "id" => "#{actor_uri}#main-key",
             "owner" => actor_uri,
-            "publicKeyPem" => account.public_key
+            "publicKeyPem" => account.public_key_pem || ""
           }
         }
         

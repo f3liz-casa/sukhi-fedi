@@ -1,7 +1,7 @@
 # sukhi-fedi
 
 Federated SNS server. Mastodon/Misskey API compatible.
-Elixir gateway + Deno/Fedify NATS Micro worker fleet, coordinated by
+Elixir gateway + Bun/Fedify NATS Micro worker fleet, coordinated by
 PostgreSQL + NATS JetStream.
 
 ## 📖 Documentation
@@ -22,11 +22,10 @@ Additional reference material:
 ## Quick start
 
 ```bash
-# Full dev stack (Postgres, NATS w/ JetStream, Prometheus, Grafana, Elixir, Deno)
+# Full dev stack (Postgres, NATS w/ JetStream, Elixir, Bun, api plugin)
 docker-compose up -d
-# → Elixir http://localhost:4000
-# → Prometheus http://localhost:9090
-# → Grafana http://localhost:3000 (anonymous admin)
+# → Elixir         http://localhost:4000
+# → PromEx metrics http://localhost:4000/metrics  (scrape externally)
 ```
 
 ## Running tests
@@ -35,11 +34,11 @@ docker-compose up -d
 # Elixir unit tests (hermetic, no live deps)
 cd elixir && mix test --no-start
 
-# Deno tests
-cd deno && deno task test
+# Bun tests
+cd bun && bun test
 
-# Type check the NATS Micro service
-cd deno && deno check services/fedify_service.ts
+# Type check (bun-agnostic via tsc)
+cd bun && bun run check
 
 # Integration tests (needs docker-compose.test.yml stack)
 docker-compose -f docker-compose.test.yml up -d
@@ -51,10 +50,10 @@ cd elixir && mix test --only integration
 | Layer      | Responsibility                                                      |
 | ---------- | ------------------------------------------------------------------- |
 | Elixir     | HTTP (Mastodon/Misskey API, inbox, WebFinger, NodeInfo), DB, Oban   |
-| Deno       | NATS Micro service only — JSON-LD build, HTTP Signature, verify     |
+| Bun        | NATS Micro service only — JSON-LD build, HTTP Signature, verify     |
 | PostgreSQL | System of record, `outbox` table for exactly-once-effective events  |
 | NATS       | JetStream `OUTBOX` + `DOMAIN_EVENTS`; Micro service `fedify`        |
-| PromEx     | Prometheus metrics (no OpenTelemetry / Jaeger)                      |
+| PromEx     | Prometheus metrics at `/metrics` (scrape externally; no Grafana in-repo) |
 
 See §2 of `ARCHITECTURE.md` for the responsibility split rationale.
 

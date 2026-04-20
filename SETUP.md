@@ -117,15 +117,22 @@ Deno connects to NATS at `nats://localhost:4222` by default and listens on port
 
 ## Database Migrations
 
+Migrations live in `elixir/priv/repo/migrations/core/` (always-on) and
+`elixir/priv/repo/migrations/addons/<id>/` (per-addon). The release
+entrypoint (`elixir/rel/entrypoint.sh`) runs
+`SukhiFedi.Release.migrate_all/0` automatically on every container
+start, so Watchtower-driven upgrades apply new migrations without
+operator intervention.
+
 ```bash
-# Dev
-cd elixir && mix ecto.migrate
+# Dev (walks core + all enabled addons' migration dirs)
+cd elixir && mix sukhi.migrate
 
-# Docker Compose
-docker compose exec elixir bin/sukhi_fedi eval 'SukhiFedi.Release.migrate()'
+# Docker Compose (migrations run in the entrypoint; no manual step)
+docker compose up -d
 
-# Production (Kamal)
-kamal app exec --interactive --reuse "bin/sukhi_fedi eval 'SukhiFedi.Release.migrate()'"
+# One-off manual run
+docker compose exec gateway bin/sukhi_fedi eval 'SukhiFedi.Release.migrate_all()'
 ```
 
 ---
@@ -147,12 +154,13 @@ Deno emits OTLP traces when `OTEL_DENO=1` and `--unstable-otel` is passed
 
 ## Production Deployment
 
-Deployment is three steps: **Terraform** provisions the OCI server → **Ansible**
-configures it → **Kamal** deploys the app.
+Self-hosted flow: **Terraform** provisions the VM → **Ansible**
+configures it → **docker compose up -d** pulls pinned images from GHCR
+→ **Watchtower** keeps them fresh.
 
 ### Step 1 — Provision with Terraform
 
-Terraform creates the OCI VM (ARM64 `VM.Standard.A1.Flex`), VCN/subnet, and a
+Creates the OCI VM (ARM64 `VM.Standard.A1.Flex`), VCN/subnet, and a
 block volume mounted at `/mnt/data` (used by PostgreSQL and NATS JetStream).
 
 ```bash
@@ -163,12 +171,12 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform apply
 # outputs: instance_public_ip
-# also generates: infra/ansible/inventory.ini, config/deploy.yml, config/deploy_deno.yml
+# also generates: infra/ansible/inventory.ini
 ```
 
 ### Step 2 — Configure with Ansible
 
-Ansible mounts the block volume, creates the `deploy` user, and installs Docker.
+Mounts the block volume, creates the `deploy` user, and installs Docker.
 
 ```bash
 cd infra/ansible
@@ -177,81 +185,65 @@ ansible-galaxy collection install community.general ansible.posix
 ansible-playbook -i inventory.ini playbook.yml
 ```
 
-### Step 3 — Deploy with Kamal
+### Step 3 — Deploy with docker compose + Watchtower
 
-#### Prerequisites
-
-- OCI Container Registry (OCIR) credentials
-- Cloudflare Tunnel token
-- Server SSH access as the `deploy` user
-
-### Secrets
-
-Copy and fill in `.kamal/secrets`:
+Copy this repo (or the `sukhi-fedi-starter` skeleton) to the VM and set
+`.env` with a version pin and any feature toggles:
 
 ```
-OCIR_USERNAME=<tenancy-namespace>/<oci-username>
-OCIR_AUTH_TOKEN=<oci-auth-token>
-TUNNEL_TOKEN=<cloudflare-tunnel-token>
-POSTGRES_USER=sukhi
-POSTGRES_PASSWORD=<strong-random-password>
-GF_SECURITY_ADMIN_PASSWORD=<grafana-admin-password>
+SUKHI_REPO_OWNER=nyanrus
+SUKHI_VERSION=v1            # :v1 for rolling minor updates, :v1.2.3 for pinned
+DOMAIN=example.tld
+ERLANG_COOKIE=<long random string>
+ENABLED_ADDONS=all          # or a comma list: mastodon_api,streaming,moderation
+WATCHTOWER_POLL_INTERVAL=3600
 ```
 
-### First deployment
+Then:
 
 ```bash
-# Build and push the Deno image separately (it's an accessory)
-kamal build push --config-file config/deploy_deno.yml
-
-# Bootstrap the server
-kamal setup
-
-# Start accessories in order
-kamal accessory boot postgres
-kamal accessory boot nats
-kamal accessory boot deno
-kamal accessory boot otelcol
-kamal accessory boot jaeger
-kamal accessory boot prometheus
-kamal accessory boot grafana
-kamal accessory boot cloudflared
-
-# Run migrations
-kamal app exec --interactive --reuse "bin/sukhi_fedi eval 'SukhiFedi.Release.migrate()'"
+docker compose pull
+docker compose up -d
 ```
 
-### Subsequent deployments
+Migrations run inside the `gateway` entrypoint on every start, so first
+boot and subsequent upgrades are symmetric.
+
+### Upgrades
+
+Nothing to do. Watchtower polls GHCR every `WATCHTOWER_POLL_INTERVAL`
+seconds, pulls the new image when the `:v1` / `:v1.2` / `:v1.2.3` tag
+you pinned moves, and recreates `gateway` / `api` / `bun` containers.
+Stateful `postgres` / `nats` containers are left alone.
+
+To force an upgrade immediately:
 
 ```bash
-kamal deploy
+docker compose pull gateway api bun
+docker compose up -d gateway api bun
 ```
 
-To update Deno independently:
+To pin a specific version (opt out of auto-update):
 
 ```bash
-kamal build push --config-file config/deploy_deno.yml
-kamal accessory reboot deno
+# in .env
+SUKHI_VERSION=v1.2.3
 ```
 
 ### Logs
 
 ```bash
-kamal app logs
-kamal accessory logs deno
+docker compose logs -f gateway
+docker compose logs -f bun api
 ```
 
 ---
 
-## Adding Deno Workers
+## Scaling Bun Workers
 
-To scale AP processing, add more Deno workers. NATS distributes the queue
-automatically — no config changes required:
+NATS Micro queue-groups the Bun fleet on `fedify-workers`, so adding
+replicas is automatic:
 
 ```bash
-# Docker Compose
-docker compose up --scale deno=3
-
-# Kamal — update replicas in config/deploy.yml, then:
-kamal deploy
+docker compose up -d --scale bun=3
 ```

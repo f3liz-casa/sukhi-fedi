@@ -8,7 +8,7 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
   implement `routes/0`, done.
   """
 
-  use SukhiApi.Capability
+  use SukhiApi.Capability, addon: :mastodon_api
 
   @impl true
   def routes, do: [{:get, "/api/v1/instance", &instance/1}]

@@ -1,0 +1,21 @@
+{
+  "name": "sukhi-bun",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run main.ts",
+    "fedify-service": "bun run services/fedify_service.ts",
+    "test": "bun test",
+    "check": "bun x tsc --noEmit"
+  },
+  "dependencies": {
+    "@fedify/fedify": "^1.0.0",
+    "@nats-io/nats-core": "^3",
+    "@nats-io/services": "^3",
+    "nats": "npm:@nats-io/transport-node@^3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7"
+  }
+}

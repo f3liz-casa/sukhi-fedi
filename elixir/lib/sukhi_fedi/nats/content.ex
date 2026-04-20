@@ -6,7 +6,8 @@ defmodule SukhiFedi.Nats.Content do
 
   import SukhiFedi.Nats.Helpers
 
-  alias SukhiFedi.{Articles, Media, Feeds, Repo, Schema}
+  alias SukhiFedi.{Repo, Schema}
+  alias SukhiFedi.Addons.{Articles, Feeds, Media}
 
   # ── Feeds ──────────────────────────────────────────────────────────────────
 

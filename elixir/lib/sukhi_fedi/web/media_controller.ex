@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.MediaController do
   import Plug.Conn
-  alias SukhiFedi.{Repo, Media, Schema, Auth}
+  alias SukhiFedi.{Repo, Schema, Auth}
+  alias SukhiFedi.Addons.Media
 
   def presigned(conn) do
     with {:ok, account} <- authenticate(conn),

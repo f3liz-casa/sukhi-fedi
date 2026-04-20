@@ -142,7 +142,7 @@ defmodule SukhiFedi.Web.NotesController do
 
   defp attach_media(_note, nil), do: :ok
   defp attach_media(note, media_ids) when is_list(media_ids) do
-    SukhiFedi.Media.attach_to_note(note.id, media_ids)
+    SukhiFedi.Addons.Media.attach_to_note(note.id, media_ids)
     :ok
   end
 

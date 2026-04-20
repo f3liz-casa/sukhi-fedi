@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.ModerationController do
   import Plug.Conn
-  alias SukhiFedi.{Moderation, Auth}
+  alias SukhiFedi.Auth
+  alias SukhiFedi.Addons.Moderation
 
   def mute(conn) do
     with {:ok, account} <- Auth.current_account(conn),

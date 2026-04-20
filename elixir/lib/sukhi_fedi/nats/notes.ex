@@ -7,7 +7,8 @@ defmodule SukhiFedi.Nats.Notes do
   import SukhiFedi.Nats.Helpers
   import Ecto.Query
 
-  alias SukhiFedi.{Notes, Bookmarks, PinnedNotes, Repo, Schema, AP}
+  alias SukhiFedi.{Notes, Repo, Schema, AP}
+  alias SukhiFedi.Addons.{Bookmarks, PinnedNotes}
   alias SukhiFedi.Schema.ConversationParticipant
 
   # ── Notes ──────────────────────────────────────────────────────────────────

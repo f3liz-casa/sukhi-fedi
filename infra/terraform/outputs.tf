@@ -29,25 +29,3 @@ resource "local_file" "ansible_inventory" {
   INI
 }
 
-# ── Kamal configs (auto-generated on apply) ───────────────────────────────────
-
-resource "local_file" "kamal_deploy" {
-  filename        = "${path.module}/../../config/deploy.yml"
-  file_permission = "0644"
-  content = templatefile("${path.module}/templates/deploy.yml.tpl", {
-    region            = var.region
-    tenancy_namespace = var.tenancy_namespace
-    public_ip         = oci_core_instance.sukhi_vm.public_ip
-    domain            = var.domain
-  })
-}
-
-resource "local_file" "kamal_deploy_deno" {
-  filename        = "${path.module}/../../config/deploy_deno.yml"
-  file_permission = "0644"
-  content = templatefile("${path.module}/templates/deploy_deno.yml.tpl", {
-    region            = var.region
-    tenancy_namespace = var.tenancy_namespace
-    public_ip         = oci_core_instance.sukhi_vm.public_ip
-  })
-}

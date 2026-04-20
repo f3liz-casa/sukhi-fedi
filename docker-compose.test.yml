@@ -58,7 +58,7 @@ services:
 
   fedify-service:
     build:
-      context: ./deno
+      context: ./bun
     depends_on:
       nats:
         condition: service_healthy
@@ -66,4 +66,4 @@ services:
         condition: service_completed_successfully
     environment:
       NATS_URL: nats://nats:4222
-    command: ["task", "fedify-service"]
+    command: ["bun", "run", "services/fedify_service.ts"]

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Social do
   import Ecto.Query
-  alias SukhiFedi.{Repo, Outbox, Moderation}
+  alias SukhiFedi.{Repo, Outbox}
+  alias SukhiFedi.Addons.Moderation
   alias SukhiFedi.Schema.Follow
 
   @doc """

@@ -6,7 +6,9 @@ defmodule SukhiFedi.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
+    :ok = SukhiFedi.Addon.Registry.verify_abi!()
+
+    core_children = [
       SukhiFedi.PromEx,
       SukhiFedi.Repo,
       {Bandit, plug: SukhiFedi.Web.Router, port: 4000},
@@ -24,12 +26,10 @@ defmodule SukhiFedi.Application do
       # Transactional Outbox relay: publishes outbox rows to NATS JetStream.
       SukhiFedi.Outbox.Relay,
       # NATS listener for db.* subjects (Deno HTTP API → Elixir DB)
-      SukhiFedi.Web.DbNatsListener,
-      # Streaming pub/sub registry (holds subscriber PIDs per stream key)
-      SukhiFedi.Streaming.Registry,
-      # NATS listener that broadcasts new posts to streaming subscribers
-      SukhiFedi.Streaming.NatsListener
+      SukhiFedi.Web.DbNatsListener
     ]
+
+    children = core_children ++ SukhiFedi.Addon.Registry.children()
 
     opts = [strategy: :one_for_one, name: SukhiFedi.Supervisor]
     Supervisor.start_link(children, opts)
