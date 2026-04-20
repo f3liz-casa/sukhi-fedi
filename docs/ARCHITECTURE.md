@@ -1,14 +1,9 @@
 # sukhi-fedi Architecture
 
-> **This document is the canonical architecture reference.** If anything in
-> other docs contradicts it, this one wins. The goal is that a fresh
-> contributor can rebuild the system from scratch using only this file plus
-> the code.
->
-> Older docs (`docs/COMPLETE_ARCHITECTURE.md`, `docs/ARCHITECTURE_SPEC.md`,
-> `docs/IMPLEMENTATION_*.md`, `docs/PRIORITY_*.md`) describe historical
-> intent and are retained as reference only — they are consolidated away
-> in stage 6.
+> **This document is the canonical architecture reference.** A fresh
+> contributor can rebuild the system from scratch using only this file
+> plus the code. The only companion doc is
+> [`ADDONS.md`](ADDONS.md), which specifies the addon ABI.
 
 ## 1. Product intent
 

@@ -10,14 +10,9 @@ PostgreSQL + NATS JetStream.
 A fresh contributor can rebuild the system from scratch using only that
 document and the code. Read it first.
 
-Additional reference material:
-
-- [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) — REST endpoints
-- [`docs/FEDERATION_QUICKREF.md`](docs/FEDERATION_QUICKREF.md) — ActivityPub cheatsheet
-- [`docs/FEDERATION_DEPLOYMENT.md`](docs/FEDERATION_DEPLOYMENT.md) — production deployment
-- [`docs/STREAMING.md`](docs/STREAMING.md) / [`docs/STREAMING_QUICKREF.md`](docs/STREAMING_QUICKREF.md) — WebSocket streaming
-- [`docs/MVP.md`](docs/MVP.md) — product scope
-- [`docs/INDEX.md`](docs/INDEX.md) — index of all docs
+- [`docs/ADDONS.md`](docs/ADDONS.md) — addon ABI contract (how to pick,
+  write, or distribute feature addons)
+- [`SETUP.md`](SETUP.md) — self-host deployment with docker compose + Watchtower
 
 ## Quick start
 
