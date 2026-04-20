@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Delivery.FollowerSyncWorker do
+defmodule SukhiDelivery.Delivery.FollowerSyncWorker do
   @moduledoc """
   FEP-8fcf: Background Oban worker that fetches a remote actor's followers
   collection and reconciles local follow records.
@@ -7,7 +7,7 @@ defmodule SukhiFedi.Delivery.FollowerSyncWorker do
 
   use Oban.Worker, queue: :federation, max_attempts: 3
 
-  alias SukhiFedi.Delivery.FollowersSync
+  alias SukhiDelivery.Delivery.FollowersSync
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"actor_uri" => actor_uri, "collection_url" => collection_url}}) do

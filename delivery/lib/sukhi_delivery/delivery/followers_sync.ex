@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Delivery.FollowersSync do
+defmodule SukhiDelivery.Delivery.FollowersSync do
   @moduledoc """
   FEP-8fcf: Followers Collection Synchronization.
 
-  Provides helpers for computing the Collection-Synchronization header that
-  accompanies shared-inbox deliveries, and for reconciling stale local follow
-  records when we receive the header from a remote server.
+  Computes the Collection-Synchronization header for outbound shared-inbox
+  deliveries, and reconciles stale local follow records when we receive
+  the header from a remote server. Header parsing lives on the gateway
+  (InboxController) since it's a pure regex and the parsed result only
+  drives the enqueue of a follow-up Oban job.
   """
 
   import Ecto.Query
-  alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Follow, Account}
+  alias SukhiDelivery.Repo
+  alias SukhiDelivery.Schema.{Follow, Account}
 
   @doc """
   Compute a SHA-256 digest (lowercase hex) of the sorted follower URIs for a
@@ -53,28 +55,11 @@ defmodule SukhiFedi.Delivery.FollowersSync do
   end
 
   @doc """
-  Parse the Collection-Synchronization header value from an inbound request.
-  Returns {:ok, %{collection_id, url, digest}} or :error.
-  """
-  def parse_header(nil), do: :error
-
-  def parse_header(value) when is_binary(value) do
-    # Format: collectionId="<uri>", url="<uri>", digest="<hex>"
-    with [_, collection_id] <- Regex.run(~r/collectionId="([^"]+)"/, value),
-         [_, url] <- Regex.run(~r/url="([^"]+)"/, value),
-         [_, digest] <- Regex.run(~r/digest="([^"]+)"/, value) do
-      {:ok, %{collection_id: collection_id, url: url, digest: digest}}
-    else
-      _ -> :error
-    end
-  end
-
-  @doc """
   Reconcile local follow records for a remote actor whose followers collection
   digest we received. Removes stale follows not present in the remote collection.
   """
   def reconcile(sender_actor_uri, collection_items) when is_list(collection_items) do
-    domain = Application.get_env(:sukhi_fedi, :domain)
+    domain = Application.get_env(:sukhi_delivery, :domain)
 
     local_follows =
       from(f in Follow,

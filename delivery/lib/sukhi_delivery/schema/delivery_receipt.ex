@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Schema.DeliveryReceipt do
+defmodule SukhiDelivery.Schema.DeliveryReceipt do
   @moduledoc """
-  Marks a single (activity_id, inbox_url) delivery as completed.
-  Used by the Oban delivery worker for per-inbox idempotency so that
-  retries never double-deliver an Activity to the same remote inbox.
+  Per-(activity_id, inbox_url) idempotency marker for outbound deliveries.
   """
 
   use Ecto.Schema

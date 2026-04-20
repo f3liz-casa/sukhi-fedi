@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Schema.OutboxEvent do
+defmodule SukhiDelivery.Schema.OutboxEvent do
   @moduledoc """
-  One row = one pending domain event waiting to be published to NATS.
-
-  The `SukhiDelivery.Outbox.Relay` GenServer (on the delivery node)
-  consumes rows where `status = "pending"` and flips them to
-  `"published"` (or `"failed"` after exceeding attempts).
+  Read-side projection of the gateway's `outbox` table. The delivery
+  node's `SukhiDelivery.Outbox.Relay` picks up pending rows and publishes
+  them to NATS JetStream; writes happen on the gateway via
+  `SukhiFedi.Outbox.enqueue_multi/6`.
   """
 
   use Ecto.Schema

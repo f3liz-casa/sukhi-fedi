@@ -91,6 +91,38 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # ── Delivery node ────────────────────────────────────────────────────────
+  # Owns the outbound federation side: Outbox.Relay (pg-notify → NATS) and
+  # the Oban `:delivery` / `:federation` queues. Talks to the gateway only
+  # via Postgres (shared outbox + delivery_receipts tables) and NATS —
+  # deliberately no distributed Erlang on this edge.
+  delivery:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-delivery:${SUKHI_VERSION:-v1}
+    hostname: delivery
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: sukhi_fedi
+      DB_POOL_SIZE: "5"
+      NATS_HOST: nats
+      NATS_PORT: "4222"
+      METRICS_PORT: "4001"
+    ports:
+      - "4001:4001"
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
   # ── Plugin API node (distributed Erlang) ─────────────────────────────────
   # Hosts Mastodon / Misskey REST endpoints as SukhiApi capabilities.
   # Scale capability coverage by adding files under api/lib/sukhi_api/

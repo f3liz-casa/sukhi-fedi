@@ -11,7 +11,7 @@ config :sukhi_fedi, ecto_repos: [SukhiFedi.Repo]
 
 config :sukhi_fedi, Oban,
   repo: SukhiFedi.Repo,
-  queues: [delivery: 10, monitor: 5],
+  queues: [monitor: 5],
   plugins: [
     # Hourly NodeInfo monitor poll. PollCoordinator enumerates due
     # MonitoredInstances and enqueues one PollWorker per instance.

@@ -14,37 +14,40 @@ Misskey互換のAPIを喋るよ。ローカルにログインして、Noteを投
 流れてくる投稿を受け取る、あの感じ。
 
 設計の北極星：
-**Elixirゲートウェイが1個 + Bunワーカー群（ステートレス） + 分散Erlangのプラグインノード1個**、
+**案内人（ゲートウェイ）と配達員（delivery ノード）の Elixir ノードが別々 +
+Bun ワーカー群（ステートレス） + 分散Erlang のプラグインノード**、
 それを **PostgreSQL（真実の源）と NATS（イベントの通り道）** で束ねる。
 それ以外は必須依存にしない、って決めてる。
 
 ## 2. 誰がなにを持ってるの？
 
 ```
- ユーザー (HTTPS)        他のサーバー (HTTPS)
-      │                       │
-      ▼                       ▼
- ╔══════════════════════════════════════════════╗
- ║           Elixir — 案内人 + 配達員            ║
- ║  Bandit/Plug / WebSocket ストリーミング        ║
- ║  OAuth / WebAuthn / セッション                 ║
- ║  inbox POST の受付 + ディスパッチ              ║
- ║  Outbox.Relay（LISTEN/NOTIFY → JetStream）    ║
- ║  Oban 配信ワーカー（HTTP POST + リトライ）     ║
- ║  WebFinger / NodeInfo（直接、プロキシなし）    ║
- ║  /api/v1 と /api/admin をプラグインノードへ    ║
- ╚═════════════════════════════════╤════════════╝
-                                   │
-      PostgreSQL（真実の源、Ecto経由）
-      + outbox テーブル（実質exactly-once）
-      + delivery_receipts（inbox単位の冪等性）
-                                   │
-      NATS JetStream
-      ├─ stream OUTBOX        (sns.outbox.>)
-      └─ stream DOMAIN_EVENTS (sns.events.>)
-                                   │
-                ┌──────────────────┼──────────────────┐
-                ▼                                     ▼
+ ユーザー (HTTPS)                                     他のサーバー (HTTPS)
+      │                                                    ▲
+      ▼                                                    │
+ ╔══════════════════════════════════╗     ╔══════════════════════════════════╗
+ ║      elixir — 案内人              ║     ║      delivery — 配達員            ║
+ ║  Bandit/Plug / WS streaming      ║     ║  Outbox.Relay                     ║
+ ║  OAuth / WebAuthn / session      ║     ║  （LISTEN/NOTIFY → JetStream）    ║
+ ║  inbox POST 受付 + dispatch      ║     ║  Oban :delivery / :federation     ║
+ ║  Outbox の書き込み側（Ecto.Multi）║     ║  外向き HTTP POST + リトライ      ║
+ ║  WebFinger / NodeInfo            ║     ║  Collection-Synchronization       ║
+ ║  /api/v1 + /api/admin → api ノード║     ║  fedify.sign.v1 で署名            ║
+ ╚═════════════════════════════╤════╝     ╚═════════════════════════════╤════╝
+                               │                                         │
+                               ▼                                         │
+                PostgreSQL（真実の源、Ecto経由）◄──── outbox を読む ──────┘
+                + outbox（gateway が書き、delivery が読む）
+                + delivery_receipts（delivery が書く、冪等性）
+                + oban_jobs（共有テーブル、キューは分離）
+                               │
+                               ▼
+                NATS JetStream
+                ├─ stream OUTBOX        (sns.outbox.>)     — delivery が publish
+                └─ stream DOMAIN_EVENTS (sns.events.>)     — streaming 用
+                               │
+                ┌──────────────┼─────────────────┐
+                ▼                                ▼
  ╔══════════════════════════════════╗  ╔═════════════════════════════╗
  ║      Bun — 翻訳家 + 印鑑職人      ║  ║   api — REST プラグインノード ║
  ║  NATS Micro サービス "fedify"    ║  ║  （:sukhi_api、BEAMノード） ║
@@ -59,38 +62,41 @@ Misskey互換のAPIを喋るよ。ローカルにログインして、Noteを投
 
 この分け方で守ってるお約束:
 
-1. **外の世界とHTTPを喋るのはElixirだけ**。ユーザーも他サーバーも。
-   BunはHTTPサーバー持ってない。
-2. **Postgresに書き込むのもElixirだけ**。Bunはステートレス。
-3. **外向き配信は全部 Elixir の Oban を通す** — Bunじゃない。
-   BEAMの軽量プロセスなら数千フォロワーへのファン・アウトも余裕。
-   Bunのシングルスレッド・イベントループは詰まっちゃう。
-4. **BunはJSON-LDとHTTP署名だけ担当**。Fedifyが得意な領域がちょうどここ。
-5. **Mastodon/Misskey REST は api プラグインノードで動く**。ゲートウェイとは
-   分散Erlang の `:rpc` で繋がる — HTTPホップなし、NATSエンベロープなし。
+1. **ユーザー向け HTTP はゲートウェイだけが喋る**。Bun は HTTP サーバーなし、
+   delivery は外向きの inbox POST だけ。
+2. **コアスキーマに書き込むのはゲートウェイだけ**（notes, follows, outbox 挿入…）。
+   delivery は `outbox / accounts / follows / objects / relays` を読み、
+   `delivery_receipts` に書く — 狭くて安定した射影。
+3. **外向き配信は全部 delivery ノード** — Bun でもゲートウェイでもない。
+   ゲートウェイは `oban_jobs` テーブルに文字列ワーカー名
+   （`SukhiDelivery.Delivery.Worker`）で Job を差し込む。`:delivery` キューを
+   polling してるのは delivery だけなので、実行もそこだけ。
+4. **ゲートウェイ ↔ delivery の通信は Postgres と NATS だけ**。この境界に
+   分散 Erlang は引かない。分散 Erlang を使うのは `api/` プラグインノードだけ
+   — Mastodon REST の同期応答がほしいから。
+5. **Bun は JSON-LD と HTTP 署名だけ担当**。Fedify の得意な領域がちょうどここ。
+6. **Mastodon/Misskey REST は api プラグインノードで動く**。ゲートウェイとは
+   分散 Erlang の `:rpc` で繋がる — HTTPホップなし、NATSエンベロープなし。
 
 ## 3. ディレクトリの地図
 
 ```
 sukhi-fedi/
-├── elixir/                                # 案内人 + 配達員
+├── elixir/                                # 案内人（ゲートウェイのみ）
 │   ├── lib/sukhi_fedi/
 │   │   ├── application.ex                 # 監視ツリー
 │   │   ├── addon.ex / addon/registry.ex   # アドオンABI + 発見
 │   │   ├── repo.ex
 │   │   ├── outbox.ex                      # Outbox.enqueue / enqueue_multi
-│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
-│   │   ├── delivery/
-│   │   │   ├── fedify_client.ex           # NATS Micro クライアント → Bun
-│   │   │   ├── worker.ex                  # Oban 配信ワーカー
-│   │   │   ├── fan_out.ex                 # 事前計算 + Oban.insert_all
-│   │   │   ├── followers_sync.ex          # FEP-8fcf
-│   │   │   └── follower_sync_worker.ex
-│   │   ├── federation/actor_fetcher.ex    # リモートactor取得 + ETSキャッシュ
+│   │   │                                    （書き込み側のみ。Relay と
+│   │   │                                    読み取り側は delivery ノード）
+│   │   ├── federation/
+│   │   │   ├── actor_fetcher.ex           # リモートactor取得 + ETSキャッシュ
+│   │   │   └── fedify_client.ex           # NATS Micro クライアント → Bun
+│   │   │                                    （admin のリレー購読で使用）
 │   │   ├── schema/                        # Ectoスキーマ（note, account,
 │   │   │   │                                follow, boost, reaction, …）
-│   │   │   ├── outbox_event.ex            # `outbox` テーブル
-│   │   │   └── delivery_receipt.ex
+│   │   │   └── outbox_event.ex            # `outbox` テーブル
 │   │   ├── cache/ets.ex                   # ETS TTLキャッシュ
 │   │   ├── ap/                            # ActivityPub ヘルパー
 │   │   │   ├── client.ex                  # レガシーNATS req/reply (ap.*)
@@ -118,6 +124,28 @@ sukhi-fedi/
 │   ├── test/                              # unit + integration
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   └── mix.exs / Dockerfile
+│
+├── delivery/                              # 配達員（別の BEAM ノード）
+│   ├── lib/sukhi_delivery/
+│   │   ├── application.ex                 # 監視ツリー
+│   │   ├── repo.ex
+│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
+│   │   ├── delivery/
+│   │   │   ├── worker.ex                  # Oban :delivery キュー
+│   │   │   ├── fan_out.ex                 # 潜在（将来の outbox consumer 用）
+│   │   │   ├── fedify_client.ex           # NATS Micro クライアント → Bun
+│   │   │   ├── followers_sync.ex          # FEP-8fcf
+│   │   │   └── follower_sync_worker.ex    # Oban :federation キュー
+│   │   ├── schema/                        # コアスキーマの読み取り射影
+│   │   │   ├── outbox_event.ex / delivery_receipt.ex
+│   │   │   └── account.ex / follow.ex / object.ex / relay.ex
+│   │   ├── relays.ex                      # get_active_inbox_urls/0
+│   │   ├── prom_ex.ex                     # メトリクスは :4001
+│   │   └── release.ex                     # 空（マイグレはゲートウェイ所有）
+│   ├── config/{config,dev,prod,runtime,test}.exs
+│   ├── test/delivery/worker_test.exs
+│   ├── mix.exs
+│   └── Dockerfile
 │
 ├── bun/                                   # 翻訳家 + 印鑑職人
 │   ├── services/fedify_service.ts         # ★ NATS Micro サービス本体

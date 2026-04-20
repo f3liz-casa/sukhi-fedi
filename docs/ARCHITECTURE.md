@@ -12,38 +12,40 @@ and Misskey-compatible APIs. Users sign in locally, publish Notes,
 follow remote actors, and receive posts from any compatible fediverse
 server.
 
-Design north star: **one Elixir gateway + one stateless Bun worker
-fleet + one distributed-Erlang plugin node**, coordinated by
-**PostgreSQL (system of record) + NATS (event plane)**. Nothing else
-is a hard dependency.
+Design north star: **one Elixir gateway + one Elixir delivery node +
+one stateless Bun worker fleet + one distributed-Erlang plugin node**,
+coordinated by **PostgreSQL (system of record) + NATS (event plane)**.
+Nothing else is a hard dependency.
 
 ## 2. Boundary lines
 
 ```
- users (HTTPS)         remote servers (HTTPS)
-      │                       │
-      ▼                       ▼
- ╔══════════════════════════════════════════════╗
- ║           Elixir — 案内人 + 配達員            ║
- ║  Bandit/Plug  /  WebSocket streaming          ║
- ║  OAuth / WebAuthn / session                   ║
- ║  inbox POST receive + dispatch                ║
- ║  Outbox.Relay  (LISTEN/NOTIFY → JetStream)    ║
- ║  Oban delivery workers (HTTP POST + retries)  ║
- ║  WebFinger / NodeInfo (direct, no proxy)      ║
- ║  Routes /api/v1 + /api/admin to plugin node   ║
- ╚═════════════════════════════════╤════════════╝
-                                   │
-      PostgreSQL (system of record, Ecto)
-      + outbox table (exactly-once-effectively)
-      + delivery_receipts (per-inbox idempotency)
-                                   │
-      NATS JetStream
-      ├─ stream OUTBOX        (sns.outbox.>)
-      └─ stream DOMAIN_EVENTS (sns.events.>)
-                                   │
-                ┌──────────────────┼──────────────────┐
-                ▼                                     ▼
+ users (HTTPS)                                    remote servers (HTTPS)
+      │                                                   ▲
+      ▼                                                   │
+ ╔══════════════════════════════════╗     ╔══════════════════════════════════╗
+ ║      elixir — 案内人 (gateway)    ║     ║      delivery — 配達員            ║
+ ║  Bandit/Plug  / WS streaming     ║     ║  Outbox.Relay                     ║
+ ║  OAuth / WebAuthn / session      ║     ║  (LISTEN/NOTIFY → JetStream)      ║
+ ║  inbox POST receive + dispatch   ║     ║  Oban :delivery / :federation     ║
+ ║  Outbox *write side* (Ecto.Multi)║     ║  HTTP POST + retries              ║
+ ║  WebFinger / NodeInfo            ║     ║  Collection-Synchronization       ║
+ ║  Routes /api/v1 + /api/admin →api║     ║  signs via fedify.sign.v1         ║
+ ╚═════════════════════════════╤════╝     ╚═════════════════════════════╤════╝
+                               │                                        │
+                               ▼                                        │
+                PostgreSQL (system of record, Ecto) ◄───reads outbox────┘
+                + outbox (gateway writes, delivery reads)
+                + delivery_receipts (delivery writes, idempotency)
+                + oban_jobs (shared table, disjoint queues)
+                               │
+                               ▼
+                NATS JetStream
+                ├─ stream OUTBOX        (sns.outbox.>)    — delivery publishes
+                └─ stream DOMAIN_EVENTS (sns.events.>)    — streaming
+                               │
+                ┌──────────────┼────────────────┐
+                ▼                               ▼
  ╔══════════════════════════════════╗  ╔═════════════════════════════╗
  ║      Bun — 翻訳家 + 印鑑職人      ║  ║  api — REST plugin node     ║
  ║  NATS Micro service "fedify"     ║  ║  (:sukhi_api, BEAM node)    ║
@@ -58,39 +60,43 @@ is a hard dependency.
 
 Rules enforced by this split:
 
-1. **Only Elixir speaks HTTP to the outside world** (both users and remote
-   servers). Bun has no HTTP server.
-2. **Only Elixir writes to Postgres.** Bun is stateless.
-3. **All outbound deliveries flow through Oban on Elixir**, never Bun.
-   BEAM's lightweight processes handle fan-out to thousands of followers
-   without breaking a sweat; Bun's single-thread event loop would choke.
-4. **Bun owns JSON-LD + HTTP Signature only.** Fedify's opinionated
+1. **Only the gateway speaks HTTP to users.** Bun has no HTTP server; the
+   delivery node speaks HTTP only outbound to remote inboxes.
+2. **Only the gateway writes to the core schema** (notes, follows,
+   outbox row inserts, …). The delivery node reads `outbox`, `accounts`,
+   `follows`, `objects`, `relays` and writes `delivery_receipts` — a
+   narrow, stable projection.
+3. **All outbound ActivityPub deliveries live on the delivery node**,
+   never Bun and never the gateway. Gateway inserts Oban jobs by
+   fully-qualified worker string (`SukhiDelivery.Delivery.Worker`) into
+   the shared `oban_jobs` table; only delivery polls the `:delivery`
+   queue, so only delivery executes them.
+4. **Gateway ↔ Delivery is Postgres + NATS.** No distributed Erlang on
+   that edge. Distributed Erlang is reserved for the `api/` plugin node,
+   which needs synchronous request/reply for Mastodon REST.
+5. **Bun owns JSON-LD + HTTP Signature only.** Fedify's opinionated
    ActivityPub handling is exactly this slice, so we lean on it there.
-5. **Mastodon/Misskey REST runs on the api plugin node**, reached via
+6. **Mastodon/Misskey REST runs on the api plugin node**, reached via
    distributed Erlang `:rpc` — no HTTP hop, no JSON-over-NATS envelope.
 
 ## 3. Repository layout
 
 ```
 sukhi-fedi/
-├── elixir/                                # 案内人 + 配達員 (gateway)
+├── elixir/                                # 案内人 (gateway only)
 │   ├── lib/sukhi_fedi/
 │   │   ├── application.ex                 # supervision tree
 │   │   ├── addon.ex / addon/registry.ex   # addon ABI + discovery
 │   │   ├── repo.ex
 │   │   ├── outbox.ex                      # Outbox.enqueue / enqueue_multi
-│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
-│   │   ├── delivery/
-│   │   │   ├── fedify_client.ex           # NATS Micro client → Bun
-│   │   │   ├── worker.ex                  # Oban delivery worker
-│   │   │   ├── fan_out.ex                 # precomputes + Oban.insert_all
-│   │   │   ├── followers_sync.ex          # FEP-8fcf support
-│   │   │   └── follower_sync_worker.ex
-│   │   ├── federation/actor_fetcher.ex    # remote actor GET + ETS cache
+│   │   │                                    (write side only; delivery
+│   │   │                                    node owns the Relay / read side)
+│   │   ├── federation/
+│   │   │   ├── actor_fetcher.ex           # remote actor GET + ETS cache
+│   │   │   └── fedify_client.ex           # NATS Micro client → Bun (admin)
 │   │   ├── schema/                        # Ecto schemas (note, account,
 │   │   │   │                                follow, boost, reaction, …)
-│   │   │   ├── outbox_event.ex            # `outbox` table
-│   │   │   └── delivery_receipt.ex
+│   │   │   └── outbox_event.ex            # `outbox` table
 │   │   ├── cache/ets.ex                   # ETS TTL cache
 │   │   ├── ap/                            # ActivityPub helpers
 │   │   │   ├── client.ex                  # legacy NATS req/reply (ap.*)
@@ -121,10 +127,33 @@ sukhi-fedi/
 │   ├── test/
 │   │   ├── support/integration_case.ex
 │   │   ├── integration/                   # E2E (docker-compose.test.yml)
-│   │   ├── delivery/ · web/               # unit tests
+│   │   ├── web/                           # unit tests
 │   │   └── test_helper.exs                # excludes :integration
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   ├── mix.exs / mix.lock
+│   └── Dockerfile
+│
+├── delivery/                              # 配達員 (separate BEAM node)
+│   ├── lib/sukhi_delivery/
+│   │   ├── application.ex                 # supervision tree
+│   │   ├── repo.ex
+│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
+│   │   ├── delivery/
+│   │   │   ├── worker.ex                  # Oban :delivery queue
+│   │   │   ├── fan_out.ex                 # latent (future outbox consumer)
+│   │   │   ├── fedify_client.ex           # NATS Micro client → Bun
+│   │   │   ├── followers_sync.ex          # FEP-8fcf
+│   │   │   └── follower_sync_worker.ex    # Oban :federation queue
+│   │   ├── schema/                        # read-only projection of the
+│   │   │                                    gateway's core schema
+│   │   │   ├── outbox_event.ex / delivery_receipt.ex
+│   │   │   └── account.ex / follow.ex / object.ex / relay.ex
+│   │   ├── relays.ex                      # get_active_inbox_urls/0
+│   │   ├── prom_ex.ex                     # metrics on :4001
+│   │   └── release.ex                     # stub (gateway owns migrations)
+│   ├── config/{config,dev,prod,runtime,test}.exs
+│   ├── test/delivery/worker_test.exs
+│   ├── mix.exs
 │   └── Dockerfile
 │
 ├── bun/                                   # 翻訳家 + 印鑑職人

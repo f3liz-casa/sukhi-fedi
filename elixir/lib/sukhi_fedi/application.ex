@@ -14,17 +14,15 @@ defmodule SukhiFedi.Application do
       {Bandit, plug: SukhiFedi.Web.Router, port: 4000},
       {Gnat.ConnectionSupervisor, nats_connection_settings()},
       SukhiFedi.Cache.Ets,
-      # Named Finch pool used by Delivery.Worker for outbound inbox POSTs.
-      # size * count = concurrent connections per remote host. Tune up if
-      # `sukhi_delivery_pool_utilization` stays near 1.0 in production.
+      # Finch powers outbound HTTP from the federation fetcher and the
+      # nodeinfo-monitor addon. Outbound ActivityPub delivery lives on
+      # the separate delivery node; this pool does not carry that traffic.
       {Finch,
        name: SukhiFedi.Finch,
        pools: %{
          default: [size: 50, count: 4]
        }},
       {Oban, Application.fetch_env!(:sukhi_fedi, Oban)},
-      # Transactional Outbox relay: publishes outbox rows to NATS JetStream.
-      SukhiFedi.Outbox.Relay,
       # NATS listener for db.* subjects (Deno HTTP API → Elixir DB)
       SukhiFedi.Web.DbNatsListener
     ]

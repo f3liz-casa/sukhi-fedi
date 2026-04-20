@@ -1,27 +1,32 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Delivery.Worker do
+defmodule SukhiDelivery.Delivery.Worker do
   @moduledoc """
   Oban worker that HTTP-POSTs a signed ActivityPub Activity to a remote
   inbox.
 
+  Cross-node Oban: the gateway inserts jobs into the shared `oban_jobs`
+  table with this module name as a string (`worker:
+  "SukhiDelivery.Delivery.Worker"`); only the delivery node's Oban
+  supervisor polls the `:delivery` queue, so only delivery nodes execute
+  these jobs.
+
   Idempotency: when the job args include `"activity_id"`, the worker
   consults `delivery_receipts` and skips the POST if the same
   `(activity_id, inbox_url)` tuple has already been delivered. On success
-  a receipt is recorded. Older callers that don't pass `activity_id`
-  still work — they simply don't get dedup.
+  a receipt is recorded.
 
-  Signing is delegated to `SukhiFedi.Delivery.FedifyClient.sign/1`
-  (NATS Micro → Deno/Fedify). If signing is unavailable (no key, service
-  down) the POST still goes out unsigned — remote servers will 401 / 403
-  and Oban retries with exponential backoff (max_attempts: 10).
+  Signing is delegated to `SukhiDelivery.Delivery.FedifyClient.sign/1`
+  (NATS Micro → Bun/Fedify). If signing is unavailable (no key, service
+  down) the POST goes out unsigned and remote servers will 401/403 —
+  Oban retries with exponential backoff (max_attempts: 10).
   """
 
   use Oban.Worker, queue: :delivery, max_attempts: 10
   import Ecto.Query
 
-  alias SukhiFedi.{Repo, Delivery.FedifyClient}
-  alias SukhiFedi.Schema.{Object, Account, DeliveryReceipt}
-  alias SukhiFedi.Delivery.FollowersSync
+  alias SukhiDelivery.{Repo, Delivery.FedifyClient}
+  alias SukhiDelivery.Schema.{Object, Account, DeliveryReceipt}
+  alias SukhiDelivery.Delivery.FollowersSync
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
@@ -40,9 +45,6 @@ defmodule SukhiFedi.Delivery.Worker do
 
     base_headers = %{"content-type" => "application/activity+json"}
 
-    # FEP-8fcf: attach Collection-Synchronization header for shared-inbox deliveries.
-    # FanOut precomputes this once per fan-out and hands it in via args["sync_header"];
-    # legacy callers that don't pass it fall back to computing on the fly.
     sync_headers = resolve_sync_headers(args, actor_uri)
 
     headers =
@@ -57,7 +59,7 @@ defmodule SukhiFedi.Delivery.Worker do
     case Req.post(inbox_url,
            body: body,
            headers: Enum.to_list(headers),
-           finch: SukhiFedi.Finch,
+           finch: SukhiDelivery.Finch,
            connect_options: [timeout: 10_000],
            receive_timeout: 30_000
          ) do
@@ -66,7 +68,6 @@ defmodule SukhiFedi.Delivery.Worker do
         :ok
 
       {:ok, %{status: 410}} ->
-        # Gone — remote resource is permanently retired. Record and stop retrying.
         record_delivery(activity_id, inbox_url, "gone")
         :ok
 
@@ -91,8 +92,6 @@ defmodule SukhiFedi.Delivery.Worker do
     {Jason.encode!(raw_json), nil}
   end
 
-  # Prefer the value precomputed by FanOut; fall back to computing when
-  # absent (e.g. for jobs enqueued directly from Instructions.execute/1).
   defp resolve_sync_headers(%{"sync_header" => value}, _actor_uri) when is_binary(value) do
     %{"Collection-Synchronization" => value}
   end

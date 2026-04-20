@@ -1,24 +1,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Outbox.Relay do
+defmodule SukhiDelivery.Outbox.Relay do
   @moduledoc """
-  Consumes pending rows from the `outbox` table and publishes them to
-  NATS JetStream. Paired with `SukhiFedi.Outbox.enqueue_multi/6` this
-  delivers "DB commit = NATS durable" semantics.
+  Consumes pending rows from the shared `outbox` table (written by the
+  gateway via `SukhiFedi.Outbox.enqueue_multi/6`) and publishes them to
+  NATS JetStream. "DB commit = NATS durable" semantics.
 
   Wakeups:
-    * Postgres `NOTIFY outbox_new` (fired by the AFTER INSERT trigger)
+    * Postgres `NOTIFY outbox_new` (fired by the AFTER INSERT trigger
+      installed by the gateway's outbox migration)
     * Periodic fallback tick
 
-  Uses `FOR UPDATE SKIP LOCKED` so additional relay instances
-  (horizontal scale) cooperate safely — each claims a disjoint batch.
+  Uses `FOR UPDATE SKIP LOCKED` so multiple relay instances cooperate
+  safely — each claims a disjoint batch.
   """
 
   use GenServer
   require Logger
   import Ecto.Query
 
-  alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.OutboxEvent
+  alias SukhiDelivery.Repo
+  alias SukhiDelivery.Schema.OutboxEvent
 
   @poll_interval_ms 30_000
   @batch_size 100
@@ -54,7 +55,7 @@ defmodule SukhiFedi.Outbox.Relay do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.debug("SukhiFedi.Outbox.Relay ignoring: #{inspect(msg)}")
+    Logger.debug("SukhiDelivery.Outbox.Relay ignoring: #{inspect(msg)}")
     {:noreply, state}
   end
 
@@ -95,8 +96,6 @@ defmodule SukhiFedi.Outbox.Relay do
       |> Repo.update_all(set: [status: "published", published_at: now])
     end
 
-    # Failures keep per-row updates — `last_error` differs per row and the
-    # cold path is bounded by @max_attempts so amplification isn't a concern.
     Enum.each(failures, fn {event, reason} ->
       new_attempts = event.attempts + 1
       new_status = if new_attempts >= @max_attempts, do: "failed", else: "pending"

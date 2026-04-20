@@ -4,7 +4,13 @@ defmodule SukhiFedi.Web.InboxController do
 
   alias SukhiFedi.AP.Client
   alias SukhiFedi.AP.Instructions
-  alias SukhiFedi.Delivery.{FollowersSync, FollowerSyncWorker}
+
+  # FEP-8fcf Collection-Synchronization format:
+  #   collectionId="<uri>", url="<uri>", digest="<hex>"
+  @sync_url_regex ~r/url="([^"]+)"/
+
+  @follower_sync_worker "SukhiDelivery.Delivery.FollowerSyncWorker"
+  @follower_sync_queue "federation"
 
   def user_inbox(conn, _opts) do
     handle_inbox(conn)
@@ -16,8 +22,6 @@ defmodule SukhiFedi.Web.InboxController do
 
   defp handle_inbox(conn) do
     raw_json = conn.body_params
-
-    # FEP-8fcf: parse Collection-Synchronization header for async reconciliation
     sync_header = get_req_header(conn, "collection-synchronization") |> List.first()
 
     with {:ok, _} <- Client.request("ap.verify", %{payload: raw_json}),
@@ -37,10 +41,14 @@ defmodule SukhiFedi.Web.InboxController do
     actor_uri = Map.get(raw_json, "actor")
 
     with true <- is_binary(actor_uri),
-         {:ok, %{url: collection_url}} <- FollowersSync.parse_header(sync_header) do
-      %{actor_uri: actor_uri, collection_url: collection_url}
-      |> FollowerSyncWorker.new()
-      |> Oban.insert()
+         [_, collection_url] <- Regex.run(@sync_url_regex, sync_header) do
+      Oban.insert(
+        Oban.Job.new(
+          %{actor_uri: actor_uri, collection_url: collection_url},
+          worker: @follower_sync_worker,
+          queue: @follower_sync_queue
+        )
+      )
     end
 
     :ok

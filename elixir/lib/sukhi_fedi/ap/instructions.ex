@@ -6,11 +6,17 @@ defmodule SukhiFedi.AP.Instructions do
 
   import Ecto.Query
 
-  alias SukhiFedi.Delivery.Worker
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account, Note}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
+
+  # Delivery runs on a separate BEAM node with its own Oban supervisor
+  # polling the :delivery queue. We reach its worker via the fully-
+  # qualified worker string so the gateway has no compile-time dependency
+  # on the delivery app.
+  @delivery_worker "SukhiDelivery.Delivery.Worker"
+  @delivery_queue "delivery"
 
   @public_ns "https://www.w3.org/ns/activitystreams#Public"
   @as_public "Public"
@@ -34,9 +40,13 @@ defmodule SukhiFedi.AP.Instructions do
 
     followee_uri = save_data["followeeUri"]
 
-    %{raw_json: reply, inbox_url: inbox_url, actor_uri: followee_uri}
-    |> Worker.new()
-    |> Oban.insert!()
+    Oban.insert!(
+      Oban.Job.new(
+        %{raw_json: reply, inbox_url: inbox_url, actor_uri: followee_uri},
+        worker: @delivery_worker,
+        queue: @delivery_queue
+      )
+    )
 
     :ok
   end

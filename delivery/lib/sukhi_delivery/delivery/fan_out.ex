@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-defmodule SukhiFedi.Delivery.FanOut do
+defmodule SukhiDelivery.Delivery.FanOut do
   @moduledoc """
   Resolves recipient inboxes and enqueues Oban delivery jobs.
 
@@ -8,11 +8,15 @@ defmodule SukhiFedi.Delivery.FanOut do
   `Collection-Synchronization` header — and threaded into every job via
   `args`. This turns N per-worker Postgres reads + N SHA-256 digests
   over the follower set into one of each, per fan-out.
+
+  Latent module: no current call site. Wired in when an outbox-driven
+  federation consumer is introduced — keep here so that consumer can
+  be added without reshuffling the delivery node's module tree.
   """
 
-  alias SukhiFedi.Delivery.{Worker, FollowersSync}
-  alias SukhiFedi.Schema.Object
-  alias SukhiFedi.Relays
+  alias SukhiDelivery.Delivery.{Worker, FollowersSync}
+  alias SukhiDelivery.Schema.Object
+  alias SukhiDelivery.Relays
 
   @doc """
   Enqueues one delivery job per inbox URL for the given object.

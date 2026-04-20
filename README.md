@@ -1,8 +1,9 @@
 # sukhi-fedi
 
 Federated SNS server. Mastodon/Misskey API compatible.
-Elixir gateway + Bun/Fedify NATS Micro worker fleet, coordinated by
-PostgreSQL + NATS JetStream.
+Elixir gateway + Elixir delivery node + Bun/Fedify NATS Micro worker
+fleet + distributed-Erlang api plugin, coordinated by PostgreSQL +
+NATS JetStream.
 
 ## 📖 Documentation
 
@@ -17,17 +18,21 @@ document and the code. Read it first.
 ## Quick start
 
 ```bash
-# Full dev stack (Postgres, NATS w/ JetStream, Elixir, Bun, api plugin)
+# Full dev stack (Postgres, NATS w/ JetStream, gateway, delivery, bun, api)
 docker-compose up -d
-# → Elixir         http://localhost:4000
-# → PromEx metrics http://localhost:4000/metrics  (scrape externally)
+# → Gateway         http://localhost:4000
+# → Gateway metrics http://localhost:4000/metrics  (scrape externally)
+# → Delivery metrics http://localhost:4001/metrics (scrape externally)
 ```
 
 ## Running tests
 
 ```bash
-# Elixir unit tests (hermetic, no live deps)
+# Elixir gateway unit tests (hermetic, no live deps)
 cd elixir && mix test --no-start
+
+# Elixir delivery unit tests
+cd delivery && mix test --no-start
 
 # Bun tests
 cd bun && bun test
@@ -42,13 +47,14 @@ cd elixir && mix test --only integration
 
 ## Architecture at a glance
 
-| Layer      | Responsibility                                                      |
-| ---------- | ------------------------------------------------------------------- |
-| Elixir     | HTTP (Mastodon/Misskey API, inbox, WebFinger, NodeInfo), DB, Oban   |
-| Bun        | NATS Micro service only — JSON-LD build, HTTP Signature, verify     |
-| PostgreSQL | System of record, `outbox` table for exactly-once-effective events  |
-| NATS       | JetStream `OUTBOX` + `DOMAIN_EVENTS`; Micro service `fedify`        |
-| PromEx     | Prometheus metrics at `/metrics` (scrape externally; no Grafana in-repo) |
+| Layer      | Responsibility                                                           |
+| ---------- | ------------------------------------------------------------------------ |
+| Gateway    | HTTP ingress (Mastodon/Misskey API, inbox, WebFinger, NodeInfo), outbox writes |
+| Delivery   | Outbox.Relay, Oban delivery & federation queues, outbound inbox POSTs    |
+| Bun        | NATS Micro service only — JSON-LD build, HTTP Signature, verify          |
+| PostgreSQL | System of record; shared `outbox` / `delivery_receipts` / `oban_jobs`    |
+| NATS       | JetStream `OUTBOX` + `DOMAIN_EVENTS`; Micro service `fedify`             |
+| PromEx     | Prometheus metrics at `/metrics` (gateway :4000, delivery :4001)         |
 
 See §2 of `ARCHITECTURE.md` for the responsibility split rationale.
 
