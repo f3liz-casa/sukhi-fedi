@@ -69,7 +69,15 @@ defmodule SukhiFedi.Outbox.Relay do
         )
         |> Repo.all()
 
-      Enum.each(events, &publish_one/1)
+      {published_ids, failures} =
+        Enum.reduce(events, {[], []}, fn event, {ok_ids, fail_acc} ->
+          case do_publish(event) do
+            :ok -> {[event.id | ok_ids], fail_acc}
+            {:error, reason} -> {ok_ids, [{event, reason} | fail_acc]}
+          end
+        end)
+
+      apply_results(published_ids, failures)
     end)
   rescue
     e ->
@@ -77,33 +85,37 @@ defmodule SukhiFedi.Outbox.Relay do
       :error
   end
 
-  defp publish_one(event) do
-    case do_publish(event) do
-      :ok ->
-        event
-        |> Ecto.Changeset.change(%{
-          status: "published",
-          published_at: DateTime.utc_now()
-        })
-        |> Repo.update!()
+  defp apply_results([], []), do: :ok
 
-      {:error, reason} ->
-        new_attempts = event.attempts + 1
-        new_status = if new_attempts >= @max_attempts, do: "failed", else: "pending"
+  defp apply_results(published_ids, failures) do
+    now = DateTime.utc_now()
 
-        event
-        |> Ecto.Changeset.change(%{
-          attempts: new_attempts,
-          last_error: inspect(reason),
-          status: new_status
-        })
-        |> Repo.update!()
-
-        Logger.warning(
-          "Outbox.Relay publish failed (attempt #{new_attempts}) " <>
-            "id=#{event.id} subject=#{event.subject}: #{inspect(reason)}"
-        )
+    unless published_ids == [] do
+      from(e in OutboxEvent, where: e.id in ^published_ids)
+      |> Repo.update_all(set: [status: "published", published_at: now])
     end
+
+    # Failures keep per-row updates — `last_error` differs per row and the
+    # cold path is bounded by @max_attempts so amplification isn't a concern.
+    Enum.each(failures, fn {event, reason} ->
+      new_attempts = event.attempts + 1
+      new_status = if new_attempts >= @max_attempts, do: "failed", else: "pending"
+
+      event
+      |> Ecto.Changeset.change(%{
+        attempts: new_attempts,
+        last_error: inspect(reason),
+        status: new_status
+      })
+      |> Repo.update!()
+
+      Logger.warning(
+        "Outbox.Relay publish failed (attempt #{new_attempts}) " <>
+          "id=#{event.id} subject=#{event.subject}: #{inspect(reason)}"
+      )
+    end)
+
+    :ok
   end
 
   defp do_publish(event) do

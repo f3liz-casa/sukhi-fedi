@@ -34,13 +34,14 @@ defmodule SukhiFedi.Web.SocialController do
 
   def following(conn) do
     username = conn.path_params["username"]
-    
+
     case Accounts.get_account_by_username(username) do
       nil -> send_json(conn, 404, %{error: "not_found", message: "User not found"})
       account ->
         params = fetch_query_params(conn).params
         opts = [cursor: params["cursor"], limit: parse_int(params["limit"], 20)]
-        result = Social.list_following(account.id, opts)
+        follower_uri = "https://#{Application.get_env(:sukhi_fedi, :domain)}/users/#{account.username}"
+        result = Social.list_following(follower_uri, opts)
         send_json(conn, 200, result)
     end
   end

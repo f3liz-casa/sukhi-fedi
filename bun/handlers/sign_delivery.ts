@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { signRequest, importJwk } from "@fedify/fedify";
+import { signRequest } from "@fedify/fedify";
+import { getImportedPrivateKey, type JwkInput } from "../fedify/key_cache.ts";
 
 export interface SignDeliveryPayload {
   actorUri: string;
   inbox: string;
   body: string;
-  privateKeyJwk: JsonWebKey;
+  privateKeyJwk: JwkInput;
   keyId: string;
   /**
    * Preferred HTTP Signature algorithm.
@@ -26,7 +27,7 @@ export interface SignDeliveryResult {
 export async function handleSignDelivery(
   payload: SignDeliveryPayload,
 ): Promise<SignDeliveryResult> {
-  const privateKey = await importJwk(payload.privateKeyJwk, "private");
+  const privateKey = await getImportedPrivateKey(payload.privateKeyJwk);
 
   const request = new Request(payload.inbox, {
     method: "POST",

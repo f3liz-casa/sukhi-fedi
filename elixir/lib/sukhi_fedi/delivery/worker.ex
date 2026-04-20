@@ -40,16 +40,10 @@ defmodule SukhiFedi.Delivery.Worker do
 
     base_headers = %{"content-type" => "application/activity+json"}
 
-    # FEP-8fcf: attach Collection-Synchronization header for shared-inbox deliveries
-    sync_headers =
-      if actor_uri do
-        case FollowersSync.header_value(actor_uri) do
-          nil -> %{}
-          value -> %{"Collection-Synchronization" => value}
-        end
-      else
-        %{}
-      end
+    # FEP-8fcf: attach Collection-Synchronization header for shared-inbox deliveries.
+    # FanOut precomputes this once per fan-out and hands it in via args["sync_header"];
+    # legacy callers that don't pass it fall back to computing on the fly.
+    sync_headers = resolve_sync_headers(args, actor_uri)
 
     headers =
       case sign_request(actor_uri, inbox_url, body) do
@@ -95,6 +89,23 @@ defmodule SukhiFedi.Delivery.Worker do
 
   defp resolve_body_and_actor(%{"raw_json" => raw_json}) do
     {Jason.encode!(raw_json), nil}
+  end
+
+  # Prefer the value precomputed by FanOut; fall back to computing when
+  # absent (e.g. for jobs enqueued directly from Instructions.execute/1).
+  defp resolve_sync_headers(%{"sync_header" => value}, _actor_uri) when is_binary(value) do
+    %{"Collection-Synchronization" => value}
+  end
+
+  defp resolve_sync_headers(%{"sync_header" => nil}, _actor_uri), do: %{}
+
+  defp resolve_sync_headers(_args, nil), do: %{}
+
+  defp resolve_sync_headers(_args, actor_uri) do
+    case FollowersSync.header_value(actor_uri) do
+      nil -> %{}
+      value -> %{"Collection-Synchronization" => value}
+    end
   end
 
   defp sign_request(nil, _inbox, _body), do: :skip

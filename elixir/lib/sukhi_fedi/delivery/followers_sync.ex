@@ -12,8 +12,6 @@ defmodule SukhiFedi.Delivery.FollowersSync do
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Follow, Account}
 
-  @public_ns "https://www.w3.org/ns/activitystreams#Public"
-
   @doc """
   Compute a SHA-256 digest (lowercase hex) of the sorted follower URIs for a
   local actor's followers collection.
@@ -78,27 +76,25 @@ defmodule SukhiFedi.Delivery.FollowersSync do
   def reconcile(sender_actor_uri, collection_items) when is_list(collection_items) do
     domain = Application.get_env(:sukhi_fedi, :domain)
 
-    # Only process follows to local accounts
     local_follows =
       from(f in Follow,
-        where: f.follower_uri == ^sender_actor_uri
+        join: a in Account,
+        on: a.id == f.followee_id,
+        where: f.follower_uri == ^sender_actor_uri,
+        select: %{id: f.id, followee_username: a.username}
       )
       |> Repo.all()
 
-    Enum.each(local_follows, fn follow ->
-      # If the followee is local and the sender is no longer in their followers
-      # list according to the digest, remove the follow
-      followee_uri = "https://#{domain}/users/#{follow_followee_username(follow)}"
+    stale_ids =
+      for %{id: id, followee_username: username} <- local_follows,
+          "https://#{domain}/users/#{username}" not in collection_items,
+          do: id
 
-      unless followee_uri in collection_items do
-        Repo.delete(follow)
-      end
-    end)
-  end
+    unless stale_ids == [] do
+      from(f in Follow, where: f.id in ^stale_ids) |> Repo.delete_all()
+    end
 
-  defp follow_followee_username(follow) do
-    account = Repo.get(Account, follow.followee_id)
-    if account, do: account.username, else: nil
+    :ok
   end
 
   defp username_from_uri(uri) do

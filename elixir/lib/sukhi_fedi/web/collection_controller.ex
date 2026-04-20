@@ -6,9 +6,8 @@ defmodule SukhiFedi.Web.CollectionController do
   """
 
   import Plug.Conn
-  import Ecto.Query
   alias SukhiFedi.{Repo, Social}
-  alias SukhiFedi.Schema.{Account, Follow}
+  alias SukhiFedi.Schema.Account
 
   def followers(conn, _opts) do
     username = conn.path_params["name"]
@@ -46,16 +45,11 @@ defmodule SukhiFedi.Web.CollectionController do
 
     if account do
       follower_uri = actor_uri
-      followee_ids = Social.list_following(follower_uri)
 
       items =
-        Enum.map(followee_ids, fn followee_id ->
-          case Repo.get(Account, followee_id) do
-            %Account{username: u} -> "https://#{domain}/users/#{u}"
-            _ -> nil
-          end
-        end)
-        |> Enum.reject(&is_nil/1)
+        follower_uri
+        |> Social.list_following()
+        |> Enum.map(fn %{username: u} -> "https://#{domain}/users/#{u}" end)
 
       collection = %{
         "@context" => "https://www.w3.org/ns/activitystreams",

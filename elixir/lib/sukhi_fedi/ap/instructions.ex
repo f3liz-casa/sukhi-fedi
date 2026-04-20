@@ -4,9 +4,11 @@ defmodule SukhiFedi.AP.Instructions do
   Parses and executes instructions returned by Deno workers.
   """
 
+  import Ecto.Query
+
   alias SukhiFedi.Delivery.Worker
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account}
+  alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account, Note}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
 
@@ -22,6 +24,8 @@ defmodule SukhiFedi.AP.Instructions do
     maybe_handle_dm(object_data)
     maybe_handle_relay_accept(object_data)
     maybe_handle_pin_unpin(object_data)
+    maybe_handle_delete(object_data)
+    maybe_handle_undo(object_data)
     :ok
   end
 
@@ -189,6 +193,64 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   defp maybe_handle_pin_unpin(_), do: :ok
+
+  # Inbound `Delete` activity: drop the local copy of whatever object the
+  # remote actor is tombstoning. Object id can be a string or a Tombstone
+  # map with `id`. Both `objects` and `notes` (if a local Note mirrored
+  # the remote AP id) are scrubbed.
+  defp maybe_handle_delete(%{"type" => "Delete", "object" => object}) do
+    case extract_object_id(object) do
+      nil -> :ok
+      ap_id ->
+        from(o in Object, where: o.ap_id == ^ap_id) |> Repo.delete_all()
+        from(n in Note, where: n.ap_id == ^ap_id) |> Repo.delete_all()
+        :ok
+    end
+  end
+
+  defp maybe_handle_delete(_), do: :ok
+
+  # Inbound `Undo(Follow)`: remove the matching follow row. Other Undo
+  # variants (Like, Announce, …) are no-ops because we don't currently
+  # materialise remote-actor-originated likes/boosts as local rows.
+  defp maybe_handle_undo(%{"type" => "Undo", "actor" => actor_uri, "object" => inner})
+       when is_binary(actor_uri) and is_map(inner) do
+    case inner["type"] do
+      "Follow" ->
+        followee_uri = extract_object_id(inner["object"])
+        followee_id = followee_uri && local_account_id_from_uri(followee_uri)
+
+        if followee_id do
+          from(f in Follow,
+            where: f.follower_uri == ^actor_uri and f.followee_id == ^followee_id
+          )
+          |> Repo.delete_all()
+        end
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_handle_undo(_), do: :ok
+
+  defp extract_object_id(id) when is_binary(id), do: id
+  defp extract_object_id(%{"id" => id}) when is_binary(id), do: id
+  defp extract_object_id(_), do: nil
+
+  defp local_account_id_from_uri(uri) when is_binary(uri) do
+    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+    if String.contains?(uri, domain) do
+      username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+      case Repo.get_by(Account, username: username) do
+        nil -> nil
+        account -> account.id
+      end
+    end
+  end
 
   defp normalize_collection(list) when is_list(list), do: list
   defp normalize_collection(str) when is_binary(str), do: [str]

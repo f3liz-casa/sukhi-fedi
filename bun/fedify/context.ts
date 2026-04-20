@@ -1,8 +1,4 @@
-import { createFederation, MemoryKvStore, fetchDocumentLoader } from "@fedify/fedify";
-
-export const federation = createFederation<void>({
-  kv: new MemoryKvStore(),
-});
+import { fetchDocumentLoader } from "@fedify/fedify";
 
 const documentCache = new Map<string, Awaited<ReturnType<typeof fetchDocumentLoader>>>();
 

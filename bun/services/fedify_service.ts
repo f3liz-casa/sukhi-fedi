@@ -25,6 +25,9 @@ import { handleBuildAnnounce } from "../handlers/build/announce.ts";
 import { handleBuildActor } from "../handlers/build/actor.ts";
 import { handleBuildDm } from "../handlers/build/dm.ts";
 import { handleBuildAdd, handleBuildRemove } from "../handlers/build/collection_op.ts";
+import { handleBuildLike } from "../handlers/build/like.ts";
+import { handleBuildUndo } from "../handlers/build/undo.ts";
+import { handleBuildDelete } from "../handlers/build/delete.ts";
 import { handleSignDelivery } from "../handlers/sign_delivery.ts";
 import { handleVerify } from "../handlers/verify.ts";
 import { mergedTranslators } from "../addons/loader.ts";
@@ -48,6 +51,9 @@ const CORE_TRANSLATORS: Record<string, TranslateHandler> = {
   dm: handleBuildDm as TranslateHandler,
   add: handleBuildAdd as TranslateHandler,
   remove: handleBuildRemove as TranslateHandler,
+  like: handleBuildLike as TranslateHandler,
+  undo: handleBuildUndo as TranslateHandler,
+  delete: handleBuildDelete as TranslateHandler,
 };
 
 const TRANSLATORS: Record<string, TranslateHandler> = mergedTranslators(CORE_TRANSLATORS);

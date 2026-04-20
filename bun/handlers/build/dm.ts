@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Create, Note } from "@fedify/fedify";
+import { Temporal } from "@js-temporal/polyfill";
 import { signAndSerialize, injectDefined } from "../../fedify/utils.ts";
 
 export interface BuildDmPayload {

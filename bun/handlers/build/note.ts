@@ -1,4 +1,5 @@
 import { Create, Note, signObject } from "@fedify/fedify";
+import { Temporal } from "@js-temporal/polyfill";
 import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
 import { getOrCreateKey } from "../../fedify/keys.ts";
 import { injectDefined } from "../../fedify/utils.ts";

@@ -7,13 +7,15 @@
 
 ## 1. Product intent
 
-`sukhi-fedi` is a **federated (ActivityPub) SNS server** with Mastodon- and
-Misskey-compatible APIs. Users sign in locally, publish Notes, follow
-remote actors, and receive posts from any compatible fediverse server.
+`sukhi-fedi` is a **federated (ActivityPub) SNS server** with Mastodon-
+and Misskey-compatible APIs. Users sign in locally, publish Notes,
+follow remote actors, and receive posts from any compatible fediverse
+server.
 
-Design north star: **one Elixir gateway + one stateless Bun worker fleet**,
-coordinated by **PostgreSQL (system of record) + NATS (event plane)**.
-Nothing else is a hard dependency.
+Design north star: **one Elixir gateway + one stateless Bun worker
+fleet + one distributed-Erlang plugin node**, coordinated by
+**PostgreSQL (system of record) + NATS (event plane)**. Nothing else
+is a hard dependency.
 
 ## 2. Boundary lines
 
@@ -24,12 +26,12 @@ Nothing else is a hard dependency.
  ╔══════════════════════════════════════════════╗
  ║           Elixir — 案内人 + 配達員            ║
  ║  Bandit/Plug  /  WebSocket streaming          ║
- ║  Mastodon/Misskey-compat API                  ║
  ║  OAuth / WebAuthn / session                   ║
  ║  inbox POST receive + dispatch                ║
  ║  Outbox.Relay  (LISTEN/NOTIFY → JetStream)    ║
  ║  Oban delivery workers (HTTP POST + retries)  ║
  ║  WebFinger / NodeInfo (direct, no proxy)      ║
+ ║  Routes /api/v1 + /api/admin to plugin node   ║
  ╚═════════════════════════════════╤════════════╝
                                    │
       PostgreSQL (system of record, Ecto)
@@ -40,117 +42,139 @@ Nothing else is a hard dependency.
       ├─ stream OUTBOX        (sns.outbox.>)
       └─ stream DOMAIN_EVENTS (sns.events.>)
                                    │
-                                   ▼
- ╔══════════════════════════════════════════════╗
- ║        Bun — 翻訳家 + 印鑑職人                ║
- ║  NATS Micro service "fedify"                  ║
- ║    fedify.translate.v1  (JSON-LD build)       ║
- ║    fedify.sign.v1       (HTTP Signature)      ║
- ║    fedify.verify.v1     (signature verify)    ║
- ║    fedify.ping.v1       (health)              ║
- ║  queue group "fedify-workers" → auto LB       ║
- ║  NO HTTP server. NATS-only.                   ║
- ╚══════════════════════════════════════════════╝
+                ┌──────────────────┼──────────────────┐
+                ▼                                     ▼
+ ╔══════════════════════════════════╗  ╔═════════════════════════════╗
+ ║      Bun — 翻訳家 + 印鑑職人      ║  ║  api — REST plugin node     ║
+ ║  NATS Micro service "fedify"     ║  ║  (:sukhi_api, BEAM node)    ║
+ ║    fedify.translate.v1           ║  ║  :rpc-invoked from gateway  ║
+ ║    fedify.sign.v1                ║  ║  Mastodon / Misskey APIs    ║
+ ║    fedify.verify.v1              ║  ║  capabilities auto-register ║
+ ║    fedify.ping.v1                ║  ║                             ║
+ ║  queue group "fedify-workers"    ║  ║                             ║
+ ║  NO HTTP server — NATS-only      ║  ║                             ║
+ ╚══════════════════════════════════╝  ╚═════════════════════════════╝
 ```
 
 Rules enforced by this split:
 
 1. **Only Elixir speaks HTTP to the outside world** (both users and remote
-   servers). No Bun HTTP server in the target state.
+   servers). Bun has no HTTP server.
 2. **Only Elixir writes to Postgres.** Bun is stateless.
 3. **All outbound deliveries flow through Oban on Elixir**, never Bun.
    BEAM's lightweight processes handle fan-out to thousands of followers
    without breaking a sweat; Bun's single-thread event loop would choke.
-4. **Bun owns JSON-LD + HTTP Signature only.** Fedify's
-   opinionated ActivityPub handling is exactly this slice, so we lean on
-   it where it wins.
+4. **Bun owns JSON-LD + HTTP Signature only.** Fedify's opinionated
+   ActivityPub handling is exactly this slice, so we lean on it there.
+5. **Mastodon/Misskey REST runs on the api plugin node**, reached via
+   distributed Erlang `:rpc` — no HTTP hop, no JSON-over-NATS envelope.
 
 ## 3. Repository layout
 
 ```
 sukhi-fedi/
-├── elixir/                                # Case 案内人 + 配達員
+├── elixir/                                # 案内人 + 配達員 (gateway)
 │   ├── lib/sukhi_fedi/
 │   │   ├── application.ex                 # supervision tree
-│   │   ├── repo.ex                        # Ecto Repo
+│   │   ├── addon.ex / addon/registry.ex   # addon ABI + discovery
+│   │   ├── repo.ex
 │   │   ├── outbox.ex                      # Outbox.enqueue / enqueue_multi
 │   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
 │   │   ├── delivery/
-│   │   │   ├── fedify_client.ex           # NATS Micro client → Deno
+│   │   │   ├── fedify_client.ex           # NATS Micro client → Bun
 │   │   │   ├── worker.ex                  # Oban delivery worker
-│   │   │   ├── fan_out.ex                 # enqueues per-follower jobs
+│   │   │   ├── fan_out.ex                 # precomputes + Oban.insert_all
 │   │   │   ├── followers_sync.ex          # FEP-8fcf support
 │   │   │   └── follower_sync_worker.ex
 │   │   ├── federation/actor_fetcher.ex    # remote actor GET + ETS cache
-│   │   ├── schema/                        # Ecto schemas
-│   │   │   ├── account.ex / note.ex / follow.ex / …
+│   │   ├── schema/                        # Ecto schemas (note, account,
+│   │   │   │                                follow, boost, reaction, …)
 │   │   │   ├── outbox_event.ex            # `outbox` table
 │   │   │   └── delivery_receipt.ex
 │   │   ├── cache/ets.ex                   # ETS TTL cache
 │   │   ├── ap/                            # ActivityPub helpers
 │   │   │   ├── client.ex                  # legacy NATS req/reply (ap.*)
 │   │   │   └── instructions.ex            # inbox activity dispatcher
-│   │   ├── nats/                          # db.* topic handlers (split from god module)
-│   │   │   ├── helpers.ex                 # shared envelope + serializers
+│   │   ├── nats/                          # db.* topic handlers
+│   │   │   ├── helpers.ex
 │   │   │   ├── accounts.ex                # db.account.* / db.auth.* / db.social.*
 │   │   │   ├── notes.ex                   # db.note.* / db.bookmark.* / db.dm.*
 │   │   │   ├── content.ex                 # db.article.* / db.media.* / db.emoji.* / db.feed.*
 │   │   │   └── admin.ex                   # db.moderation.* / db.admin.*
-│   │   ├── streaming/                     # WebSocket streaming
+│   │   ├── addons/                        # first-party addons
+│   │   │   ├── nodeinfo_monitor.ex + nodeinfo_monitor/
+│   │   │   ├── streaming.ex + streaming/
+│   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex / mfm.ex
+│   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # controllers + plugs
 │   │       ├── router.ex
 │   │       ├── rate_limit_plug.ex
+│   │       ├── plugin_plug.ex             # :rpc to api plugin node
 │   │       ├── inbox_controller.ex
 │   │       ├── webfinger_controller.ex
 │   │       ├── nodeinfo_controller.ex
+│   │       ├── collection_controller.ex   # followers / following collections
 │   │       └── …
 │   ├── priv/repo/migrations/
-│   │   ├── 20240001000000_*                # initial schema
-│   │   ├── 20260325000000_*_add_priority_* # features
-│   │   ├── 20260420000001_create_outbox.exs
-│   │   └── 20260420000002_create_delivery_receipts.exs
+│   │   ├── core/                          # core schema (notes, follows, outbox, …)
+│   │   └── addons/<id>/                   # per-addon migrations
 │   ├── test/
 │   │   ├── support/integration_case.ex
 │   │   ├── integration/                   # E2E (docker-compose.test.yml)
-│   │   ├── web/ · delivery/               # unit tests
+│   │   ├── delivery/ · web/               # unit tests
 │   │   └── test_helper.exs                # excludes :integration
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   ├── mix.exs / mix.lock
 │   └── Dockerfile
 │
-├── bun/                                   # 翻訳家 + 印鑑職人 (NATS-only, no HTTP; Bun runtime)
+├── bun/                                   # 翻訳家 + 印鑑職人
 │   ├── services/fedify_service.ts         # ★ NATS Micro service
-│   ├── handlers/                          # pure functions, no HTTP
-│   │   ├── build/{note,follow,accept,announce,actor,dm,collection_op,…}.ts
+│   ├── main.ts                            # legacy ap.verify + ap.inbox
+│   ├── handlers/
+│   │   ├── build/{note,follow,accept,announce,actor,dm,collection_op,
+│   │   │           like,undo,delete}.ts   # one translator per type
 │   │   ├── verify.ts                      # HTTP Signature verify
-│   │   └── sign_delivery.ts               # HTTP Signature sign
-│   ├── fedify/{context,keys,utils}.ts     # Fedify glue
-│   ├── main.ts                            # legacy ap.* subscribes (being phased out)
-│   ├── package.json                       # npm deps incl. `nats` → @nats-io/transport-node
+│   │   ├── sign_delivery.ts               # HTTP Signature sign
+│   │   ├── inbox.ts                       # legacy ap.inbox dispatcher
+│   │   └── inbox_test.ts
+│   ├── fedify/
+│   │   ├── context.ts                     # cachedDocumentLoader
+│   │   ├── keys.ts                        # local-actor key store (actor creation)
+│   │   ├── key_cache.ts                   # imported CryptoKey cache (sign path)
+│   │   └── utils.ts                       # signAndSerialize, injectDefined, …
+│   ├── addons/
+│   │   ├── loader.ts                      # ABI check + enabled/disabled filter
+│   │   ├── types.ts                       # BunAddon + TranslateHandler
+│   │   ├── mastodon_api/manifest.ts
+│   │   └── misskey_api/manifest.ts
+│   ├── package.json                       # TS 6.0.3, @fedify/fedify 1.x,
+│   │                                        @js-temporal/polyfill, @nats-io/*
 │   ├── tsconfig.json
 │   └── Dockerfile                         # oven/bun:1-alpine
 │
-├── api/                                   # ★ Mastodon/Misskey REST plugin (separate BEAM node)
+├── api/                                   # ★ Mastodon/Misskey REST plugin node
 │   ├── mix.exs                            # independent :sukhi_api app
 │   ├── lib/sukhi_api/
 │   │   ├── application.ex                 # start-up; prints registered routes
 │   │   ├── capability.ex                  # @behaviour + `use` macro (auto-register)
 │   │   ├── registry.ex                    # runtime discovery of capability modules
 │   │   ├── router.ex                      # :rpc entry — handle(req) → {:ok, resp}
+│   │   ├── gateway_rpc.ex                 # calls back to gateway contexts
 │   │   └── capabilities/                  # ← DROP FILES HERE TO ADD ENDPOINTS
-│   │       └── mastodon_instance.ex       # example: GET /api/v1/instance
+│   │       ├── mastodon_instance.ex
+│   │       └── nodeinfo_monitor.ex
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   └── Dockerfile                         # distributed Erlang release
 │
 ├── infra/
 │   ├── nats/bootstrap.sh                  # JetStream stream bootstrap
-│   ├── terraform/ · ansible/              # infra-as-code (OCI)
+│   └── terraform/ · ansible/              # infra-as-code (OCI)
 │
-├── (observability stack removed — PromEx exposes /metrics, external scrape)
-│
-├── docker-compose.yml                     # dev stack
+├── docker-compose.yml                     # dev + prod stack (pinned GHCR images)
 ├── docker-compose.test.yml                # hermetic test stack
-└── docs/ARCHITECTURE.md                   # ← this file
+└── docs/
+    ├── ARCHITECTURE.md                    # ← this file
+    └── ADDONS.md                          # addon ABI contract
 ```
 
 ## 4. NATS topology
@@ -174,43 +198,53 @@ on publish gives stream-level dedup.
 sns.<context>.<aggregate>.<op>[.<variant>]
 ```
 
-| Subject                            | Direction | Emitted by        | Consumed by                  |
-| ---------------------------------- | --------- | ----------------- | ---------------------------- |
-| `sns.outbox.note.created`          | pub       | `Notes`           | deliverer / timeline-updater |
-| `sns.outbox.follow.requested`      | pub       | `Social`          | deliverer                    |
-| `sns.outbox.like.created`          | pub       | (future)          | deliverer                    |
-| `sns.events.timeline.home.updated` | pub       | timeline-updater  | streaming-fanout             |
-| `sns.events.notification.mention`  | pub       | inbox handler     | streaming-fanout             |
+| Subject                            | Direction | Emitted by                    | Consumed by                  |
+| ---------------------------------- | --------- | ----------------------------- | ---------------------------- |
+| `sns.outbox.note.created`          | pub       | `Notes.create_note/1`         | deliverer / timeline-updater |
+| `sns.outbox.note.deleted`          | pub       | `Notes.delete_note/1`         | deliverer                    |
+| `sns.outbox.follow.requested`      | pub       | `Social.follow/2`             | deliverer                    |
+| `sns.outbox.like.created`          | pub       | `Notes.create_like/2`         | deliverer                    |
+| `sns.outbox.like.undone`           | pub       | `Notes.delete_like/2`         | deliverer                    |
+| `sns.outbox.announce.created`      | pub       | `Notes.create_boost/2`        | deliverer                    |
+| `sns.events.timeline.home.updated` | pub       | timeline-updater (addon)      | streaming-fanout             |
+| `sns.events.notification.mention`  | pub       | inbox handler                 | streaming-fanout             |
 
 ### 4.3 NATS Micro services (Bun-side)
 
 Service name: `fedify`, version `0.2.0`, queue group `fedify-workers`.
 Multiple Bun replicas auto-share load.
 
-| Endpoint              | Request                                    | Response                                 |
-| --------------------- | ------------------------------------------ | ---------------------------------------- |
-| `fedify.ping.v1`      | raw bytes                                  | echoes request (health check)            |
-| `fedify.translate.v1` | `{object_type, payload}`                   | `{ok:true, data:{json_ld, ...}}`         |
-| `fedify.sign.v1`      | `{actorUri, inbox, body, privateKeyJwk, keyId, algorithm?}` | `{ok:true, data:{headers:{...}}}` |
-| `fedify.verify.v1`    | `{method, url, headers, body}`             | `{ok:true, data:{ok:bool, ...}}`         |
+| Endpoint              | Request                                                       | Response                                 |
+| --------------------- | ------------------------------------------------------------- | ---------------------------------------- |
+| `fedify.ping.v1`      | raw bytes                                                     | echoes request (health check)            |
+| `fedify.translate.v1` | `{object_type, payload}`                                      | `{ok:true, data:{…}}`                    |
+| `fedify.sign.v1`      | `{actorUri, inbox, body, privateKeyJwk, keyId, algorithm?}`   | `{ok:true, data:{headers:{…}}}`          |
+| `fedify.verify.v1`    | `{method, url, headers, body}`                                | `{ok:true, data:{ok:bool, …}}`           |
 
-`object_type` values accepted by translate: `note`, `follow`, `accept`,
-`announce`, `actor`, `dm`, `add`, `remove` (plus `integrity_proof` once
-the pre-existing TS bug in `handlers/build/integrity_proof.ts:71` is
-fixed in stage 5).
+Core `object_type` values accepted by translate (in
+`bun/services/fedify_service.ts`): `note`, `follow`, `accept`,
+`announce`, `actor`, `dm`, `add`, `remove`, `like`, `undo`, `delete`.
+Addons contribute additional keys under an `<addon_id>.<type>`
+namespace; core keys cannot be overridden (`addons/loader.ts` enforces
+this at startup).
 
 Service discovery: NATS Micro auto-publishes `$SRV.{PING,INFO,STATS}.fedify`.
 
-### 4.4 Legacy NATS subjects (being phased out)
+### 4.4 Legacy NATS surface
 
-Old `ap.*` subscribe handlers still live in `deno/main.ts`. Elixir
-callers progressively move to `SukhiFedi.Delivery.FedifyClient`. Once
-all callers are migrated, `main.ts` subscribe loops are deleted (stage
-2-b).
+Two legacy surfaces still live during the ongoing strangler-fig
+migration:
 
-`db.*` subjects (Deno → Elixir DB queries) and `stream.new_post` (old
-streaming publish) are on the same phase-out path — migrations live in
-stages 3 (HTTP consolidation) and 2-b.
+- **`ap.verify` / `ap.inbox`** on `bun/main.ts` — subscribe-loop handlers
+  for incoming signature verification and inbox activity dispatch. The
+  inbox controller still calls these via `SukhiFedi.AP.Client.request/2`.
+  Everything else graduated to `fedify.*`.
+- **`db.>`** wildcard on `SukhiFedi.Web.DbNatsListener` — request/reply
+  for Postgres reads/writes from the Bun HTTP API that used to live in
+  `bun/` before stage 3-b. The HTTP layer is gone; the `db.*` topics
+  remain only because the api plugin node and a handful of addons still
+  use them as a convenient RPC shim. Handlers live in
+  `SukhiFedi.Nats.{Accounts, Notes, Content, Admin}`.
 
 ## 5. Transactional Outbox
 
@@ -220,7 +254,7 @@ events.
 
 ### 5.1 Schema
 
-Migration `20260420000001_create_outbox.exs`:
+Migration `core/20260420000001_create_outbox.exs`:
 
 ```
 outbox(
@@ -236,13 +270,22 @@ outbox(
   inserted_at    timestamptz NOT NULL DEFAULT now(),
   published_at   timestamptz
 )
-index(outbox, [status, id])
-index(outbox, [aggregate_type, aggregate_id])
+-- partial index — keeps hot set tiny once published rows dominate
+create index(:outbox, [:id], where: "status = 'pending'")
+create index(:outbox, [:aggregate_type, :aggregate_id])
 
--- AFTER INSERT trigger fires NOTIFY outbox_new so the relay wakes up immediately
+-- Statement-level trigger (not per-row): one NOTIFY per INSERT
+-- statement, regardless of how many rows got inserted in bulk.
+AFTER INSERT ON outbox FOR EACH STATEMENT EXECUTE FUNCTION outbox_notify();
 ```
 
-Plus `delivery_receipts` (migration `20260420000002`):
+Core migration `core/20260420000005_add_hot_path_indexes.exs` performs
+the partial-index swap and the `FOR EACH STATEMENT` trigger upgrade.
+Same migration adds `notes(visibility, created_at)` for the public
+timeline and `follows(followee_id, state)` + `follows(follower_uri,
+state)` for the FEP-8fcf and "who follows X" paths.
+
+Plus `delivery_receipts` (migration `core/20260420000002`):
 
 ```
 delivery_receipts(
@@ -258,8 +301,9 @@ unique_index(delivery_receipts, [activity_id, inbox_url])
 
 ### 5.2 Write path (producer)
 
-All domain writes that need federation use `SukhiFedi.Outbox.enqueue_multi/6`
-inside a single `Ecto.Multi` with the domain insert:
+All domain writes that need federation use
+`SukhiFedi.Outbox.enqueue_multi/6` inside a single `Ecto.Multi` with
+the domain insert:
 
 ```elixir
 Ecto.Multi.new()
@@ -267,16 +311,19 @@ Ecto.Multi.new()
 |> Outbox.enqueue_multi(:outbox_event,
      "sns.outbox.note.created", "note",
      & &1.note.id,
-     fn %{note: note} -> %{note_id: note.id, ...} end)
+     fn %{note: note} -> %{note_id: note.id, …} end)
 |> Repo.transaction()
 ```
 
 DB commit ⇒ outbox row is durable. Period.
 
-Implemented call sites (grow as stages progress):
+Implemented call sites:
 - `SukhiFedi.Notes.create_note/1`  → `sns.outbox.note.created`
+- `SukhiFedi.Notes.delete_note/1`  → `sns.outbox.note.deleted`
+- `SukhiFedi.Notes.create_like/2`  → `sns.outbox.like.created`
+- `SukhiFedi.Notes.delete_like/2`  → `sns.outbox.like.undone`
+- `SukhiFedi.Notes.create_boost/2` → `sns.outbox.announce.created`
 - `SukhiFedi.Social.follow/2`      → `sns.outbox.follow.requested`
-- *(future)* like / boost / delete once context fns exist.
 
 ### 5.3 Relay path (consumer of outbox, producer to NATS)
 
@@ -294,8 +341,12 @@ Implemented call sites (grow as stages progress):
    for future horizontal scale.
 4. For each claimed row: `Gnat.pub/4` to JetStream with
    `Nats-Msg-Id: outbox-<id>` header (stream dedup).
-5. Success → `status='published', published_at=now()`.
-   Failure → `attempts++`, status flips to `failed` at 10.
+5. Outcomes are bucketed, then two statements finish the tick:
+   - one `update_all` flips all successful ids to `status='published',
+     published_at=now()`;
+   - failures keep per-row updates (each row's `last_error` differs,
+     and the cold path is bounded by `max_attempts=10`). Failed rows
+     flip to `status='failed'` once attempts reach the cap.
 
 ## 6. End-to-end flows
 
@@ -303,30 +354,47 @@ Implemented call sites (grow as stages progress):
 
 ```
 POST /api/v1/statuses
-   │  (via proxy_plug → Deno api/notes during strangler-fig migration;
-   │   direct Elixir handler after stage 3 completes)
+   │  (matched by /api/v1/*_ in router.ex → PluginPlug → :rpc api node)
+   │   The capability there calls SukhiFedi.Notes.create_note/1 via
+   │   gateway_rpc.
    ▼
 Elixir Notes.create_note/1
    Ecto.Multi:
      insert notes
      insert outbox(sns.outbox.note.created)
-   commit  ──▶ AFTER INSERT TRIGGER fires NOTIFY outbox_new
+   commit  ──▶ AFTER INSERT STATEMENT TRIGGER fires NOTIFY outbox_new
                          │
                          ▼
               Outbox.Relay (wakes up)
                          │  Gnat.pub to JetStream OUTBOX
                          ▼
-         (future consumer: ap-deliverer)
+         (consumer — future work: ap-deliverer reads OUTBOX and calls
+          Delivery.FanOut.enqueue/2)
                          │  fan out to each follower inbox
-                         ▼ (one Oban job per follower)
-         Delivery.Worker (Oban)
+                         ▼
+         Delivery.FanOut.enqueue(object, inbox_urls)
+           1. read Object's raw_json once
+           2. compute FEP-8fcf header_value(actor_uri) once
+           3. build a list of job args with
+              {raw_json, actor_uri, activity_id, sync_header, inbox_url}
+           4. Oban.insert_all — one INSERT per fan-out, not one per inbox
+                         │
+                         ▼ (one Oban job per follower inbox)
+         Delivery.Worker (Oban queue :delivery, max_attempts 10)
           1. check delivery_receipts(activity_id, inbox_url) — skip if delivered
-          2. build JSON-LD: FedifyClient.translate("note", payload)
-          3. sign envelope: FedifyClient.sign(...)
-          4. Req.post inbox_url
-          5. on 2xx → insert delivery_receipt
-          6. on non-2xx / error → Oban exp backoff, max 10 attempts
+          2. resolve body from args["raw_json"] (no DB round-trip)
+          3. attach Collection-Synchronization header from args["sync_header"]
+          4. sign envelope: FedifyClient.sign(...) → NATS Micro to Bun,
+             which fetches a cached CryptoKey from bun/fedify/key_cache.ts
+          5. Req.post inbox_url  via named Finch pool (size 50 × 4)
+          6. on 2xx → insert delivery_receipt
+          7. on non-2xx / error → Oban exp backoff, max 10 attempts
 ```
+
+All the work that is invariant across a fan-out (body encode, follower
+digest, signing key import) happens exactly once per activity rather
+than once per recipient. See `SukhiFedi.Delivery.FanOut` for the
+precomputation, `bun/fedify/key_cache.ts` for the Bun CryptoKey reuse.
 
 ### 6.2 Remote server delivers to our inbox
 
@@ -334,30 +402,39 @@ Elixir Notes.create_note/1
 POST /users/alice/inbox  (external Mastodon)
    │
    ▼
-Elixir InboxController
-   │   captures raw body + headers
-   ▼
-FedifyClient.verify({method, url, headers, body})
-   │   NATS req/reply → fedify.verify.v1
-   ▼
-Deno handleVerify → Fedify.verifyRequest
-   │   {ok: true} or {ok: false}
-   ▼
-Elixir Instructions.execute(activity)
-   │   Follow / Accept / Create(Note) / Announce / Like / Delete
-   ▼
-DB writes + (sometimes) Outbox.enqueue for Accept back
+Elixir InboxController (captures raw body + headers)
    │
    ▼
-200 OK
+AP.Client.request("ap.verify", {payload})
+   │   legacy NATS req/reply → Bun main.ts handleVerify
+   │   {ok: true} or {ok: false}
+   ▼
+AP.Client.request("ap.inbox", {payload})
+   │   legacy NATS req/reply → Bun main.ts handleInbox
+   │   returns an Instructions map
+   ▼
+Instructions.execute(instruction)
+   │   Follow / Accept / Create(Note) / Announce / Like / Delete / Undo
+   │   + FEP-8fcf: if request carried a Collection-Synchronization
+   │     header, enqueue FollowerSyncWorker to reconcile local follows
+   ▼
+DB writes + (sometimes) an Oban job (e.g. an Accept back)
+   │
+   ▼
+202 Accepted
 ```
+
+`Instructions.execute/1` also catches incoming `Delete` to scrub local
+object mirrors and `Undo(Follow)` to remove follow rows. DMs are
+materialised into local notes with `visibility = "direct"` and
+conversation participants are recorded.
 
 ### 6.3 WebFinger (local actor lookup)
 
 ```
 GET /.well-known/webfinger?resource=acct:alice@example.tld
    ▼
-WebfingerController (Elixir, **no Deno call**)
+WebfingerController (Elixir, no Bun call)
    1. parse acct → username, domain
    2. if domain == our domain:
         Accounts.get_account_by_username/1
@@ -375,133 +452,73 @@ GET /nodeinfo/2.1                    → static info (version, software, usage)
 NodeinfoController (Elixir, pure)
 ```
 
-### 6.5 /api/v1/timelines/home
+### 6.5 Followers / following collections
 
-Plain Ecto SELECT from the home-timeline view. No federation involved.
-Not part of the refactor scope.
+`GET /users/:name/followers` and `GET /users/:name/following` are
+served by `SukhiFedi.Web.CollectionController` with a single JOIN query
+(`Social.list_followers/2` / `Social.list_following/2`) — no per-item
+round-trip to hydrate account data.
 
-## 7. Observability (Elixir-native, OpenTelemetry-free)
+## 7. Addon system
 
-- **Metrics**: `PromEx` exposes `/metrics` on port 4000. External
-  scraper (self-hosted Prometheus on a larger box, Grafana Cloud Free,
-  etc.) pulls from there. Out of the box: Ecto / Oban / Plug / BEAM
-  system metrics; custom metrics via `:telemetry.execute` +
-  `telemetry_metrics`.
-- **Dashboards**: not provided in-repo. Point a Grafana instance
-  (local or managed) at the Prometheus scraper that consumes
-  `http://<host>:4000/metrics`. The gateway stack stays ~550 MB
-  without an in-container Grafana/Prometheus.
-- **Traces**: deliberately **not** instrumented. We rejected OpenTelemetry
-  / Jaeger / otelcol because (a) the Deno / Fedify side's OTel support
-  is expensive (needs `--unstable-otel`), (b) the operational tax doesn't
-  pay off at our scale, and (c) structured logs with a `request_id`
-  cover the replay-the-path use case. See `elixir/mix.exs` — zero
-  `opentelemetry_*` deps.
-- **Structured logging**: every controller / worker should log with
-  `Logger.metadata(request_id: …)` so a single incident can be
-  reconstructed via `grep`.
+Three layers can each host addon-contributed code; they declare
+themselves with matching ids and share the same `ENABLED_ADDONS` /
+`DISABLE_ADDONS` env vars.
 
-Custom metrics to emit as we build each stage:
-| Metric                            | Type      | Where                |
-| --------------------------------- | --------- | -------------------- |
-| `sukhi_outbox_pending_count`      | gauge     | `Outbox.Relay` tick  |
-| `sukhi_outbox_publish_rate`       | counter   | `Outbox.Relay`       |
-| `sukhi_delivery_success_rate`     | counter   | `Delivery.Worker`    |
-| `sukhi_delivery_failure_rate`     | counter   | `Delivery.Worker`    |
-| `sukhi_fedify_latency_ms`         | histogram | `FedifyClient`       |
-| `sukhi_inbox_request_rate`        | counter   | `InboxController`    |
+### Gateway (`elixir/lib/sukhi_fedi/`)
 
-## 8. Environment variables
-
-| Var                        | Service  | Default                 | Purpose                            |
-| -------------------------- | -------- | ----------------------- | ---------------------------------- |
-| `DB_HOST` / `USER` / `PASS` / `NAME` | Elixir | (required in prod)  | Postgres connection                |
-| `DB_POOL_SIZE`             | Elixir   | `10`                    | Ecto pool size                     |
-| `NATS_HOST` / `NATS_PORT`  | Elixir   | `127.0.0.1:4222`        | NATS client                        |
-| `NATS_URL`                 | Bun      | `nats://localhost:4222` | NATS client (both main.ts & svc)   |
-| `DENO_URL`                 | Elixir   | `http://localhost:8000` | Legacy proxy target (phased out)   |
-| `PORT`                     | Deno     | `8000`                  | Legacy HTTP server (phased out)    |
-| `SUKHI_ROLE` *(planned)*   | Elixir   | `all`                   | `inbox` / `api` / `worker` / `all` |
-
-## 9. Running locally
-
-### Dev stack
-```bash
-docker-compose up -d        # postgres + nats + nats-bootstrap + elixir + bun + api
-# http://localhost:4000            — Elixir gateway
-# http://localhost:4000/metrics    — PromEx (scrape with external Prometheus)
+```elixir
+defmodule SukhiFedi.Addons.Streaming do
+  use SukhiFedi.Addon, id: :streaming
+  @impl true
+  def supervision_children,
+    do: [SukhiFedi.Addons.Streaming.Registry, SukhiFedi.Addons.Streaming.NatsListener]
+end
 ```
 
-### Test stack (hermetic, distinct ports)
-```bash
-docker-compose -f docker-compose.test.yml up -d
-# Postgres : localhost:15432   (db: sukhi_fedi_test, ephemeral tmpfs)
-# NATS     : localhost:14222   (monitor: :18222)
-# fedify-service : NATS Micro service queue "fedify-workers"
+`SukhiFedi.Addon.Registry` scans compiled modules for the persistent
+`@sukhi_fedi_addon` attribute at boot, verifies each addon's
+`abi_version` major against core (`"1"`), applies the enable/disable
+filter, and returns supervision children + NATS subscriptions. Major-
+version mismatch is a boot-time crash. Migrations under
+`priv/repo/migrations/addons/<id>/` run per-addon at release time.
+
+### Bun (`bun/addons/`)
+
+```ts
+const myAddon: BunAddon = {
+  id: "my_addon",
+  abi_version: "1.0",
+  translators: { "my_addon.widget": handleBuildWidget },
+};
+export default myAddon;
 ```
 
-### Running tests
+Register in `bun/addons/loader.ts` (static list — Bun imports are
+compile-time). Addons contribute extra `fedify.translate.v1` keys and
+legacy `ap.*` subscribes. Core translators cannot be overridden.
 
-```bash
-# Elixir unit tests (no live deps, --no-start because app needs NATS):
-cd elixir && mix test --no-start
+### API plugin node (`api/lib/sukhi_api/capabilities/`)
 
-# Elixir integration tests (needs docker-compose.test.yml up):
-cd elixir && mix test --only integration
+Each file one capability; `use SukhiApi.Capability, addon: :mastodon_api`
+tags it. Untagged capabilities are treated as core. `SukhiApi.Registry`
+discovers them at boot via `:application.get_key(:sukhi_api, :modules)`
+and filters by the same env vars. DB access goes back through the
+gateway (`gateway_rpc`) so the plugin node doesn't run its own Ecto
+pool.
 
-# Bun tests:
-cd bun && bun test
+See `docs/ADDONS.md` for the full ABI.
 
-# Type check the whole bun surface (tsc, invoked via bun):
-cd bun && bun run check
-```
+## 8. API plugin node (distributed Erlang)
 
-## 10. Horizontal scale posture
-
-- Both Elixir and Bun are designed to be **stateless** — all state is in
-  Postgres or NATS. `mix release` + `docker compose up --scale gateway=N` adds Elixir
-  replicas; identical Bun containers running the fedify service
-  auto-load-balance via the NATS Micro queue group `fedify-workers`.
-- The `Outbox.Relay`'s `FOR UPDATE SKIP LOCKED` makes running multiple
-  relay instances safe — each claims a disjoint batch.
-- ETS caches (WebFinger JRDs, remote actor fetches) are **node-local**;
-  misses fall back to Postgres or a remote HTTP fetch, so cache
-  inconsistency across nodes is harmless.
-- Future `SUKHI_ROLE=inbox|api|worker|all` env switch lets a single
-  image start with different supervision subtrees, so a node can
-  specialize in e.g. inbox intake under DoS without affecting user API.
-
-## 11. Migration philosophy (strangler-fig)
-
-Refactor from the current mixed state to the target architecture in
-small, always-mergeable, always-running steps. Stages 0–6 are the
-checkpoints; every stage keeps `mix test` + `bun test` green and
-can ship independently.
-
-```
-0   scaffolding            ✅ done
-1   Outbox infra           ✅ done
-2   NATS Micro (additive)  ✅ done
-2-b remove old ap.*        ✅ FedifyClient-scope done; legacy ap.* subscribes still live
-3   HTTP consolidation     ✅ WebFinger / NodeInfo / ActorFetcher / RateLimitPlug
-3-b Deno HTTP removal      ✅ deno/{api.ts,api/,handlers/wellknown/} + proxy_plug deleted
-3-c Plugin API (api/)      ✅ distributed-Erlang plugin node; capabilities auto-register
-4   Delivery to Elixir     ✅ Worker uses FedifyClient + delivery_receipts
-4-b Finch pool + E2E       ✅ Finch pool 50×4 per host; E2E blocked on Docker
-5   God-module split       ✅ db_nats_listener 617 → 80 line dispatcher + 5 Nats.* modules
-6   docs + dead-code purge ✅ 15 stale docs removed; README/CHECKLIST/INDEX point at this file
-```
-
-### §12 Plugin API node (distributed Erlang)
-
-The Mastodon / Misskey REST surface runs as a **separate BEAM node** under
-`api/`. The gateway reaches it with `:rpc.call/5`; no HTTP hop, no
-JSON-over-NATS envelope, just Erlang distribution over the
-docker-compose network.
+The Mastodon / Misskey REST surface runs as a **separate BEAM node**
+under `api/`. The gateway reaches it with `:rpc.call/5` via
+`SukhiFedi.Web.PluginPlug`; no HTTP hop, no JSON-over-NATS envelope,
+just Erlang distribution over the docker-compose network.
 
 ```
 client  ──HTTPS──▶  Elixir gateway (node gateway@elixir)
-                    └─ router match "/api/v1/*_"
+                    └─ router match "/api/v1/*_" or "/api/admin/*_"
                        └─ SukhiFedi.Web.PluginPlug
                           └─ :rpc.call(api@api, SukhiApi.Router, :handle, [req])
                                            │
@@ -509,7 +526,7 @@ client  ──HTTPS──▶  Elixir gateway (node gateway@elixir)
                                    api BEAM node (node api@api)
                                    SukhiApi.Registry (auto-discovery)
                                      └─ Capabilities.MastodonInstance
-                                     └─ Capabilities.…              ← one file = one feature
+                                     └─ Capabilities.<more>       ← one file = one feature
 ```
 
 **Request / response contract** (see `SukhiApi.Capability` moduledoc):
@@ -524,56 +541,141 @@ resp :: %{status: 200, body: iodata, headers: [{k, v}]}
 
 ```elixir
 defmodule SukhiApi.Capabilities.InstancePeers do
-  use SukhiApi.Capability
+  use SukhiApi.Capability, addon: :mastodon_api  # or omit for core
 
   @impl true
   def routes, do: [{:get, "/api/v1/instance/peers", &peers/1}]
 
-  def peers(_req), do: {:ok, %{status: 200, body: "[]", headers: [{"content-type", "application/json"}]}}
+  def peers(_req), do: {:ok, %{status: 200, body: "[]",
+                               headers: [{"content-type", "application/json"}]}}
 end
 ```
 
 That's the entire change. No router edit, no manifest update — the
-`use SukhiApi.Capability` macro persists a module attribute; `SukhiApi.Registry`
-scans `:application.get_key(:sukhi_api, :modules)` at runtime and picks
-up every such module.
-
-**Removing** an endpoint — delete the file.
-
-**Narrowing a node's surface** — set `ENABLED_CAPABILITIES` env to a
-comma-separated list of module names (e.g. `Elixir.SukhiApi.Capabilities.MastodonInstance`).
-Useful when running multiple specialised plugin nodes (e.g. a locked-down
-admin-only node, or a public-facing read-only node).
+`use SukhiApi.Capability` macro persists a module attribute;
+`SukhiApi.Registry` scans `:application.get_key(:sukhi_api, :modules)`
+at runtime and picks up every such module.
 
 **Failure modes**:
 
-  * no `plugin_nodes` configured → 503 `{"error":"plugin_unavailable"}`
-  * node unreachable at `:rpc` time → 503 `{"error":"plugin_rpc_failed"}`
-  * handler crashes on the remote node → remote catches and returns 500
-  * path not covered by any capability → remote returns 404
+- no `plugin_nodes` configured → 503 `{"error":"plugin_unavailable"}`
+- node unreachable at `:rpc` time → 503 `{"error":"plugin_rpc_failed"}`
+- handler crashes on the remote node → remote catches and returns 500
+- path not covered by any capability → remote returns 404
 
-**Scale and isolation posture**:
+## 9. Observability (OpenTelemetry-free)
 
-  * multiple plugin nodes can run in parallel; `PluginPlug` picks the
-    first reachable one each request
-  * capabilities that need DB access call back to the gateway's context
-    modules (`SukhiFedi.Notes`, `Accounts`, etc.) via `:rpc`, avoiding a
-    second Ecto pool
-  * an API surge crashes only the plugin node; gateway (federation /
-    inbox / delivery) stays up
+- **Metrics**: `PromEx` exposes `/metrics` on port 4000. External
+  scraper (self-hosted Prometheus, Grafana Cloud Free, …) pulls from
+  there. Out of the box: Ecto / Oban / Plug / BEAM system metrics;
+  custom metrics via `:telemetry.execute` + `telemetry_metrics`.
+- **Dashboards**: not provided in-repo. Point a Grafana instance at
+  the Prometheus scraper consuming `http://<host>:4000/metrics`.
+- **Traces**: deliberately **not** instrumented. We rejected
+  OpenTelemetry / Jaeger / otelcol because (a) Fedify's OTel
+  integration is heavy, (b) the operational tax doesn't pay off at our
+  scale, and (c) structured logs with a `request_id` cover the
+  replay-the-path use case. `elixir/mix.exs` has zero `opentelemetry_*`
+  deps on purpose.
+- **Structured logging**: every controller / worker should log with
+  `Logger.metadata(request_id: …)` so a single incident can be
+  reconstructed via `grep`.
 
-### Known 3-b regression
+Custom metrics to emit as we build each feature:
+| Metric                            | Type      | Where                |
+| --------------------------------- | --------- | -------------------- |
+| `sukhi_outbox_pending_count`      | gauge     | `Outbox.Relay` tick  |
+| `sukhi_outbox_publish_rate`       | counter   | `Outbox.Relay`       |
+| `sukhi_delivery_success_rate`     | counter   | `Delivery.Worker`    |
+| `sukhi_delivery_failure_rate`     | counter   | `Delivery.Worker`    |
+| `sukhi_fedify_latency_ms`         | histogram | `FedifyClient`       |
+| `sukhi_inbox_request_rate`        | counter   | `InboxController`    |
+| `sukhi_delivery_pool_utilization` | gauge     | Finch telemetry       |
 
-`/api/v1/*` and `/api/admin/*` used to be implemented in Deno. The
-Deno HTTP layer was removed in 3-b and replaced by the plugin-node
-pattern above in 3-c. The **`SukhiApi.Capabilities.MastodonInstance`
-example is the only endpoint currently implemented** — porting the
-remaining Mastodon/Misskey surface is an ongoing exercise in "drop
-files into `capabilities/`", tackled feature by feature.
+## 10. Environment variables
 
-ActivityPub federation (inbox POST, WebFinger, NodeInfo, actor JSON,
-outbound delivery) is **unaffected** — those paths stay on Elixir's
-native handlers.
+| Var                              | Service | Default                 | Purpose                            |
+| -------------------------------- | ------- | ----------------------- | ---------------------------------- |
+| `DB_HOST` / `USER` / `PASS` / `NAME` | Elixir | (required in prod) | Postgres connection                |
+| `DB_POOL_SIZE`                   | Elixir  | `10`                    | Ecto pool size                     |
+| `NATS_HOST` / `NATS_PORT`        | Elixir  | `127.0.0.1:4222`        | NATS client                        |
+| `NATS_URL`                       | Bun     | `nats://localhost:4222` | NATS client                        |
+| `PLUGIN_NODES`                   | Elixir  | `api@api` (compose)     | Space/comma node list for `:rpc`   |
+| `RELEASE_COOKIE`                 | Elixir+api | `sukhi_fedi_dev_cookie` | distributed Erlang shared secret |
+| `DOMAIN` / `INSTANCE_TITLE`      | api     | `localhost:4000` / `sukhi-fedi` | NodeInfo / WebFinger output |
+| `ENABLED_ADDONS` / `DISABLE_ADDONS` | all  | `all` / `""`            | Comma-separated addon ids          |
+
+## 11. Running locally
+
+### Dev stack
+```bash
+docker-compose up -d        # postgres + nats + nats-bootstrap + gateway + bun + api + watchtower
+# http://localhost:4000             — Elixir gateway
+# http://localhost:4000/metrics     — PromEx (scrape externally)
+```
+
+### Test stack (hermetic, distinct ports)
+```bash
+docker-compose -f docker-compose.test.yml up -d
+# Postgres : localhost:15432   (db: sukhi_fedi_test, ephemeral tmpfs)
+# NATS     : localhost:14222   (monitor: :18222)
+# fedify-service : NATS Micro service queue "fedify-workers"
+```
+
+### Running tests
+
+```bash
+# Elixir unit tests (hermetic, no live deps):
+cd elixir && mix test --no-start
+
+# Elixir integration tests (needs docker-compose.test.yml up):
+cd elixir && mix test --only integration
+
+# Bun tests:
+cd bun && bun test
+
+# Type-check the whole bun surface (TS 6.0.3 via tsc):
+cd bun && bun run check
+```
+
+## 12. Horizontal scale posture
+
+- Elixir and Bun are designed to be **stateless** — all state lives in
+  Postgres or NATS. `mix release` + `docker compose up --scale
+  gateway=N` adds gateway replicas; identical Bun containers
+  auto-load-balance via the NATS Micro queue group `fedify-workers`.
+- `Outbox.Relay`'s `FOR UPDATE SKIP LOCKED` makes running multiple
+  relay instances safe — each claims a disjoint batch.
+- ETS caches (WebFinger JRDs, remote actor fetches, imported CryptoKeys
+  on Bun) are **node-local**; misses fall back to Postgres or a remote
+  HTTP fetch, so cache inconsistency across nodes is harmless.
+- Future `SUKHI_ROLE=inbox|api|worker|all` env switch lets a single
+  image start with different supervision subtrees, so a node can
+  specialize in e.g. inbox intake under DoS without affecting user API.
+
+## 13. Migration philosophy (strangler-fig)
+
+The repo arrived at its current shape via small, always-mergeable
+stages; each kept `mix test` + `bun test` green and could ship
+independently.
+
+```
+0   scaffolding            ✅ done
+1   Outbox infra           ✅ done
+2   NATS Micro (additive)  ✅ done
+2-b remove old ap.*        ✅ FedifyClient-scope done; legacy ap.verify/inbox still live
+3   HTTP consolidation     ✅ WebFinger / NodeInfo / ActorFetcher / RateLimitPlug
+3-b Bun HTTP removal       ✅ bun/lib/ deleted (no Hono server); bun/api/ handlers removed
+3-c Plugin API (api/)      ✅ distributed-Erlang plugin node; capabilities auto-register
+4   Delivery to Elixir     ✅ Worker uses FedifyClient + delivery_receipts
+4-b Finch pool + E2E       ✅ Finch pool 50×4 per host
+5   God-module split       ✅ db_nats_listener 617 → 80 line dispatcher + 5 Nats.* modules
+6   docs + dead-code purge ✅ stale docs removed; README/ARCHITECTURE align
+7   Hot-path optimisation  ✅ FanOut precomputes (body, digest), Oban.insert_all,
+                              Outbox.Relay bulk update_all, partial outbox index,
+                              per-statement NOTIFY, notes/follows indexes,
+                              Bun CryptoKey cache
+```
 
 If you're adding a feature, first decide which stage it belongs in and
 whether it should be deferred until the stage completes.

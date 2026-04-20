@@ -1,41 +1,41 @@
-import { Announce, signObject } from "@fedify/fedify";
+import { Like, signObject } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
 import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
 import { getOrCreateKey } from "../../fedify/keys.ts";
 
-export interface BuildAnnouncePayload {
+export interface BuildLikePayload {
   actor: string;
   object: string;
   activityId: string;
   recipientInboxes: string[];
 }
 
-export interface BuildAnnounceResult {
-  announce: unknown;
+export interface BuildLikeResult {
+  like: unknown;
   recipientInboxes: string[];
 }
 
-export async function handleBuildAnnounce(
-  payload: BuildAnnouncePayload,
-): Promise<BuildAnnounceResult> {
+export async function handleBuildLike(
+  payload: BuildLikePayload,
+): Promise<BuildLikeResult> {
   const documentLoader = fetchDocumentLoader;
   const { privateKey, keyId } = await getOrCreateKey(payload.actor);
 
-  const announce = new Announce({
+  const like = new Like({
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: new URL(payload.object),
     published: Temporal.Now.instant(),
   });
 
-  const signed = await signObject(announce, privateKey, new URL(keyId), {
+  const signed = await signObject(like, privateKey, new URL(keyId), {
     documentLoader,
   });
 
-  const announceJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const likeJson = await signed.toJsonLd({ contextLoader: documentLoader });
 
   return {
-    announce: announceJson,
+    like: likeJson,
     recipientInboxes: payload.recipientInboxes,
   };
 }

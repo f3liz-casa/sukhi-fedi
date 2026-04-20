@@ -10,12 +10,13 @@
   },
   "dependencies": {
     "@fedify/fedify": "^1.0.0",
+    "@js-temporal/polyfill": "^0.5.1",
     "@nats-io/nats-core": "^3",
     "@nats-io/services": "^3",
     "nats": "npm:@nats-io/transport-node@^3"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.7"
+    "typescript": "^6.0.3"
   }
 }
