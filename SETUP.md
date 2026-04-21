@@ -188,6 +188,7 @@ SUKHI_VERSION=v1            # :v1 for rolling minor updates, :v1.2.3 for pinned
 DOMAIN=example.tld
 ERLANG_COOKIE=<long random string>
 ENABLED_ADDONS=all          # or a comma list: mastodon_api,streaming,moderation
+ADDON_PRESETS=              # optional bundle: mastodon_compatible,server_version_watcher
 WATCHTOWER_POLL_INTERVAL=3600
 ```
 

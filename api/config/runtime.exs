@@ -2,12 +2,35 @@
 import Config
 
 # Mirror the gateway's addon selection so capability routes disappear
-# in lockstep with their owning addon.
+# in lockstep with their owning addon. ADDON_PRESETS is expanded and
+# unioned with ENABLED_ADDONS; DISABLE_ADDONS is the deny-list.
+presets =
+  System.get_env("ADDON_PRESETS", "")
+  |> String.split(",", trim: true)
+  |> Enum.map(&String.to_atom/1)
+
+# Implicit ENABLED_ADDONS default yields to ADDON_PRESETS; explicit
+# "all" still wins. See elixir/config/runtime.exs for the rationale.
 enabled_addons =
-  case System.get_env("ENABLED_ADDONS", "all") do
-    "all" -> :all
-    "" -> :all
-    csv -> csv |> String.split(",", trim: true) |> Enum.map(&String.to_atom/1)
+  case {System.get_env("ENABLED_ADDONS"), presets} do
+    {nil, []} ->
+      :all
+
+    {nil, ids} ->
+      SukhiApi.Addon.Presets.expand(ids)
+
+    {"all", _} ->
+      :all
+
+    {"", []} ->
+      :all
+
+    {"", ids} ->
+      SukhiApi.Addon.Presets.expand(ids)
+
+    {csv, ids} ->
+      explicit = csv |> String.split(",", trim: true) |> Enum.map(&String.to_atom/1)
+      Enum.uniq(SukhiApi.Addon.Presets.expand(ids) ++ explicit)
   end
 
 disabled_addons =

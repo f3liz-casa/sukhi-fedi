@@ -1,13 +1,41 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import Config
 
-# Addon selection. ENABLED_ADDONS: comma list of ids, or "all" (default).
-# DISABLE_ADDONS: comma list of ids to always exclude.
+# Addon selection.
+#   ENABLED_ADDONS: comma list of ids, or "all" (default).
+#   ADDON_PRESETS:  comma list of preset ids (see SukhiFedi.Addon.Presets).
+#                   Expanded and unioned with ENABLED_ADDONS.
+#   DISABLE_ADDONS: comma list of ids to always exclude (deny-list wins).
+presets =
+  System.get_env("ADDON_PRESETS", "")
+  |> String.split(",", trim: true)
+  |> Enum.map(&String.to_atom/1)
+
+# When ADDON_PRESETS is set, it becomes the effective allowlist (union
+# with any explicit ENABLED_ADDONS list). ENABLED_ADDONS=all only wins
+# if it was *explicitly* set; the implicit default ("all" when unset)
+# yields to the preset so operators who pick a preset aren't surprised
+# by every addon silently turning on.
 enabled_addons =
-  case System.get_env("ENABLED_ADDONS", "all") do
-    "all" -> :all
-    "" -> :all
-    csv -> csv |> String.split(",", trim: true) |> Enum.map(&String.to_atom/1)
+  case {System.get_env("ENABLED_ADDONS"), presets} do
+    {nil, []} ->
+      :all
+
+    {nil, ids} ->
+      SukhiFedi.Addon.Presets.expand(ids)
+
+    {"all", _} ->
+      :all
+
+    {"", []} ->
+      :all
+
+    {"", ids} ->
+      SukhiFedi.Addon.Presets.expand(ids)
+
+    {csv, ids} ->
+      explicit = csv |> String.split(",", trim: true) |> Enum.map(&String.to_atom/1)
+      Enum.uniq(SukhiFedi.Addon.Presets.expand(ids) ++ explicit)
   end
 
 disabled_addons =

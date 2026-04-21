@@ -101,6 +101,62 @@ to avoid clashing with the core names (`note`, `follow`, `accept`,
 5. Operators enable it by adding `my_feature` to `ENABLED_ADDONS` in
    their `.env` and `docker compose up -d`.
 
+## Presets
+
+Presets are named bundles of addon ids. Pick one (or several) with
+`ADDON_PRESETS` and the matching addons turn on without spelling each
+id into `ENABLED_ADDONS`.
+
+```
+# .env
+ADDON_PRESETS=mastodon_compatible
+ENABLED_ADDONS=              # optional: union with the preset
+DISABLE_ADDONS=              # still wins (deny-list)
+```
+
+Precedence: `presets_expanded ∪ ENABLED_ADDONS` → then `DISABLE_ADDONS`
+is subtracted by the registry. If `ENABLED_ADDONS=all` is set
+**explicitly**, it wins and the preset becomes redundant; if it's left
+unset (or empty), the preset is the effective allowlist.
+
+Defined in `SukhiFedi.Addon.Presets` (gateway) and `SukhiApi.Addon.Presets`
+(api node). Both maps are identical and must be kept in sync.
+
+### `mastodon_compatible`
+
+A Mastodon-API-shaped server. Capabilities for `:streaming` and
+`:web_push` are still pending (TODO.md), but the addons themselves run
+so the supervision tree is ready when those capabilities land.
+
+| id               | role                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| `:mastodon_api`  | REST capabilities (oauth, statuses, timelines, media, …)     |
+| `:media`         | `/api/v1/media` uploads                                      |
+| `:feeds`         | home / public / list timelines                               |
+| `:moderation`    | block / mute / report / domain blocks                        |
+| `:bookmarks`     | `/api/v1/bookmarks`                                          |
+| `:pinned_notes`  | featured collection + pin endpoints                          |
+| `:streaming`     | `/api/v1/streaming` WebSocket (handler pending)              |
+| `:web_push`      | push subscriptions (VAPID flow pending)                      |
+
+Deliberately **not** included:
+
+- `:articles` — ActivityPub `Article` type; not a Mastodon concept.
+- `:misskey_api` — different API profile; use a separate preset.
+- `:nodeinfo_monitor` — optional observability; belongs to
+  `server_version_watcher`.
+
+### `server_version_watcher`
+
+Polls remote fediverse servers' NodeInfo and posts a bot Note when
+their version changes.
+
+| id                  | role                                                      |
+| ------------------- | --------------------------------------------------------- |
+| `:nodeinfo_monitor` | Oban cron + `MonitoredInstance` + version-change Notes    |
+| `:feeds`            | so the bot Notes appear in home/public timelines          |
+| `:pinned_notes`     | so the latest-version Note can be pinned to the bot actor |
+
 ## Rolling tags & Watchtower
 
 Images are published to
