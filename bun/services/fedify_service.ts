@@ -136,32 +136,50 @@ export async function startFedifyService(
 
   const grp = service.addGroup("fedify");
 
-  grp.addEndpoint("ping.v1", (err, msg) => {
-    if (err) {
-      service.stop(err as Error);
-      return;
-    }
-    msg.respond(msg.data);
+  // @nats-io/services forbids dots in endpoint names (they're tokens, not
+  // subjects). Pass `subject` explicitly so the external subject stays
+  // `fedify.<op>.v1` — the Elixir client talks to these subjects directly.
+  grp.addEndpoint("ping_v1", {
+    subject: "ping.v1",
+    handler: (err, msg) => {
+      if (err) {
+        service.stop(err as Error);
+        return;
+      }
+      msg.respond(msg.data);
+    },
   });
 
-  grp.addEndpoint("translate.v1", (err, msg) => {
-    if (err) return service.stop(err as Error);
-    void handleTranslate(msg);
+  grp.addEndpoint("translate_v1", {
+    subject: "translate.v1",
+    handler: (err, msg) => {
+      if (err) return service.stop(err as Error);
+      void handleTranslate(msg);
+    },
   });
 
-  grp.addEndpoint("sign.v1", (err, msg) => {
-    if (err) return service.stop(err as Error);
-    void handleSign(msg);
+  grp.addEndpoint("sign_v1", {
+    subject: "sign.v1",
+    handler: (err, msg) => {
+      if (err) return service.stop(err as Error);
+      void handleSign(msg);
+    },
   });
 
-  grp.addEndpoint("verify.v1", (err, msg) => {
-    if (err) return service.stop(err as Error);
-    void handleVerifyMicro(msg);
+  grp.addEndpoint("verify_v1", {
+    subject: "verify.v1",
+    handler: (err, msg) => {
+      if (err) return service.stop(err as Error);
+      void handleVerifyMicro(msg);
+    },
   });
 
-  grp.addEndpoint("inbox.v1", (err, msg) => {
-    if (err) return service.stop(err as Error);
-    void handleInboxMicro(msg);
+  grp.addEndpoint("inbox_v1", {
+    subject: "inbox.v1",
+    handler: (err, msg) => {
+      if (err) return service.stop(err as Error);
+      void handleInboxMicro(msg);
+    },
   });
 
   const stop = async () => {
