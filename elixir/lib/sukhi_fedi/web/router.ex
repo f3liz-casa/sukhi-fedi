@@ -8,6 +8,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.ActorController
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
+  alias SukhiFedi.Web.ViewerController
 
   plug(Plug.Logger)
   # Global per-peer rate limit. Conservative ceiling; internal probes
@@ -65,6 +66,16 @@ defmodule SukhiFedi.Web.Router do
 
   get "/uploads/*path" do
     serve_upload(conn, path)
+  end
+
+  # ── Human-facing HTML + JSON proxy for nodeinfo lookup ──────────────────
+
+  get "/" do
+    ViewerController.home(conn, [])
+  end
+
+  get "/api/nodeinfo" do
+    ViewerController.nodeinfo_lookup(conn, [])
   end
 
   # ── Health + metrics ─────────────────────────────────────────────────────
