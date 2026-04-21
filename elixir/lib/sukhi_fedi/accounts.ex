@@ -195,6 +195,86 @@ defmodule SukhiFedi.Accounts do
     end
   end
 
+  # ── admin listing ────────────────────────────────────────────────────────
+
+  @doc """
+  List accounts for the admin dashboard with filters and offset pagination.
+
+  Supported filters (all optional):
+    * `:suspended` (bool) — only suspended / only non-suspended
+    * `:is_admin`  (bool) — only admins / only non-admins
+    * `:username`  (string) — case-insensitive prefix match
+
+  Pagination: `%{offset: non_neg_integer, limit: pos_integer}`.
+
+  Returns `{:ok, {accounts, total_count}}`. The total is the count that
+  would match the filters without the offset/limit, so the caller can
+  compute `total_pages`.
+  """
+  @spec list_accounts(map(), %{offset: non_neg_integer(), limit: pos_integer()}) ::
+          {:ok, {[Account.t()], non_neg_integer()}}
+  def list_accounts(filter, %{offset: offset, limit: limit})
+      when is_map(filter) and is_integer(offset) and is_integer(limit) do
+    base = filter_accounts(Account, filter)
+
+    total = Repo.aggregate(base, :count, :id)
+
+    accounts =
+      base
+      |> order_by([a], desc: a.id)
+      |> offset(^offset)
+      |> limit(^limit)
+      |> Repo.all()
+
+    {:ok, {accounts, total}}
+  end
+
+  defp filter_accounts(query, filter) do
+    Enum.reduce(filter, query, fn
+      {:suspended, true}, q -> from(a in q, where: not is_nil(a.suspended_at))
+      {:suspended, false}, q -> from(a in q, where: is_nil(a.suspended_at))
+      {:is_admin, true}, q -> from(a in q, where: a.is_admin == true)
+      {:is_admin, false}, q -> from(a in q, where: a.is_admin == false)
+      {:username, <<_, _::binary>> = prefix}, q ->
+        like = String.downcase(prefix) <> "%"
+        from(a in q, where: like(fragment("lower(?)", a.username), ^like))
+      _, q -> q
+    end)
+  end
+
+  @doc """
+  Toggle an account's `is_admin` flag. Emits
+  `sns.outbox.admin.role_changed` so operator tooling and caches can react.
+  `by_id` is the admin performing the change (recorded in the event payload).
+  """
+  @spec set_admin(integer(), integer(), boolean()) ::
+          {:ok, Account.t()} | {:error, :not_found}
+  def set_admin(account_id, by_id, flag)
+      when is_integer(account_id) and is_integer(by_id) and is_boolean(flag) do
+    case Repo.get(Account, account_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Account{} = account ->
+        Multi.new()
+        |> Multi.update(:account, Ecto.Changeset.change(account, %{is_admin: flag}))
+        |> Outbox.enqueue_multi(
+          :outbox_event,
+          "sns.outbox.admin.role_changed",
+          "account",
+          & &1.account.id,
+          fn %{account: a} ->
+            %{account_id: a.id, by_id: by_id, is_admin: a.is_admin}
+          end
+        )
+        |> Repo.transaction()
+        |> case do
+          {:ok, %{account: a}} -> {:ok, a}
+          {:error, _step, reason, _} -> {:error, reason}
+        end
+    end
+  end
+
   # ── statuses by account ──────────────────────────────────────────────────
 
   @doc """

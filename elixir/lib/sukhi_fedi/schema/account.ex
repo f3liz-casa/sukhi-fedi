@@ -20,6 +20,9 @@ defmodule SukhiFedi.Schema.Account do
     field :banner_url, :string
     field :bio, :string
     field :is_admin, :boolean, default: false
+    field :suspended_at, :utc_datetime
+    field :suspended_by_id, :id
+    field :suspension_reason, :string
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end
