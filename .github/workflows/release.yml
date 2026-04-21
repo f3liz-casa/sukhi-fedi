@@ -65,5 +65,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+          # Dual-layer cache: GHA (fast on warm runners) + registry
+          # (persistent, no 10 GB eviction, survives GHA cache purges).
+          # `mode=max` exports intermediate layers too — critical for
+          # the deps.compile cache to actually hit on later tags.
+          cache-from: |
+            type=gha,scope=${{ matrix.name }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.name }}:buildcache
+          cache-to: |
+            type=gha,scope=${{ matrix.name }},mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.name }}:buildcache,mode=max
