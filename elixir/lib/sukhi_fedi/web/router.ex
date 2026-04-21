@@ -78,6 +78,14 @@ defmodule SukhiFedi.Web.Router do
     ViewerController.nodeinfo_lookup(conn, [])
   end
 
+  get "/api/watchers" do
+    ViewerController.list_watchers(conn, [])
+  end
+
+  post "/api/watchers" do
+    ViewerController.register_watcher(conn, [])
+  end
+
   # ── Health + metrics ─────────────────────────────────────────────────────
 
   get "/up" do

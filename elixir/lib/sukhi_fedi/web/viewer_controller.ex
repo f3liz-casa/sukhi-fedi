@@ -8,8 +8,10 @@ defmodule SukhiFedi.Web.ViewerController do
   """
 
   import Plug.Conn
+  import Ecto.Query
 
   alias SukhiFedi.Addons.NodeinfoMonitor.NodeinfoFetcher
+  alias SukhiFedi.{Repo, Schema.Account}
 
   def home(conn, _opts) do
     domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
@@ -17,6 +19,60 @@ defmodule SukhiFedi.Web.ViewerController do
     conn
     |> put_resp_content_type("text/html; charset=utf-8")
     |> send_resp(200, page_html(domain))
+  end
+
+  def list_watchers(conn, _opts) do
+    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+    watchers =
+      Account
+      |> where([a], not is_nil(a.monitored_domain))
+      |> order_by(asc: :monitored_domain)
+      |> Repo.all()
+      |> Enum.map(fn a ->
+        %{
+          username: a.username,
+          display_name: a.display_name,
+          monitored_domain: a.monitored_domain,
+          summary: a.summary,
+          handle: "@#{a.username}@#{domain}",
+          actor_url: "https://#{domain}/users/#{a.username}"
+        }
+      end)
+
+    send_json(conn, 200, %{watchers: watchers})
+  end
+
+  def register_watcher(conn, _opts) do
+    with raw when is_binary(raw) <- conn.params["domain"] || :missing,
+         domain <- normalize_domain(raw),
+         true <- valid_domain?(domain) || :invalid,
+         {:ok, snap} <- NodeinfoFetcher.fetch(domain) do
+      {:ok, result} = SukhiFedi.Release.seed_watcher(domain)
+      username = "watcher-" <> String.replace(domain, ".", "_")
+      self_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+      send_json(conn, 200, %{
+        status: to_string(result),
+        username: username,
+        handle: "@#{username}@#{self_domain}",
+        domain: domain,
+        software_name: snap.software_name,
+        version: snap.version
+      })
+    else
+      :missing ->
+        send_json(conn, 400, %{error: "missing 'domain'"})
+
+      :invalid ->
+        send_json(conn, 400, %{error: "invalid domain"})
+
+      false ->
+        send_json(conn, 400, %{error: "invalid domain"})
+
+      {:error, reason} ->
+        send_json(conn, 502, %{error: "nodeinfo fetch failed", reason: inspect(reason)})
+    end
   end
 
   def nodeinfo_lookup(conn, _opts) do
@@ -102,7 +158,7 @@ defmodule SukhiFedi.Web.ViewerController do
     </head>
     <body>
     <h1>NodeInfo viewer</h1>
-    <p class="sub">Fetch any fediverse server's <code>/.well-known/nodeinfo</code> through #{self_domain}.</p>
+    <p class="sub">Fetch any fediverse server's <code>/.well-known/nodeinfo</code> through #{self_domain}. Register a server to get a followable bot (<code>@watcher-&lt;domain&gt;@#{self_domain}</code>) that you can follow from any ActivityPub server.</p>
 
     <form id="f">
       <input type="text" id="domain" name="domain" placeholder="mastodon.social" autofocus required>
@@ -111,14 +167,18 @@ defmodule SukhiFedi.Web.ViewerController do
 
     <div id="result"></div>
 
+    <h2 style="font-size:1.1rem;margin-top:2.5rem">Currently watching</h2>
+    <div id="watchers"><p class="sub">Loading…</p></div>
+
     <footer>
-      Or follow this instance's bot: <code>@watcher@#{self_domain}</code>
+      Default bot: <code>@watcher@#{self_domain}</code>
     </footer>
 
     <script>
     const form = document.getElementById('f');
     const input = document.getElementById('domain');
     const out = document.getElementById('result');
+    const list = document.getElementById('watchers');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -126,9 +186,9 @@ defmodule SukhiFedi.Web.ViewerController do
       btn.disabled = true;
       out.innerHTML = '<p>Fetching…</p>';
 
+      const domain = input.value.trim();
       try {
-        const url = '/api/nodeinfo?domain=' + encodeURIComponent(input.value);
-        const res = await fetch(url);
+        const res = await fetch('/api/nodeinfo?domain=' + encodeURIComponent(domain));
         const json = await res.json();
 
         if (!res.ok) {
@@ -136,7 +196,8 @@ defmodule SukhiFedi.Web.ViewerController do
           return;
         }
 
-        out.innerHTML = renderSnapshot(json);
+        out.innerHTML = renderSnapshot(json) + renderRegisterBox(json.domain);
+        wireRegister();
       } catch (err) {
         out.innerHTML = `<div class="card err">Network error: ${escapeHtml(err.message)}</div>`;
       } finally {
@@ -165,9 +226,68 @@ defmodule SukhiFedi.Web.ViewerController do
         '<details><summary>Raw JSON</summary><pre>' + escapeHtml(JSON.stringify(s.raw, null, 2)) + '</pre></details>';
     }
 
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function renderRegisterBox(domain) {
+      return `<div class="card" style="margin-top:1rem">
+        <div>Register <strong>${escapeHtml(domain)}</strong> for monitoring — creates a followable bot.</div>
+        <div style="margin-top:.5rem"><button id="reg" data-domain="${escapeHtml(domain)}">Register</button></div>
+        <div id="reg-out" style="margin-top:.5rem"></div>
+      </div>`;
     }
+
+    function wireRegister() {
+      const btn = document.getElementById('reg');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const dom = btn.dataset.domain;
+        const regOut = document.getElementById('reg-out');
+        btn.disabled = true;
+        regOut.textContent = 'Registering…';
+        try {
+          const res = await fetch('/api/watchers', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ domain: dom })
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            regOut.innerHTML = `<span class="err">${escapeHtml(json.error || res.statusText)}</span>`;
+          } else {
+            const msg = json.status === 'already_exists' ? 'Already registered' : 'Registered';
+            regOut.innerHTML = `${escapeHtml(msg)} — follow <code>${escapeHtml(json.handle)}</code>`;
+            loadWatchers();
+          }
+        } catch (err) {
+          regOut.innerHTML = `<span class="err">${escapeHtml(err.message)}</span>`;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
+    async function loadWatchers() {
+      try {
+        const res = await fetch('/api/watchers');
+        const json = await res.json();
+        if (!json.watchers || !json.watchers.length) {
+          list.innerHTML = '<p class="sub">Nobody is watched yet. Register a server above.</p>';
+          return;
+        }
+        list.innerHTML = '<div class="card">' + json.watchers.map(w =>
+          `<div class="row">
+            <div class="k">${escapeHtml(w.monitored_domain)}</div>
+            <div class="v"><code>${escapeHtml(w.handle)}</code></div>
+          </div>`
+        ).join('') + '</div>';
+      } catch (err) {
+        list.innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    loadWatchers();
     </script>
     </body>
     </html>
