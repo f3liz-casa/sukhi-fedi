@@ -39,7 +39,7 @@ ensure_stream() {
 ensure_stream OUTBOX \
   --subjects="sns.outbox.>" \
   --storage=file \
-  --retention=workqueue \
+  --retention=workq \
   --replicas=1 \
   --discard=old \
   --dupe-window=2m \
