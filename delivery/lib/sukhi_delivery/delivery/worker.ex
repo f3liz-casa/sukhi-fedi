@@ -60,7 +60,6 @@ defmodule SukhiDelivery.Delivery.Worker do
            body: body,
            headers: Enum.to_list(headers),
            finch: SukhiDelivery.Finch,
-           connect_options: [timeout: 10_000],
            receive_timeout: 30_000
          ) do
       {:ok, %{status: status}} when status in 200..299 ->
