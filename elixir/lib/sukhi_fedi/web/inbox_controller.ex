@@ -22,17 +22,36 @@ defmodule SukhiFedi.Web.InboxController do
 
   defp handle_inbox(conn) do
     raw_json = conn.body_params
+    raw_body = conn.assigns[:raw_body] || ""
+    headers = Enum.into(conn.req_headers, %{})
+    url = request_url(conn)
     sync_header = get_req_header(conn, "collection-synchronization") |> List.first()
 
-    with {:ok, _} <- FedifyClient.verify(%{raw: raw_json}),
+    verify_payload = %{
+      raw: raw_body,
+      headers: headers,
+      method: "POST",
+      url: url
+    }
+
+    with {:ok, _} <- FedifyClient.verify(verify_payload),
          {:ok, instruction} <- FedifyClient.inbox(%{raw: raw_json}) do
       Instructions.execute(instruction)
       maybe_enqueue_follower_sync(raw_json, sync_header)
       send_resp(conn, 202, "")
     else
       {:error, reason} ->
-        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+        send_resp(conn, 400, Jason.encode!(%{error: inspect(reason)}))
     end
+  end
+
+  # Reconstruct the public URL the remote signer signed against, even
+  # when cloudflared (or any reverse proxy) has rewritten Host to an
+  # internal value like `gateway:4000`.
+  defp request_url(conn) do
+    domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
+    query = if conn.query_string in [nil, ""], do: "", else: "?" <> conn.query_string
+    "https://#{domain}#{conn.request_path}#{query}"
   end
 
   defp maybe_enqueue_follower_sync(_raw_json, nil), do: :ok

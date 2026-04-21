@@ -16,7 +16,13 @@ defmodule SukhiFedi.Web.Router do
   # dedicated forwarders when needed.
   plug(SukhiFedi.Web.RateLimitPlug, bucket: "global", limit: 500, scale_ms: 60_000)
   plug(:match)
-  plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
+
+  plug(Plug.Parsers,
+    parsers: [:json],
+    json_decoder: Jason,
+    body_reader: {SukhiFedi.Web.CacheBodyReader, :read_body, []}
+  )
+
   plug(:dispatch)
 
   # ── ActivityPub / well-known (handled natively by Elixir) ────────────────
