@@ -9,6 +9,8 @@ import {
   EmojiReact,
   Flag,
   Follow,
+  getAuthenticatedDocumentLoader,
+  importJwk,
   Like,
   Move,
   Reject,
@@ -16,10 +18,18 @@ import {
   Undo,
   Update,
 } from "@fedify/fedify";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../fedify/context.ts";
+import { cachedDocumentLoader } from "../fedify/context.ts";
 
 export interface InboxPayload {
   raw: Record<string, unknown>;
+  // Optional signing key so we can do authorized-fetch against servers
+  // in Mastodon Secure Mode / Misskey auth-fetch-required mode when
+  // resolving the remote actor for a Follow.
+  signAs?: {
+    keyId: string;
+    privateJwk: Record<string, unknown>;
+    publicJwk?: Record<string, unknown>;
+  };
 }
 
 export type InboxInstruction =
@@ -28,7 +38,17 @@ export type InboxInstruction =
   | { action: "ignore" };
 
 export async function handleInbox(payload: InboxPayload): Promise<InboxInstruction> {
-  const documentLoader = fetchDocumentLoader;
+  let documentLoader = cachedDocumentLoader;
+  if (payload.signAs) {
+    const privateKey = await importJwk(
+      payload.signAs.privateJwk as JsonWebKey,
+      "private",
+    );
+    documentLoader = getAuthenticatedDocumentLoader({
+      keyId: new URL(payload.signAs.keyId),
+      privateKey,
+    });
+  }
   const raw = payload.raw;
   const type = raw["type"];
 

@@ -4,6 +4,8 @@ defmodule SukhiFedi.Web.InboxController do
 
   alias SukhiFedi.AP.Instructions
   alias SukhiFedi.Federation.FedifyClient
+  alias SukhiFedi.Repo
+  alias SukhiFedi.Schema.Account
 
   # FEP-8fcf Collection-Synchronization format:
   #   collectionId="<uri>", url="<uri>", digest="<hex>"
@@ -34,8 +36,14 @@ defmodule SukhiFedi.Web.InboxController do
       url: url
     }
 
+    inbox_payload =
+      case sign_as_for(conn) do
+        nil -> %{raw: raw_json}
+        sign_as -> %{raw: raw_json, signAs: sign_as}
+      end
+
     with {:ok, _} <- FedifyClient.verify(verify_payload),
-         {:ok, instruction} <- FedifyClient.inbox(%{raw: raw_json}) do
+         {:ok, instruction} <- FedifyClient.inbox(inbox_payload) do
       Instructions.execute(instruction)
       maybe_enqueue_follower_sync(raw_json, sync_header)
       send_resp(conn, 202, "")
@@ -52,6 +60,27 @@ defmodule SukhiFedi.Web.InboxController do
     domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
     query = if conn.query_string in [nil, ""], do: "", else: "?" <> conn.query_string
     "https://#{domain}#{conn.request_path}#{query}"
+  end
+
+  # When the inbox is user-scoped (`/users/:name/inbox`), return the
+  # receiving account's signing key so Bun's `getActor` call can do an
+  # authorized (signed) fetch of the remote actor. Required by servers
+  # with Secure Mode / authorized-fetch turned on (Mastodon, Misskey).
+  # Shared inbox has no :name, so this returns nil.
+  defp sign_as_for(conn) do
+    domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
+
+    with username when is_binary(username) <- conn.path_params["name"],
+         %Account{private_key_jwk: priv, public_key_jwk: pub} when not is_nil(priv) <-
+           Repo.get_by(Account, username: username) do
+      %{
+        keyId: "https://#{domain}/users/#{username}#main-key",
+        privateJwk: priv,
+        publicJwk: pub
+      }
+    else
+      _ -> nil
+    end
   end
 
   defp maybe_enqueue_follower_sync(_raw_json, nil), do: :ok
