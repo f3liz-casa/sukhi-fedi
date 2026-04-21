@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Override for OCI Always Free x64 (VM.Standard.E2.1.Micro: 1 OCPU, 1 GB).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.x64-freetier.yml up -d
+#
+# - api, watchtower: disabled profile (not used by nodeinfo_monitor;
+#   reclaim ~350 MB and remove orchestration churn on a 1 GB box)
+# - postgres: tuned for shared_buffers=48MB, max_connections=25
+# - gateway, delivery (BEAM): aggressive ERL_FLAGS (1 scheduler, busy-wait
+#   off, small heaps), ERL_FULLSWEEP_AFTER=10 to keep binary refs from
+#   piling up, reduced DB pools
+# - persistent volumes bound to /mnt/data (attached OCI block volume)
+
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=48MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=25
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - wal_buffers=2MB
+      - -c
+      - max_wal_size=256MB
+      - -c
+      - min_wal_size=80MB
+    volumes:
+      - /mnt/data/postgres:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+
+  nats:
+    volumes:
+      - /mnt/data/nats:/data
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+
+  gateway:
+    environment:
+      DB_POOL_SIZE: "5"
+      PLUGIN_NODES: ""
+      ERL_FLAGS: >-
+        +S 1:1
+        +SDcpu 1:1
+        +SDio 1
+        +sbwt none
+        +sbwtdcpu none
+        +sbwtdio none
+        +P 65536
+        +Q 4096
+        +MBsbct 128
+        +MBlmbcs 256
+        +hms 46
+        +hmbs 12288
+      ERL_FULLSWEEP_AFTER: "10"
+      ERL_MAX_PORTS: "4096"
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+
+  delivery:
+    environment:
+      DB_POOL_SIZE: "3"
+      ERL_FLAGS: >-
+        +S 1:1
+        +SDcpu 1:1
+        +SDio 1
+        +sbwt none
+        +sbwtdcpu none
+        +sbwtdio none
+        +P 65536
+        +Q 4096
+        +MBsbct 128
+        +MBlmbcs 256
+        +hms 46
+        +hmbs 12288
+      ERL_FULLSWEEP_AFTER: "10"
+      ERL_MAX_PORTS: "4096"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  bun:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  api:
+    profiles: ["disabled"]
+
+  watchtower:
+    deploy:
+      resources:
+        limits:
+          memory: 48M

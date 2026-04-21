@@ -1,5 +1,5 @@
 output "instance_public_ip" {
-  description = "Public IPv4 address of the sukhi-fedi VM"
+  description = "Public IPv4 address of the sukhi-fedi x64 VM"
   value       = oci_core_instance.sukhi_vm.public_ip
 }
 
@@ -22,4 +22,3 @@ output "ssh_command" {
   description = "SSH one-liner to the freshly-provisioned VM"
   value       = "ssh ubuntu@${oci_core_instance.sukhi_vm.public_ip}"
 }
-

@@ -146,38 +146,40 @@ endpoints; the compose file does not bundle one.
 
 ## Production Deployment
 
-Self-hosted flow: **Terraform** provisions the VM → **Ansible**
-configures it → **docker compose up -d** pulls pinned images from GHCR
-→ **Watchtower** keeps them fresh.
+Self-hosted flow: **Terraform** provisions the VM (cloud-init runs on first
+boot to install Docker, mount the block volume, and harden the OS) →
+**docker compose up -d** pulls pinned images from GHCR → **Watchtower** keeps
+them fresh.
+
+Two Terraform stacks available:
+
+- `infra/terraform/` — ARM64 `VM.Standard.A1.Flex` (2 OCPU / 12 GB default)
+- `infra/terraform-x64-freetier/` — x64 `VM.Standard.E2.1.Micro` (1 OCPU /
+  1 GB, Always Free). Trades RAM for wider AD availability. See that
+  directory's README for the memory-tight BEAM/PG tuning.
 
 ### Step 1 — Provision with Terraform
 
-Creates the OCI VM (ARM64 `VM.Standard.A1.Flex`), VCN/subnet, and a
-block volume mounted at `/mnt/data` (used by PostgreSQL and NATS JetStream).
+Creates the OCI VM, VCN/subnet, and a block volume mounted at `/mnt/data`
+(used by PostgreSQL and NATS JetStream). cloud-init on first boot installs
+Docker CE, creates the `deploy` user with your SSH key, locks down UFW
+(SSH only; Cloudflare Tunnel handles HTTP ingress), tunes sysctl, and
+creates a swap file on RAM-tight hosts.
 
 ```bash
-cd infra/terraform
+cd infra/terraform                 # or infra/terraform-x64-freetier
 cp terraform.tfvars.example terraform.tfvars
 # fill in tenancy_ocid, user_ocid, fingerprint, private_key_path,
 # tenancy_namespace, domain, etc.
 terraform init
 terraform apply
-# outputs: instance_public_ip
-# also generates: infra/ansible/inventory.ini
+# outputs: instance_public_ip, ssh_command
+
+# wait for cloud-init to finish (3–5 min on first boot)
+ssh ubuntu@$(terraform output -raw instance_public_ip) 'cloud-init status --wait'
 ```
 
-### Step 2 — Configure with Ansible
-
-Mounts the block volume, creates the `deploy` user, and installs Docker.
-
-```bash
-cd infra/ansible
-ansible-galaxy collection install community.general ansible.posix
-# update inventory.ini with the IP from terraform output
-ansible-playbook -i inventory.ini playbook.yml
-```
-
-### Step 3 — Deploy with docker compose + Watchtower
+### Step 2 — Deploy with docker compose + Watchtower
 
 Copy this repo (or the `sukhi-fedi-starter` skeleton) to the VM and set
 `.env` with a version pin and any feature toggles:

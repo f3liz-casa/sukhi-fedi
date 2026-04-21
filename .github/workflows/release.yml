@@ -30,6 +30,8 @@ jobs:
         include:
           - name: gateway
             context: ./elixir
+          - name: delivery
+            context: ./delivery
           - name: api
             context: ./api
           - name: bun

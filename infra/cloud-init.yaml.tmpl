@@ -1,0 +1,83 @@
+#cloud-config
+# Shared bootstrap for any sukhi-fedi VM (ARM64 A1.Flex or x64 E2.1.Micro).
+# Consumed by both infra/terraform/ and infra/terraform-x64-freetier/ via
+# Terraform templatefile(). Vars:
+#   ssh_public_key — the deploy user's SSH pubkey (single line)
+#   swap_mb        — size of /swapfile in MB, 0 = skip
+#   data_subdirs   — list of dirs to create under /mnt/data (owner: deploy)
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - ufw
+  - git
+  - htop
+  - unzip
+  - jq
+
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/sysctl.d/99-sukhi-fedi.conf
+    content: |
+      fs.file-max = 524288
+      net.core.somaxconn = 4096
+%{ if swap_mb > 0 ~}
+      vm.swappiness = 10
+%{ endif ~}
+
+runcmd:
+  # ── Docker CE (arch-aware apt repo) ─────────────────────────────────────────
+  - install -d -m 0755 /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod 0644 /etc/apt/keyrings/docker.asc
+  - |
+    ARCH=$(dpkg --print-architecture)
+    CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $CODENAME stable" \
+      > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  - systemctl enable --now docker
+
+%{ if swap_mb > 0 ~}
+  # ── Swap ────────────────────────────────────────────────────────────────────
+  - test -f /swapfile || fallocate -l ${swap_mb}M /swapfile
+  - chmod 0600 /swapfile
+  - mkswap /swapfile || true
+  - grep -q "^/swapfile " /etc/fstab || echo "/swapfile none swap sw 0 0" >> /etc/fstab
+  - swapon -a
+%{ endif ~}
+
+  # ── Block volume mount (paravirtualized /dev/sdb) ───────────────────────────
+  - |
+    if ! blkid -s TYPE -o value /dev/sdb >/dev/null 2>&1; then
+      mkfs.ext4 -F /dev/sdb
+    fi
+  - mkdir -p /mnt/data
+  - grep -q "^/dev/sdb " /etc/fstab || echo "/dev/sdb /mnt/data ext4 defaults,nofail 0 2" >> /etc/fstab
+  - mount -a
+%{ for subdir in data_subdirs ~}
+  - install -d -o deploy -g deploy -m 0755 /mnt/data/${subdir}
+%{ endfor ~}
+
+  # ── UFW (SSH only; Cloudflare Tunnel handles ingress) ───────────────────────
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw --force enable
+
+  # ── Apply sysctl + signal completion ────────────────────────────────────────
+  - sysctl --system
+  - touch /var/lib/cloud/sukhi-fedi-bootstrap.done

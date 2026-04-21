@@ -5,10 +5,15 @@ infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/*.tfplan
 infra/terraform/.terraform.lock.hcl
+infra/terraform-x64-freetier/terraform.tfvars
+infra/terraform-x64-freetier/.terraform/
+infra/terraform-x64-freetier/*.tfstate
+infra/terraform-x64-freetier/*.tfstate.*
+infra/terraform-x64-freetier/*.tfplan
+infra/terraform-x64-freetier/.terraform.lock.hcl
 
-# Ansible
-infra/ansible/inventory.ini
+# Local env files
+.env
+.env.x64-freetier
 
-# Kamal secrets and generated configs
-.kamal/secrets
-config/deploy.yml
+.claude/

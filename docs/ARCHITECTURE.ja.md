@@ -224,7 +224,8 @@ sukhi-fedi/
 │
 ├── infra/
 │   ├── nats/bootstrap.sh                  # JetStreamストリームのブート
-│   └── terraform/ · ansible/              # infra-as-code (OCI)
+│   ├── cloud-init.yaml.tmpl               # 共通VMブート用テンプレ
+│   └── terraform/ · terraform-x64-freetier/ # infra-as-code (OCI ARM + x64)
 │
 ├── docker-compose.yml                     # 開発+本番スタック（GHCRイメージ固定）
 ├── docker-compose.test.yml                # 密閉テストスタック

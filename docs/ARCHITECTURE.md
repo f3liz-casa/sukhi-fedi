@@ -232,7 +232,8 @@ sukhi-fedi/
 │
 ├── infra/
 │   ├── nats/bootstrap.sh                  # JetStream stream bootstrap
-│   └── terraform/ · ansible/              # infra-as-code (OCI)
+│   ├── cloud-init.yaml.tmpl               # shared VM bootstrap template
+│   └── terraform/ · terraform-x64-freetier/ # infra-as-code (OCI ARM + x64)
 │
 ├── docker-compose.yml                     # dev + prod stack (pinned GHCR images)
 ├── docker-compose.test.yml                # hermetic test stack
