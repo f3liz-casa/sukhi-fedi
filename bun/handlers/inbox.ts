@@ -53,11 +53,26 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
   const type = raw["type"];
 
   if (type === "Follow") {
-    const follow = await Follow.fromJsonLd(raw, { documentLoader });
+    console.log("[handleInbox] Follow: parsing", { hasSignAs: !!payload.signAs });
+    let follow;
+    try {
+      follow = await Follow.fromJsonLd(raw, { documentLoader });
+    } catch (e) {
+      console.error("[handleInbox] Follow.fromJsonLd failed:", e);
+      throw e;
+    }
     const actorId = follow.actorId;
+    console.log("[handleInbox] actorId=", actorId?.href);
     if (actorId == null) return { action: "ignore" };
 
-    const remoteActor = await follow.getActor({ documentLoader });
+    let remoteActor;
+    try {
+      remoteActor = await follow.getActor({ documentLoader });
+    } catch (e) {
+      console.error("[handleInbox] follow.getActor failed:", e);
+      throw e;
+    }
+    console.log("[handleInbox] remoteActor=", remoteActor?.id?.href, "inboxId=", remoteActor?.inboxId?.href);
     if (remoteActor == null || remoteActor.inboxId == null) return { action: "ignore" };
     const inboxUrl = remoteActor.inboxId.href;
 
