@@ -9,8 +9,8 @@ defmodule SukhiFedi.Repo.Migrations.AddHotPathIndexes do
     # FEP-8fcf digest + "who follows X" queries all filter by state='accepted'.
     # A plain (follower_uri, followee_id) unique already exists but doesn't
     # cover state-filtered reads.
-    create index(:follows, [:followee_id, :state])
-    create index(:follows, [:follower_uri, :state])
+    create_if_not_exists index(:follows, [:followee_id, :state])
+    create_if_not_exists index(:follows, [:follower_uri, :state])
 
     # Outbox.Relay only ever reads rows where status='pending'. Replacing the
     # full (status, id) index with a partial index keeps it tiny once the
