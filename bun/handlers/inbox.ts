@@ -30,6 +30,10 @@ export interface InboxPayload {
     privateJwk: Record<string, unknown>;
     publicJwk?: Record<string, unknown>;
   };
+  // Public host of this instance (e.g. "watch-mjw.f3liz.casa"). Used
+  // to mint the Accept activity's own `id` — remote servers expect
+  // it to be a resolvable URL under our domain.
+  selfDomain?: string;
 }
 
 export type InboxInstruction =
@@ -64,18 +68,29 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
 
   if (type === "Follow") {
     const follow = await Follow.fromJsonLd(raw, { documentLoader: contextLoader });
-    if (follow.actorId == null) return { action: "ignore" };
+    if (follow.actorId == null || follow.objectId == null) return { action: "ignore" };
 
     const remoteActor = await follow.getActor({ documentLoader: actorLoader });
     if (remoteActor == null || remoteActor.inboxId == null) return { action: "ignore" };
     const inboxUrl = remoteActor.inboxId.href;
 
-    const followeeUri = follow.objectId?.href;
+    const followeeUri = follow.objectId.href;
     const followJson = await follow.toJsonLd({ contextLoader });
+
+    // Build an Accept(Follow) to send back. The follower is waiting for
+    // this — without it their pending-follow state never resolves.
+    const selfDomain = payload.selfDomain ?? new URL(followeeUri).host;
+    const accept = new Accept({
+      id: new URL(`https://${selfDomain}/activities/accept/${crypto.randomUUID()}`),
+      actor: follow.objectId,
+      object: follow,
+    });
+    const acceptJson = await accept.toJsonLd({ contextLoader });
+
     return {
       action: "save_and_reply",
       save: { follow: followJson, followeeUri },
-      reply: followJson,
+      reply: acceptJson,
       inbox: inboxUrl,
     };
   }

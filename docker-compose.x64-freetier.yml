@@ -105,3 +105,25 @@ services:
 
   watchtower:
     profiles: ["disabled"]
+
+  # Cloudflare Tunnel — only ingress path. App ports are no longer
+  # published to the host (see base compose), so Cloudflare is the sole
+  # way in. Create the tunnel in Zero Trust → Networks → Tunnels, route
+  # the public hostname to `http://gateway:4000`, and paste the token
+  # into `.env` as CLOUDFLARE_TUNNEL_TOKEN.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # Runs as root because /home/deploy is mode 750 and the image's
+    # nonroot UID can't traverse it to read the bind-mounted config.
+    user: "0:0"
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      gateway:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 32M

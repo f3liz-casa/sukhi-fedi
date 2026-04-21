@@ -36,10 +36,12 @@ defmodule SukhiFedi.Web.InboxController do
       url: url
     }
 
+    self_domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
+
     inbox_payload =
       case sign_as_for(conn) do
-        nil -> %{raw: raw_json}
-        sign_as -> %{raw: raw_json, signAs: sign_as}
+        nil -> %{raw: raw_json, selfDomain: self_domain}
+        sign_as -> %{raw: raw_json, signAs: sign_as, selfDomain: self_domain}
       end
 
     with {:ok, _} <- FedifyClient.verify(verify_payload),

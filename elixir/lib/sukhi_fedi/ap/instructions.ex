@@ -86,16 +86,25 @@ defmodule SukhiFedi.AP.Instructions do
       end
 
     if account && follow_data do
-      follower_uri = follow_data["actor"]
+      follower_uri = extract_uri(follow_data["actor"])
 
-      %Follow{
-        follower_uri: follower_uri,
-        followee_id: account.id,
-        state: "accepted"
-      }
-      |> Repo.insert(on_conflict: :nothing)
+      if is_binary(follower_uri) do
+        %Follow{
+          follower_uri: follower_uri,
+          followee_id: account.id,
+          state: "accepted"
+        }
+        |> Repo.insert(on_conflict: :nothing)
+      end
     end
   end
+
+  # fedify's `follow.toJsonLd({ contextLoader })` inlines the resolved
+  # actor object (full Person JSON-LD) into the `actor` field instead of
+  # leaving it as a bare ID string. Accept both shapes.
+  defp extract_uri(uri) when is_binary(uri), do: uri
+  defp extract_uri(%{"id" => id}) when is_binary(id), do: id
+  defp extract_uri(_), do: nil
 
   defp insert_follow(_), do: :ok
 
