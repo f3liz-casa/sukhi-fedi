@@ -24,7 +24,7 @@ defmodule SukhiFedi.Web.InboxController do
     raw_json = conn.body_params
     raw_body = conn.assigns[:raw_body] || ""
     headers = Enum.into(conn.req_headers, %{})
-    url = request_url(conn)
+    url = public_url(conn)
     sync_header = get_req_header(conn, "collection-synchronization") |> List.first()
 
     verify_payload = %{
@@ -48,7 +48,7 @@ defmodule SukhiFedi.Web.InboxController do
   # Reconstruct the public URL the remote signer signed against, even
   # when cloudflared (or any reverse proxy) has rewritten Host to an
   # internal value like `gateway:4000`.
-  defp request_url(conn) do
+  defp public_url(conn) do
     domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
     query = if conn.query_string in [nil, ""], do: "", else: "?" <> conn.query_string
     "https://#{domain}#{conn.request_path}#{query}"
