@@ -13,6 +13,7 @@ defmodule SukhiFedi.Schema.Media do
     field :height, :integer
     field :size, :integer
     field :tags, {:array, :string}, default: []
+    field :attached_at, :utc_datetime
     belongs_to :account, SukhiFedi.Schema.Account
     many_to_many :notes, SukhiFedi.Schema.Note, join_through: "note_media"
 
@@ -21,8 +22,15 @@ defmodule SukhiFedi.Schema.Media do
 
   def changeset(media, attrs) do
     media
-    |> cast(attrs, [:url, :remote_url, :type, :blurhash, :description, :width, :height, :size, :tags, :account_id])
+    |> cast(attrs, [:url, :remote_url, :type, :blurhash, :description, :width, :height, :size, :tags, :account_id, :attached_at])
     |> validate_required([:url, :type, :account_id])
     |> validate_inclusion(:type, ["image", "video", "audio", "unknown"])
+  end
+
+  @doc "Mutate description / tags only — used by PUT /api/v1/media/:id."
+  def changeset_update(media, attrs) do
+    media
+    |> cast(attrs, [:description, :tags])
+    |> validate_length(:description, max: 1500)
   end
 end

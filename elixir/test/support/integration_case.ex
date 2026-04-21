@@ -27,10 +27,24 @@ defmodule SukhiFedi.IntegrationCase do
   using do
     quote do
       import SukhiFedi.IntegrationCase
+      alias SukhiFedi.Repo
     end
   end
 
-  setup do
+  setup tags do
+    # Use a sandbox checkout when the Repo is started (it is when
+    # `mix test --only integration` runs without `--no-start`). Falls
+    # back to a no-op if the sandbox is not in use, so tests that don't
+    # touch the DB still work.
+    case Process.whereis(SukhiFedi.Repo) do
+      nil ->
+        :ok
+
+      _pid ->
+        :ok = Ecto.Adapters.SQL.Sandbox.checkout(SukhiFedi.Repo)
+        unless tags[:async], do: Ecto.Adapters.SQL.Sandbox.mode(SukhiFedi.Repo, {:shared, self()})
+    end
+
     bypass = Bypass.open()
 
     {:ok,

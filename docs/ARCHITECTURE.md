@@ -92,11 +92,24 @@ sukhi-fedi/
 │   │   ├── outbox.ex                      # Outbox.enqueue / enqueue_multi
 │   │   │                                    (write side only; delivery
 │   │   │                                    node owns the Relay / read side)
+│   │   ├── oauth.ex                       # OAuth 2.0 server: register_app,
+│   │   │                                    {authorization_code, refresh,
+│   │   │                                    client_credentials} grants,
+│   │   │                                    verify_bearer, revoke
+│   │   ├── accounts.ex                    # Mastodon-shaped account ops
+│   │   │                                    (lookup, update_credentials,
+│   │   │                                    counts_for, list_statuses)
+│   │   ├── notes.ex                       # create_status / get / delete /
+│   │   │                                    context + favourite/reblog/
+│   │   │                                    bookmark/pin + counts/viewer
+│   │   ├── timelines.ex                   # home / public timeline queries
+│   │   ├── social.ex                      # follow / unfollow / relationships
 │   │   ├── federation/
 │   │   │   ├── actor_fetcher.ex           # remote actor GET + ETS cache
 │   │   │   └── fedify_client.ex           # NATS Micro client → Bun (admin)
 │   │   ├── schema/                        # Ecto schemas (note, account,
-│   │   │   │                                follow, boost, reaction, …)
+│   │   │   │                                follow, boost, reaction,
+│   │   │   │                                oauth_app/code/token, …)
 │   │   │   └── outbox_event.ex            # `outbox` table
 │   │   ├── cache/ets.ex                   # ETS TTL cache
 │   │   ├── ap/                            # ActivityPub helpers
@@ -107,7 +120,8 @@ sukhi-fedi/
 │   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex
 │   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # controllers + plugs
-│   │       ├── router.ex
+│   │       ├── router.ex                  # + /oauth/*_ → PluginPlug,
+│   │       │                                /uploads/*path → static serve
 │   │       ├── rate_limit_plug.ex
 │   │       ├── plugin_plug.ex             # :rpc to api plugin node
 │   │       ├── inbox_controller.ex
@@ -132,10 +146,14 @@ sukhi-fedi/
 │   ├── lib/sukhi_delivery/
 │   │   ├── application.ex                 # supervision tree
 │   │   ├── repo.ex
-│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
+│   │   ├── outbox/
+│   │   │   ├── relay.ex                   # LISTEN/NOTIFY → JetStream
+│   │   │   └── consumer.ex                # Gnat.sub on sns.outbox.>
+│   │   │                                    routes 10 subjects to Bun
+│   │   │                                    translators + Worker fan-out
 │   │   ├── delivery/
 │   │   │   ├── worker.ex                  # Oban :delivery queue
-│   │   │   ├── fan_out.ex                 # latent (future outbox consumer)
+│   │   │   ├── fan_out.ex                 # legacy precompute helper
 │   │   │   ├── fedify_client.ex           # NATS Micro client → Bun
 │   │   │   ├── followers_sync.ex          # FEP-8fcf
 │   │   │   └── follower_sync_worker.ex    # Oban :federation queue
@@ -179,13 +197,36 @@ sukhi-fedi/
 │   ├── mix.exs                            # independent :sukhi_api app
 │   ├── lib/sukhi_api/
 │   │   ├── application.ex                 # start-up; prints registered routes
-│   │   ├── capability.ex                  # @behaviour + `use` macro (auto-register)
+│   │   ├── capability.ex                  # @behaviour + `use` macro
+│   │   │                                    routes can be 3-tuple (public)
+│   │   │                                    or 4-tuple {…, scope: "…"}
 │   │   ├── registry.ex                    # runtime discovery of capability modules
 │   │   ├── router.ex                      # :rpc entry — handle(req) → {:ok, resp}
+│   │   │                                    + Bearer token auth plug for
+│   │   │                                    routes with scope: opt
 │   │   ├── gateway_rpc.ex                 # calls back to gateway contexts
+│   │   │                                    test impl injection via
+│   │   │                                    :gateway_rpc_impl env
+│   │   ├── pagination.ex                  # max_id/since_id/min_id/limit +
+│   │   │                                    Mastodon Link header builder
+│   │   ├── multipart.ex                   # plug-less multipart parser
+│   │   ├── views/                         # JSON renderers (Mastodon shape)
+│   │   │   ├── id.ex                      # snowflake-ready id encoder
+│   │   │   ├── mastodon_account.ex        # Account + CredentialAccount
+│   │   │   ├── mastodon_relationship.ex
+│   │   │   ├── mastodon_status.ex         # counts + viewer flags via ctx
+│   │   │   └── mastodon_media.ex
 │   │   └── capabilities/                  # ← DROP FILES HERE TO ADD ENDPOINTS
 │   │       ├── mastodon_instance.ex
-│   │       └── nodeinfo_monitor.ex
+│   │       ├── nodeinfo_monitor.ex
+│   │       ├── oauth_apps.ex              # /api/v1/apps + verify_credentials
+│   │       ├── oauth.ex                   # /oauth/authorize, /token, /revoke
+│   │       ├── mastodon_accounts.ex       # accounts/* read + update
+│   │       ├── mastodon_follows.ex        # accounts/:id/{follow,unfollow}
+│   │       ├── mastodon_statuses.ex       # statuses CRUD + context
+│   │       ├── mastodon_interactions.ex   # favourite/reblog/bookmark/pin
+│   │       ├── mastodon_timelines.ex      # home / public
+│   │       └── mastodon_media.ex          # POST /media + GET/PUT
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   └── Dockerfile                         # distributed Erlang release
 │
@@ -195,8 +236,10 @@ sukhi-fedi/
 │
 ├── docker-compose.yml                     # dev + prod stack (pinned GHCR images)
 ├── docker-compose.test.yml                # hermetic test stack
+├── TODO.md                                # punch list of deferred work
 └── docs/
-    ├── ARCHITECTURE.md                    # ← this file
+    ├── ARCHITECTURE.md                    # ← this file (canonical)
+    ├── ARCHITECTURE.ja.md                 # Japanese mirror; trail the EN
     └── ADDONS.md                          # addon ABI contract
 ```
 
@@ -221,16 +264,22 @@ on publish gives stream-level dedup.
 sns.<context>.<aggregate>.<op>[.<variant>]
 ```
 
-| Subject                            | Direction | Emitted by                    | Consumed by                  |
-| ---------------------------------- | --------- | ----------------------------- | ---------------------------- |
-| `sns.outbox.note.created`          | pub       | `Notes.create_note/1`         | deliverer / timeline-updater |
-| `sns.outbox.note.deleted`          | pub       | _(future capability)_         | deliverer                    |
-| `sns.outbox.follow.requested`      | pub       | _(future capability)_         | deliverer                    |
-| `sns.outbox.like.created`          | pub       | _(future capability)_         | deliverer                    |
-| `sns.outbox.like.undone`           | pub       | _(future capability)_         | deliverer                    |
-| `sns.outbox.announce.created`      | pub       | _(future capability)_         | deliverer                    |
-| `sns.events.timeline.home.updated` | pub       | timeline-updater (addon)      | streaming-fanout             |
-| `sns.events.notification.mention`  | pub       | inbox handler                 | streaming-fanout             |
+| Subject                            | Direction | Emitted by                                  | Consumed by                  |
+| ---------------------------------- | --------- | ------------------------------------------- | ---------------------------- |
+| `sns.outbox.note.created`          | pub       | `Notes.create_note/1`, `create_status/2`    | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.note.deleted`          | pub       | `Notes.delete_note/2`                       | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.follow.requested`      | pub       | `Social.request_follow/2`                   | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.follow.undone`         | pub       | `Social.unfollow/2`                         | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.actor.updated`         | pub       | `Accounts.update_credentials/2`             | _(skipped — no Bun wrapper)_ |
+| `sns.outbox.like.created`          | pub       | `Notes.favourite/2`                         | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.like.undone`           | pub       | `Notes.unfavourite/2`                       | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.announce.created`      | pub       | `Notes.reblog/2`                            | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.announce.undone`       | pub       | `Notes.unreblog/2`                          | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.add.created`           | pub       | `Notes.pin/2`                               | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.remove.created`        | pub       | `Notes.unpin/2`                             | `Outbox.Consumer` → fan-out  |
+| `sns.outbox.oauth.app_registered`  | pub       | `OAuth.register_app/1`                      | _(local audit only)_         |
+| `sns.events.timeline.home.updated` | pub       | timeline-updater (addon)                    | streaming-fanout             |
+| `sns.events.notification.mention`  | pub       | inbox handler                               | streaming-fanout             |
 
 ### 4.3 NATS Micro services (Bun-side)
 
@@ -325,14 +374,21 @@ Ecto.Multi.new()
 
 DB commit ⇒ outbox row is durable. Period.
 
-Implemented call sites:
-- `SukhiFedi.Notes.create_note/1`  → `sns.outbox.note.created`
-  (called by `SukhiFedi.Addons.NodeinfoMonitor`)
+Implemented call sites (all reachable from the api plugin node via
+`SukhiApi.GatewayRpc` — no NATS RPC on this edge):
 
-Additional call sites (deletes / likes / boosts / follow) will land
-when the api plugin node grows the matching capabilities. Those
-capabilities call back over distributed Erlang via
-`SukhiApi.GatewayRpc` — no NATS RPC layer.
+- `SukhiFedi.Notes.create_note/1`, `create_status/2`  → `sns.outbox.note.created`
+- `SukhiFedi.Notes.delete_note/2`                     → `sns.outbox.note.deleted`
+- `SukhiFedi.Notes.favourite/2`, `unfavourite/2`      → `sns.outbox.like.{created,undone}`
+- `SukhiFedi.Notes.reblog/2`, `unreblog/2`            → `sns.outbox.announce.{created,undone}`
+- `SukhiFedi.Notes.pin/2`, `unpin/2`                  → `sns.outbox.{add,remove}.created`
+- `SukhiFedi.Social.request_follow/2`, `unfollow/2`   → `sns.outbox.follow.{requested,undone}`
+- `SukhiFedi.Accounts.update_credentials/2`           → `sns.outbox.actor.updated`
+- `SukhiFedi.OAuth.register_app/1`                    → `sns.outbox.oauth.app_registered`
+
+Local-only writes (no outbox event because they don't federate):
+`Notes.bookmark/2`, `Notes.unbookmark/2`, OAuth token mint / revoke /
+refresh, session lookups.
 
 ### 5.3 Relay path (consumer of outbox, producer to NATS)
 
@@ -361,42 +417,40 @@ capabilities call back over distributed Erlang via
 
 ### 6.1 Local user posts a Note
 
-The full target flow. The pieces marked _(future)_ are not yet wired
-up — only the relay tick and delivery worker are live today; the
-post-a-status capability and the OUTBOX→FanOut consumer arrive together
-when api/ grows the matching capability.
+End-to-end flow live as of PR3 + PR5:
 
 ```
-POST /api/v1/statuses                                              _(future)_
+POST /api/v1/statuses (Bearer token)
    │  matched by /api/v1/*_ in router.ex → PluginPlug → :rpc api node
-   │  the capability calls SukhiFedi.Notes.create_note/1 via SukhiApi.GatewayRpc
+   │  SukhiApi.Capabilities.MastodonStatuses.create/1
+   │  → after auth plug stamps req.assigns.current_account
+   │  → GatewayRpc.call(SukhiFedi.Notes, :create_status, [account, attrs])
    ▼
-Elixir Notes.create_note/1                                         (live)
+SukhiFedi.Notes.create_status/2
    Ecto.Multi:
      insert notes
+     attach media (note_media join + stamp media.attached_at)
      insert outbox(sns.outbox.note.created)
    commit  ──▶ AFTER INSERT STATEMENT TRIGGER fires NOTIFY outbox_new
                          │
                          ▼
-              Outbox.Relay (wakes up)                              (live)
+              SukhiDelivery.Outbox.Relay (wakes up)
                          │  Gnat.pub to JetStream OUTBOX
                          ▼
-         OUTBOX → FanOut consumer                                  _(future)_
-                         │  fan out to each follower inbox
+         SukhiDelivery.Outbox.Consumer (Gnat.sub on sns.outbox.>)
+                         │  resolves actor + recipient inboxes
+                         │  (followers + relays + recipient-specific extras)
+                         │  FedifyClient.translate("note", payload)
+                         │  → Bun handleBuildNote signs + serializes
                          ▼
-         SukhiDelivery.Delivery.FanOut.enqueue(object, inbox_urls) (live module,
-                                                                    awaiting caller)
-           1. read Object's raw_json once
-           2. compute FEP-8fcf header_value(actor_uri) once
-           3. build a list of job args with
-              {raw_json, actor_uri, activity_id, sync_header, inbox_url}
-           4. Oban.insert_all — one INSERT per fan-out, not one per inbox
+         enqueue_jobs(body, actor_uri, activity_id, inboxes)
+           Oban.insert_all — one INSERT per fan-out, not one per inbox
                          │
                          ▼ (one Oban job per follower inbox)
-         Delivery.Worker (Oban queue :delivery, max_attempts 10)
+         SukhiDelivery.Delivery.Worker (Oban queue :delivery, max_attempts 10)
           1. check delivery_receipts(activity_id, inbox_url) — skip if delivered
           2. resolve body from args["raw_json"] (no DB round-trip)
-          3. attach Collection-Synchronization header from args["sync_header"]
+          3. attach Collection-Synchronization header
           4. sign envelope: FedifyClient.sign(...) → NATS Micro to Bun,
              which fetches a cached CryptoKey from bun/fedify/key_cache.ts
           5. Req.post inbox_url  via named Finch pool (size 50 × 4)
@@ -406,8 +460,20 @@ Elixir Notes.create_note/1                                         (live)
 
 All the work that is invariant across a fan-out (body encode, follower
 digest, signing key import) happens exactly once per activity rather
-than once per recipient. See `SukhiDelivery.Delivery.FanOut` for the
-precomputation, `bun/fedify/key_cache.ts` for the Bun CryptoKey reuse.
+than once per recipient. See `SukhiDelivery.Delivery.FanOut` (legacy
+helper, kept for richer fan-out scenarios) and
+`bun/fedify/key_cache.ts` for the Bun CryptoKey reuse.
+
+The same `Outbox.Consumer` path covers note delete, follow / unfollow,
+favourite / unfavourite, reblog / unreblog, and pin / unpin — each
+maps to a different Bun translator key but the Relay → Consumer →
+Worker shape is identical. `sns.outbox.actor.updated` is currently
+`:skipped` until Bun grows an `Update(Actor)` wrapper (TODO).
+
+The Consumer uses plain `Gnat.sub` today, so the JetStream OUTBOX
+stream grows without ACK-based pruning. A durable JetStream consumer
+is tracked in `TODO.md`; the Worker's `delivery_receipts` already
+covers idempotency on redelivery.
 
 ### 6.2 Remote server delivers to our inbox
 
@@ -570,12 +636,86 @@ That's the entire change. No router edit, no manifest update — the
 `SukhiApi.Registry` scans `:application.get_key(:sukhi_api, :modules)`
 at runtime and picks up every such module.
 
+**Authenticated endpoints** declare a 4-tuple route with a `scope:` keyword:
+
+```elixir
+def routes do
+  [{:get, "/api/v1/accounts/verify_credentials", &show/1, scope: "read:accounts"}]
+end
+
+def show(req) do
+  %{current_account: account, current_app: app, scopes: scopes} = req[:assigns]
+  …
+end
+```
+
+`SukhiApi.Router` parses the `Authorization: Bearer <token>` header,
+calls `SukhiFedi.OAuth.verify_bearer/1` on the gateway via
+`GatewayRpc`, checks scope superset, and stamps
+`req.assigns.current_account` / `current_app` / `scopes` before
+dispatching. Missing token → 401, scope mismatch → 403, gateway
+unreachable → 503. 3-tuple routes remain unauthenticated.
+
+**Test injection**: `SukhiApi.GatewayRpc.call/3,4` consults
+`Application.get_env(:sukhi_api, :gateway_rpc_impl)` first; tests set
+this to a fake module that returns canned responses, with no
+distributed Erlang round-trip. Production uses the real `:rpc.call`.
+
 **Failure modes**:
 
 - no `plugin_nodes` configured → 503 `{"error":"plugin_unavailable"}`
 - node unreachable at `:rpc` time → 503 `{"error":"plugin_rpc_failed"}`
 - handler crashes on the remote node → remote catches and returns 500
 - path not covered by any capability → remote returns 404
+- token verification fails → 401 / 403 / 503 per scope plug above
+
+### 8.1 Mastodon-compatible REST surface (PR1–PR3.5)
+
+Tagged `addon: :mastodon_api`. Each capability lives in
+`api/lib/sukhi_api/capabilities/`; views render Mastodon JSON
+shapes from `api/lib/sukhi_api/views/`.
+
+| Capability                       | Routes                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MastodonInstance`               | `GET /api/v1/instance`                                                                                                                                                                                                                                                                                                                                  |
+| `OAuthApps`                      | `POST /api/v1/apps`, `POST /api/v1/apps/verify_credentials`                                                                                                                                                                                                                                                                                             |
+| `OAuth`                          | `GET /oauth/authorize` (HTML form), `POST /oauth/authorize`, `POST /oauth/token` (auth code / refresh / client_credentials), `POST /oauth/revoke`                                                                                                                                                                                                       |
+| `MastodonAccounts`               | `verify_credentials`, `update_credentials`, `lookup`, `relationships`, `:id`, `:id/statuses`, `:id/followers`, `:id/following`                                                                                                                                                                                                                          |
+| `MastodonFollows`                | `:id/follow`, `:id/unfollow`                                                                                                                                                                                                                                                                                                                            |
+| `MastodonStatuses`               | `POST /api/v1/statuses`, `GET /:id`, `DELETE /:id`, `GET /:id/context`                                                                                                                                                                                                                                                                                  |
+| `MastodonInteractions` (PR3.5)   | `:id/{favourite,unfavourite,reblog,unreblog,bookmark,unbookmark,pin,unpin}`, `GET /api/v1/{bookmarks,favourites}`                                                                                                                                                                                                                                       |
+| `MastodonTimelines`              | `GET /api/v1/timelines/home`, `GET /api/v1/timelines/public`                                                                                                                                                                                                                                                                                            |
+| `MastodonMedia`                  | `POST /api/v1/media` (sync), `POST /api/v2/media` (async 202), `GET /api/v1/media/:id`, `PUT /api/v1/media/:id`                                                                                                                                                                                                                                         |
+
+Views: `MastodonAccount` (+ `render_credential` for self),
+`MastodonRelationship`, `MastodonStatus` (counts + viewer flags via
+`%{counts:, viewer:}` ctx), `MastodonMedia`, `Id` (snowflake-ready id
+encoder). Pagination helper at `SukhiApi.Pagination` parses
+`?max_id=`/`?since_id=`/`?min_id=`/`?limit=` and emits Mastodon
+`Link: <…>; rel="next"` headers.
+
+OAuth tables (`oauth_apps`, `oauth_authorization_codes`,
+`oauth_access_tokens`) live in `core/migrations` — not in an addon —
+so the future `:misskey_api` addon can share the same token store
+without crossing the cross-addon FK rule (`ADDONS.md §Migrations`).
+Tokens are stored as SHA-256 hashes; the plaintext is returned to
+the client only at mint time.
+
+### 8.2 Server-side media uploads
+
+`POST /api/v1/media` accepts `multipart/form-data` (parsed by the
+plug-less `SukhiApi.Multipart` since the api node doesn't run a Plug
+pipeline). The capability forwards the file bytes to gateway via
+`:rpc`, and `SukhiFedi.Addons.Media.create_from_upload/3` writes
+them under `MEDIA_DIR` (default `priv/static/uploads`). The gateway
+router serves `/uploads/<key>` directly from `MEDIA_DIR` with
+path-traversal guards. Inline cap is **8 MiB** to fit the
+distributed Erlang transport; presigned-URL flow for larger uploads
+is in `TODO.md`.
+
+The existing `generate_upload_url/3` (S3/R2 presigned PUT) is kept
+in place for future client-direct uploads but is not yet exposed
+through a capability.
 
 ## 9. Observability (OpenTelemetry-free)
 
@@ -618,6 +758,8 @@ Custom metrics to emit as we build each feature:
 | `RELEASE_COOKIE`                 | Elixir+api | `sukhi_fedi_dev_cookie` | distributed Erlang shared secret |
 | `DOMAIN` / `INSTANCE_TITLE`      | api     | `localhost:4000` / `sukhi-fedi` | NodeInfo / WebFinger output |
 | `ENABLED_ADDONS` / `DISABLE_ADDONS` | all  | `all` / `""`            | Comma-separated addon ids          |
+| `MEDIA_DIR`                      | Elixir  | `priv/static/uploads`   | On-disk root for `/uploads/<key>`  |
+| `S3_BUCKET` / `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_REGION` / `S3_PUBLIC_URL` | Elixir | _(unset)_ | Optional S3/R2 presigned-URL flow (`Media.generate_upload_url/3`) |
 
 ## 11. Running locally
 
@@ -695,7 +837,15 @@ independently.
                               ap.* surface, db.* surface, mfm/key_cache addons,
                               streaming HTTP controller; context modules pruned
                               to live functions only
+9   Mastodon API MVP       ✅ OAuth 2.0 + Bearer auth plug; accounts /
+                              statuses / timelines / media / interactions
+                              capabilities; Outbox.Consumer wires
+                              note/follow/like/announce/add/remove subjects
+                              into Bun translators + Worker fan-out.
+                              See TODO.md for what's deferred (Misskey API,
+                              streaming WS, push, durable JetStream consumer).
 ```
 
 If you're adding a feature, first decide which stage it belongs in and
-whether it should be deferred until the stage completes.
+whether it should be deferred until the stage completes. `TODO.md`
+tracks the punch list of work that hasn't been picked up yet.

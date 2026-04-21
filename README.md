@@ -13,6 +13,8 @@ document and the code. Read it first.
 
 - [`docs/ADDONS.md`](docs/ADDONS.md) — addon ABI contract (how to pick,
   write, or distribute feature addons)
+- [`TODO.md`](TODO.md) — punch list of work deferred from the
+  Mastodon-API MVP push; pick anything off it
 - [`SETUP.md`](SETUP.md) — self-host deployment with docker compose + Watchtower
 
 ## Quick start

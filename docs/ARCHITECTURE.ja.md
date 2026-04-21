@@ -91,12 +91,25 @@ sukhi-fedi/
 │   │   ├── outbox.ex                      # Outbox.enqueue / enqueue_multi
 │   │   │                                    （書き込み側のみ。Relay と
 │   │   │                                    読み取り側は delivery ノード）
+│   │   ├── oauth.ex                       # OAuth 2.0 サーバー：register_app、
+│   │   │                                    {authorization_code, refresh,
+│   │   │                                    client_credentials} grant、
+│   │   │                                    verify_bearer、revoke
+│   │   ├── accounts.ex                    # Mastodon互換アカウント操作
+│   │   │                                    (lookup, update_credentials,
+│   │   │                                    counts_for, list_statuses)
+│   │   ├── notes.ex                       # create_status / get / delete /
+│   │   │                                    context + favourite/reblog/
+│   │   │                                    bookmark/pin + counts/viewer flags
+│   │   ├── timelines.ex                   # home / public timeline クエリ
+│   │   ├── social.ex                      # follow / unfollow / relationships
 │   │   ├── federation/
 │   │   │   ├── actor_fetcher.ex           # リモートactor取得 + ETSキャッシュ
 │   │   │   └── fedify_client.ex           # NATS Micro クライアント → Bun
 │   │   │                                    （admin のリレー購読で使用）
 │   │   ├── schema/                        # Ectoスキーマ（note, account,
-│   │   │   │                                follow, boost, reaction, …）
+│   │   │   │                                follow, boost, reaction,
+│   │   │   │                                oauth_app/code/token, …）
 │   │   │   └── outbox_event.ex            # `outbox` テーブル
 │   │   ├── cache/ets.ex                   # ETS TTLキャッシュ
 │   │   ├── ap/                            # ActivityPub ヘルパー
@@ -107,7 +120,8 @@ sukhi-fedi/
 │   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex
 │   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # コントローラ + plug
-│   │       ├── router.ex
+│   │       ├── router.ex                  # /oauth/*_ → PluginPlug、
+│   │       │                                /uploads/*path → 静的配信 を追加
 │   │       ├── rate_limit_plug.ex
 │   │       ├── plugin_plug.ex             # api プラグインノードへ :rpc
 │   │       ├── inbox_controller.ex
@@ -127,10 +141,14 @@ sukhi-fedi/
 │   ├── lib/sukhi_delivery/
 │   │   ├── application.ex                 # 監視ツリー
 │   │   ├── repo.ex
-│   │   ├── outbox/relay.ex                # LISTEN/NOTIFY → JetStream
+│   │   ├── outbox/
+│   │   │   ├── relay.ex                   # LISTEN/NOTIFY → JetStream
+│   │   │   └── consumer.ex                # Gnat.sub on sns.outbox.>
+│   │   │                                    10種のsubjectをBun translator +
+│   │   │                                    Worker fan-out にルーティング
 │   │   ├── delivery/
 │   │   │   ├── worker.ex                  # Oban :delivery キュー
-│   │   │   ├── fan_out.ex                 # 潜在（将来の outbox consumer 用）
+│   │   │   ├── fan_out.ex                 # 旧式の事前計算ヘルパー（温存）
 │   │   │   ├── fedify_client.ex           # NATS Micro クライアント → Bun
 │   │   │   ├── followers_sync.ex          # FEP-8fcf
 │   │   │   └── follower_sync_worker.ex    # Oban :federation キュー
@@ -173,12 +191,35 @@ sukhi-fedi/
 │   ├── lib/sukhi_api/
 │   │   ├── application.ex
 │   │   ├── capability.ex                  # @behaviour + use マクロ
+│   │   │                                    routes は3タプル（公開）か
+│   │   │                                    4タプル {…, scope: "…"}
 │   │   ├── registry.ex                    # capability の自動発見
 │   │   ├── router.ex                      # :rpc 入口
+│   │   │                                    + scope: opt がある route 用の
+│   │   │                                    Bearerトークン認証plug
 │   │   ├── gateway_rpc.ex                 # ゲートウェイに :rpc で戻る
+│   │   │                                    :gateway_rpc_impl env で
+│   │   │                                    テスト用差し替え可
+│   │   ├── pagination.ex                  # max_id/since_id/min_id/limit +
+│   │   │                                    Mastodon Link ヘッダ生成
+│   │   ├── multipart.ex                   # plug非依存のmultipartパーサ
+│   │   ├── views/                         # JSONレンダラ（Mastodon shape）
+│   │   │   ├── id.ex                      # snowflake切替準備済みのidエンコーダ
+│   │   │   ├── mastodon_account.ex        # Account + CredentialAccount
+│   │   │   ├── mastodon_relationship.ex
+│   │   │   ├── mastodon_status.ex         # counts + viewer flags via ctx
+│   │   │   └── mastodon_media.ex
 │   │   └── capabilities/                  # ← ここにファイル置くとエンドポイント増える
 │   │       ├── mastodon_instance.ex
-│   │       └── nodeinfo_monitor.ex
+│   │       ├── nodeinfo_monitor.ex
+│   │       ├── oauth_apps.ex              # /api/v1/apps + verify_credentials
+│   │       ├── oauth.ex                   # /oauth/authorize, /token, /revoke
+│   │       ├── mastodon_accounts.ex       # accounts/* read + update
+│   │       ├── mastodon_follows.ex        # accounts/:id/{follow,unfollow}
+│   │       ├── mastodon_statuses.ex       # statuses CRUD + context
+│   │       ├── mastodon_interactions.ex   # favourite/reblog/bookmark/pin
+│   │       ├── mastodon_timelines.ex      # home / public
+│   │       └── mastodon_media.ex          # POST /media + GET/PUT
 │   └── Dockerfile
 │
 ├── infra/
@@ -187,6 +228,7 @@ sukhi-fedi/
 │
 ├── docker-compose.yml                     # 開発+本番スタック（GHCRイメージ固定）
 ├── docker-compose.test.yml                # 密閉テストスタック
+├── TODO.md                                # 未着手タスクのパンチリスト
 └── docs/
     ├── ARCHITECTURE.md                    # 英語正本
     ├── ARCHITECTURE.ja.md                 # ← ここ
@@ -214,16 +256,22 @@ sukhi-fedi/
 sns.<コンテキスト>.<集約>.<操作>[.<バリアント>]
 ```
 
-| Subject                            | 向き | 発行元                        | 消費側                       |
-| ---------------------------------- | ---- | ----------------------------- | ---------------------------- |
-| `sns.outbox.note.created`          | pub  | `Notes.create_note/1`         | deliverer / timeline-updater |
-| `sns.outbox.note.deleted`          | pub  | _(将来 capability で)_       | deliverer                    |
-| `sns.outbox.follow.requested`      | pub  | _(将来 capability で)_       | deliverer                    |
-| `sns.outbox.like.created`          | pub  | _(将来 capability で)_       | deliverer                    |
-| `sns.outbox.like.undone`           | pub  | _(将来 capability で)_       | deliverer                    |
-| `sns.outbox.announce.created`      | pub  | _(将来 capability で)_       | deliverer                    |
-| `sns.events.timeline.home.updated` | pub  | timeline-updater (addon)      | streaming-fanout             |
-| `sns.events.notification.mention`  | pub  | inbox ハンドラ                | streaming-fanout             |
+| Subject                            | 向き | 発行元                                       | 消費側                              |
+| ---------------------------------- | ---- | -------------------------------------------- | ----------------------------------- |
+| `sns.outbox.note.created`          | pub  | `Notes.create_note/1`, `create_status/2`     | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.note.deleted`          | pub  | `Notes.delete_note/2`                        | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.follow.requested`      | pub  | `Social.request_follow/2`                    | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.follow.undone`         | pub  | `Social.unfollow/2`                          | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.actor.updated`         | pub  | `Accounts.update_credentials/2`              | _(skip — Bunの`Update(Actor)`まだ)_ |
+| `sns.outbox.like.created`          | pub  | `Notes.favourite/2`                          | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.like.undone`           | pub  | `Notes.unfavourite/2`                        | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.announce.created`     | pub  | `Notes.reblog/2`                             | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.announce.undone`      | pub  | `Notes.unreblog/2`                           | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.add.created`           | pub  | `Notes.pin/2`                                | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.remove.created`        | pub  | `Notes.unpin/2`                              | `Outbox.Consumer` → fan-out         |
+| `sns.outbox.oauth.app_registered`  | pub  | `OAuth.register_app/1`                       | _(ローカル監査のみ)_               |
+| `sns.events.timeline.home.updated` | pub  | timeline-updater (addon)                     | streaming-fanout                    |
+| `sns.events.notification.mention`  | pub  | inbox ハンドラ                               | streaming-fanout                    |
 
 ### 4.3 NATS Micro サービス（Bun側）
 
@@ -317,13 +365,21 @@ Ecto.Multi.new()
 
 DBコミット ⇒ outbox行は永続化。それだけ。
 
-現状の呼び出し元:
-- `SukhiFedi.Notes.create_note/1`  → `sns.outbox.note.created`
-  （`SukhiFedi.Addons.NodeinfoMonitor` から呼ばれてる）
+現状の呼び出し元（全部、apiプラグインノードから `SukhiApi.GatewayRpc`
+経由で叩かれる — NATS RPCは挟まない）:
 
-他のpublish（delete / like / boost / follow）は、apiプラグインノードに
-対応するcapabilityが追加された時点でそこから呼ばれる。capabilityは
-分散Erlangの `SukhiApi.GatewayRpc` 経由で叩く — NATS RPCは挟まない。
+- `SukhiFedi.Notes.create_note/1`, `create_status/2`  → `sns.outbox.note.created`
+- `SukhiFedi.Notes.delete_note/2`                     → `sns.outbox.note.deleted`
+- `SukhiFedi.Notes.favourite/2`, `unfavourite/2`      → `sns.outbox.like.{created,undone}`
+- `SukhiFedi.Notes.reblog/2`, `unreblog/2`            → `sns.outbox.announce.{created,undone}`
+- `SukhiFedi.Notes.pin/2`, `unpin/2`                  → `sns.outbox.{add,remove}.created`
+- `SukhiFedi.Social.request_follow/2`, `unfollow/2`   → `sns.outbox.follow.{requested,undone}`
+- `SukhiFedi.Accounts.update_credentials/2`           → `sns.outbox.actor.updated`
+- `SukhiFedi.OAuth.register_app/1`                    → `sns.outbox.oauth.app_registered`
+
+ローカル限定の書き込み（フェデらないからoutboxは出さない）:
+`Notes.bookmark/2`, `Notes.unbookmark/2`、OAuthのtoken発行/失効/refresh、
+セッション参照。
 
 ### 5.3 リレー側（outbox消費 → NATS発行）
 
@@ -351,42 +407,41 @@ DBコミット ⇒ outbox行は永続化。それだけ。
 
 ### 6.1 ローカルユーザーがNoteを投稿
 
-これは **目標形** の流れ。今は _(future)_ マークの所がまだ繋がってなくて、
-リレーtickとdelivery workerだけがliveだよ。投稿capabilityと
-OUTBOX→FanOut consumerは、対応する api/ capability が生えるとき同時に入る。
+PR3 + PR5 で end-to-end ライブになった流れ:
 
 ```
-POST /api/v1/statuses                                              _(future)_
+POST /api/v1/statuses （Bearerトークン付き）
    │  router.ex の /api/v1/*_ にマッチ → PluginPlug → :rpc で api ノード
-   │  capability が SukhiApi.GatewayRpc 経由で SukhiFedi.Notes.create_note/1 を呼ぶ
+   │  SukhiApi.Capabilities.MastodonStatuses.create/1
+   │  → 認証plugが req.assigns.current_account をスタンプ
+   │  → GatewayRpc.call(SukhiFedi.Notes, :create_status, [account, attrs])
    ▼
-Elixir Notes.create_note/1                                         (live)
+SukhiFedi.Notes.create_status/2
    Ecto.Multi:
      insert notes
+     attach media (note_media join + media.attached_at スタンプ)
      insert outbox(sns.outbox.note.created)
    commit  ──▶ AFTER INSERT STATEMENT TRIGGER が NOTIFY outbox_new
                          │
                          ▼
-              Outbox.Relay（起きる）                                (live)
+              SukhiDelivery.Outbox.Relay（起きる）
                          │  Gnat.pub で JetStream OUTBOX へ
                          ▼
-         OUTBOX → FanOut consumer                                  _(future)_
-                         │  各フォロワーのinboxにファン・アウト
+         SukhiDelivery.Outbox.Consumer (Gnat.sub on sns.outbox.>)
+                         │  actorとrecipient inbox を解決
+                         │  （フォロワー + リレー + 各種特例）
+                         │  FedifyClient.translate("note", payload)
+                         │  → Bun handleBuildNote が署名+シリアライズ
                          ▼
-         SukhiDelivery.Delivery.FanOut.enqueue(object, inbox_urls) (モジュールはlive、
-                                                                    callerが未着)
-           1. Objectのraw_jsonを1回だけ読む
-           2. FEP-8fcfのheader_value(actor_uri)を1回だけ計算
-           3. job args を作成:
-              {raw_json, actor_uri, activity_id, sync_header, inbox_url}
-           4. Oban.insert_all — ファン・アウトごとに1 INSERT、
-              inbox数じゃなくて！
+         enqueue_jobs(body, actor_uri, activity_id, inboxes)
+           Oban.insert_all — ファン・アウトごとに1 INSERT、
+                             inbox数じゃなくて！
                          │
                          ▼ （inboxごとにOban job 1個）
-         Delivery.Worker (Oban queue :delivery, max_attempts 10)
+         SukhiDelivery.Delivery.Worker (Oban queue :delivery, max_attempts 10)
           1. delivery_receipts(activity_id, inbox_url) で配信済みか確認
           2. args["raw_json"] からbody復元（DBアクセスなし）
-          3. args["sync_header"] から Collection-Synchronization ヘッダを付与
+          3. Collection-Synchronization ヘッダを付与
           4. FedifyClient.sign(...) で署名 → NATS Microで Bun に。
              Bun 側は bun/fedify/key_cache.ts のキャッシュされた
              CryptoKey を使うよ
@@ -397,9 +452,20 @@ Elixir Notes.create_note/1                                         (live)
 
 ファン・アウトをまたいで不変になる仕事（body encode、フォロワー
 ダイジェスト、署名鍵のimport）は、配信1回ずつじゃなくてアクティビティ
-1回につき1回に集約されるようになってる。事前計算は
-`SukhiDelivery.Delivery.FanOut`、BunのCryptoKey再利用は
-`bun/fedify/key_cache.ts`。
+1回につき1回に集約されるようになってる。事前計算ヘルパーは
+`SukhiDelivery.Delivery.FanOut`（より複雑なfan-outシナリオ用に温存）、
+BunのCryptoKey再利用は `bun/fedify/key_cache.ts`。
+
+同じ `Outbox.Consumer` パスが、note 削除 / follow / unfollow /
+favourite / unfavourite / reblog / unreblog / pin / unpin もカバー。
+それぞれ別の Bun translator キーに対応するけど、Relay → Consumer →
+Worker の形は同じ。`sns.outbox.actor.updated` は `Update(Actor)`
+ラッパーが Bun 側にまだないので今は `:skipped`（TODO）。
+
+Consumer は今のところ素の `Gnat.sub` を使ってるから、JetStream の
+OUTBOX ストリームは ACK ベースで刈られない。durable な JetStream
+consumer は `TODO.md` で追跡中。Worker の `delivery_receipts` が
+冪等性を担保してるので、再配信は安全。
 
 ### 6.2 他のサーバーが私たちのinboxに配達
 
@@ -563,12 +629,86 @@ end
 `SukhiApi.Registry` が実行時に
 `:application.get_key(:sukhi_api, :modules)` をスキャンして拾う。
 
+**認証付きエンドポイント** は `routes/0` で4タプルを返し、`scope:`
+キーワードを付ける:
+
+```elixir
+def routes do
+  [{:get, "/api/v1/accounts/verify_credentials", &show/1, scope: "read:accounts"}]
+end
+
+def show(req) do
+  %{current_account: account, current_app: app, scopes: scopes} = req[:assigns]
+  …
+end
+```
+
+`SukhiApi.Router` が `Authorization: Bearer <token>` ヘッダを parse して、
+`SukhiFedi.OAuth.verify_bearer/1` を `GatewayRpc` 経由で叩いて scope の
+superset チェックを通したら、`req.assigns.current_account` /
+`current_app` / `scopes` をスタンプしてからハンドラに渡す。
+トークンなし → 401、scope 不足 → 403、ゲートウェイ到達不能 → 503。
+3タプルrouteは無認証のまま。
+
+**テスト用の差し替え**: `SukhiApi.GatewayRpc.call/3,4` は
+`Application.get_env(:sukhi_api, :gateway_rpc_impl)` を最初に見るから、
+テストはここに「キャンド応答を返すだけのモジュール」を差し込めば
+分散Erlang一切なしでrouter全部回せる。本番はそのまま `:rpc.call`。
+
 **失敗モード**:
 
 - `plugin_nodes` 未設定 → 503 `{"error":"plugin_unavailable"}`
 - `:rpc` 時にノード到達不能 → 503 `{"error":"plugin_rpc_failed"}`
 - リモートノード側でハンドラがクラッシュ → 向こうで catch して 500
 - どのcapabilityにも該当しないパス → 向こうで 404
+- トークン検証 失敗 → 上の認証plugから 401 / 403 / 503
+
+### 8.1 Mastodon互換 REST 表面（PR1〜PR3.5）
+
+全部 `addon: :mastodon_api` でタグ。capability は
+`api/lib/sukhi_api/capabilities/`、JSONレンダラは
+`api/lib/sukhi_api/views/`。
+
+| Capability                       | ルート                                                                                                                              |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `MastodonInstance`               | `GET /api/v1/instance`                                                                                                              |
+| `OAuthApps`                      | `POST /api/v1/apps`, `POST /api/v1/apps/verify_credentials`                                                                         |
+| `OAuth`                          | `GET /oauth/authorize`（HTMLフォーム）, `POST /oauth/authorize`, `POST /oauth/token`（auth code / refresh / client_credentials）, `POST /oauth/revoke` |
+| `MastodonAccounts`               | `verify_credentials`, `update_credentials`, `lookup`, `relationships`, `:id`, `:id/statuses`, `:id/followers`, `:id/following`     |
+| `MastodonFollows`                | `:id/follow`, `:id/unfollow`                                                                                                        |
+| `MastodonStatuses`               | `POST /api/v1/statuses`, `GET /:id`, `DELETE /:id`, `GET /:id/context`                                                              |
+| `MastodonInteractions` (PR3.5)   | `:id/{favourite,unfavourite,reblog,unreblog,bookmark,unbookmark,pin,unpin}`, `GET /api/v1/{bookmarks,favourites}`                 |
+| `MastodonTimelines`              | `GET /api/v1/timelines/home`, `GET /api/v1/timelines/public`                                                                        |
+| `MastodonMedia`                  | `POST /api/v1/media`（同期）, `POST /api/v2/media`（非同期 202）, `GET /api/v1/media/:id`, `PUT /api/v1/media/:id`                 |
+
+ビュー: `MastodonAccount`（自分には `render_credential`）,
+`MastodonRelationship`, `MastodonStatus`（`%{counts:, viewer:}` ctx で
+カウント+viewerフラグ）, `MastodonMedia`, `Id`（snowflake切替準備済みの
+idエンコーダ）。ページネーションは `SukhiApi.Pagination` が
+`?max_id=`/`?since_id=`/`?min_id=`/`?limit=` を読んで Mastodon 風の
+`Link: <…>; rel="next"` ヘッダを組み立てる。
+
+OAuth テーブル（`oauth_apps`, `oauth_authorization_codes`,
+`oauth_access_tokens`）は `core/migrations` 配下 — addon の中じゃない。
+将来の `:misskey_api` addon が同じ token store を使えるように、かつ
+addonをまたぐ FK を禁じてる `ADDONS.md §Migrations` のルールを
+壊さないように、こっちに置いた。トークンは SHA-256 ハッシュで保存し、
+平文は発行時の1回だけ返す。
+
+### 8.2 サーバー側メディアアップロード
+
+`POST /api/v1/media` は `multipart/form-data` を受ける（apiノードは
+Plugパイプラインを動かしてないので、自前の `SukhiApi.Multipart` で
+パース）。capability はファイルバイト列を `:rpc` でゲートウェイに
+渡し、`SukhiFedi.Addons.Media.create_from_upload/3` が `MEDIA_DIR`
+（デフォルト `priv/static/uploads`）に書き出す。ゲートウェイは
+`/uploads/<key>` を `MEDIA_DIR` から path-traversal ガード付きで
+直接配信。インライン上限は **8 MiB**（分散Erlang転送に乗る範囲）。
+それより大きいファイル向けの presigned-URL フローは `TODO.md`。
+
+既存の `generate_upload_url/3`（S3/R2 presigned PUT）はクライアント
+直接アップロードに将来使うために残してあるけど、まだcapability化
+されてない。
 
 ## 9. 可観測性（OpenTelemetryなし）
 
@@ -612,6 +752,8 @@ end
 | `RELEASE_COOKIE`                     | Elixir+api  | `sukhi_fedi_dev_cookie`   | 分散Erlang共有シークレット          |
 | `DOMAIN` / `INSTANCE_TITLE`          | api         | `localhost:4000` / `sukhi-fedi` | NodeInfo / WebFinger の出力 |
 | `ENABLED_ADDONS` / `DISABLE_ADDONS`  | 全部        | `all` / `""`              | カンマ区切りのアドオンid            |
+| `MEDIA_DIR`                          | Elixir      | `priv/static/uploads`     | `/uploads/<key>` の実体ディレクトリ |
+| `S3_BUCKET` / `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_REGION` / `S3_PUBLIC_URL` | Elixir | _(未設定)_ | S3/R2 presigned-URL フロー（`Media.generate_upload_url/3`）用 |
 
 ## 11. ローカルで動かす
 
@@ -689,10 +831,18 @@ cd bun && bun run check
                                  ap.* / db.* surface、mfm / key_cache addon、
                                  streaming HTTP controller を削除。
                                  context module は live な関数だけに圧縮
+9   Mastodon API MVP          ✅ OAuth 2.0 + Bearer 認証plug、accounts /
+                                 statuses / timelines / media / interactions
+                                 capability、Outbox.Consumer が
+                                 note/follow/like/announce/add/remove subjects を
+                                 Bun translator + Worker fan-out に流す。
+                                 残ったやつは TODO.md（Misskey API、
+                                 streaming WS、push、durable JetStream consumer など）。
 ```
 
 機能を追加するときは、まず自分がどのステージに属するのか、
-そのステージの完了を待った方がいいのか考えるんだよー。
+そのステージの完了を待った方がいいのか考えるんだよー。`TODO.md` に
+未着手の作業リストがあるから、暇なら拾って〜。
 
 ---
 

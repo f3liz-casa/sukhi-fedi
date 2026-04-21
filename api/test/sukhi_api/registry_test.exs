@@ -26,6 +26,9 @@ defmodule SukhiApi.RegistryTest do
     caps = Registry.capabilities()
     assert SukhiApi.Capabilities.MastodonInstance in caps
     assert SukhiApi.Capabilities.NodeinfoMonitor in caps
+    assert SukhiApi.Capabilities.OAuthApps in caps
+    assert SukhiApi.Capabilities.OAuth in caps
+    assert SukhiApi.Capabilities.MastodonAccounts in caps
   end
 
   test "enabling only :mastodon_api hides the nodeinfo_monitor capability" do
@@ -35,6 +38,9 @@ defmodule SukhiApi.RegistryTest do
 
     caps = Registry.capabilities()
     assert SukhiApi.Capabilities.MastodonInstance in caps
+    assert SukhiApi.Capabilities.OAuthApps in caps
+    assert SukhiApi.Capabilities.OAuth in caps
+    assert SukhiApi.Capabilities.MastodonAccounts in caps
     refute SukhiApi.Capabilities.NodeinfoMonitor in caps
   end
 
@@ -45,6 +51,9 @@ defmodule SukhiApi.RegistryTest do
 
     caps = Registry.capabilities()
     refute SukhiApi.Capabilities.MastodonInstance in caps
+    refute SukhiApi.Capabilities.OAuthApps in caps
+    refute SukhiApi.Capabilities.OAuth in caps
+    refute SukhiApi.Capabilities.MastodonAccounts in caps
     assert SukhiApi.Capabilities.NodeinfoMonitor in caps
   end
 

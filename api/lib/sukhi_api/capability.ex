@@ -27,6 +27,25 @@ defmodule SukhiApi.Capability do
         end
       end
 
+  ## Authenticated endpoints
+
+  Append a keyword list as a 4th element to require an OAuth bearer
+  token. The router verifies the token via `SukhiFedi.OAuth.verify_bearer/1`
+  on the gateway, checks scope, and exposes the bound account on
+  `req[:assigns]`:
+
+      def routes do
+        [{:get, "/api/v1/accounts/verify_credentials", &show/1, scope: "read:accounts"}]
+      end
+
+      def show(req) do
+        %{current_account: account} = req[:assigns]
+        # …
+      end
+
+  Missing token → 401, scope mismatch → 403, gateway unreachable → 503.
+  3-tuple routes remain unauthenticated.
+
   ## Removing an endpoint
 
   Delete the file. No other changes needed.
@@ -45,7 +64,8 @@ defmodule SukhiApi.Capability do
           required(:path) => String.t(),
           optional(:query) => String.t(),
           optional(:headers) => [{String.t(), String.t()}],
-          optional(:body) => binary()
+          optional(:body) => binary(),
+          optional(:assigns) => map()
         }
   @type response :: %{
           required(:status) => pos_integer(),
@@ -53,7 +73,9 @@ defmodule SukhiApi.Capability do
           required(:headers) => [{String.t(), String.t()}]
         }
   @type handler :: (request() -> {:ok, response()} | {:error, term()})
-  @type route :: {method(), String.t(), handler()}
+  @type route ::
+          {method(), String.t(), handler()}
+          | {method(), String.t(), handler(), keyword()}
 
   @callback routes() :: [route()]
 

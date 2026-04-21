@@ -11,8 +11,20 @@ defmodule SukhiApi.Application do
 
     Logger.info("SukhiApi node=#{node()} started with #{length(routes)} route(s):")
 
-    Enum.each(routes, fn {m, p, _h} ->
-      Logger.info("  #{m |> Atom.to_string() |> String.upcase()} #{p}")
+    Enum.each(routes, fn route ->
+      {m, p, opts} =
+        case route do
+          {m, p, _h} -> {m, p, []}
+          {m, p, _h, opts} -> {m, p, opts}
+        end
+
+      scope_tag =
+        case Keyword.get(opts, :scope) do
+          nil -> ""
+          s -> " (scope: #{s})"
+        end
+
+      Logger.info("  #{m |> Atom.to_string() |> String.upcase()} #{p}#{scope_tag}")
     end)
 
     # No children required right now — the plugin is driven entirely by

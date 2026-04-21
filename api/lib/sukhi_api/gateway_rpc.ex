@@ -17,6 +17,16 @@ defmodule SukhiApi.GatewayRpc do
 
   Capabilities should translate these into HTTP responses (503 for
   transport issues, 4xx/5xx for domain failures).
+
+  ## Test impl injection
+
+  Tests can substitute the entire RPC layer by setting
+
+      Application.put_env(:sukhi_api, :gateway_rpc_impl, FakeRpc)
+
+  where `FakeRpc.call/3,4` returns the same `{:ok, term} | {:error, term}`
+  shape. When unset, the real `:rpc.call` is used. This keeps capability
+  code free of test indirection.
   """
 
   @default_timeout 5_000
@@ -25,6 +35,13 @@ defmodule SukhiApi.GatewayRpc do
           {:ok, term()} | {:error, term()}
   def call(mod, fun, args, timeout \\ @default_timeout)
       when is_atom(mod) and is_atom(fun) and is_list(args) do
+    case Application.get_env(:sukhi_api, :gateway_rpc_impl) do
+      nil -> do_call(mod, fun, args, timeout)
+      impl when is_atom(impl) -> impl.call(mod, fun, args, timeout)
+    end
+  end
+
+  defp do_call(mod, fun, args, timeout) do
     case gateway_node() do
       nil ->
         {:error, :not_connected}
