@@ -104,7 +104,4 @@ services:
     profiles: ["disabled"]
 
   watchtower:
-    deploy:
-      resources:
-        limits:
-          memory: 48M
+    profiles: ["disabled"]
