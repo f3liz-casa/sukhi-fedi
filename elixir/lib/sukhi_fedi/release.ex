@@ -48,31 +48,38 @@ defmodule SukhiFedi.Release do
   """
   def seed_actor(username, opts \\ []) when is_binary(username) do
     load_app()
-    Application.ensure_all_started(@app)
 
     display_name = Keyword.get(opts, :display_name, username)
     summary = Keyword.get(opts, :summary, "")
 
-    case SukhiFedi.Repo.get_by(SukhiFedi.Schema.Account, username: username) do
-      nil ->
-        keys = SukhiFedi.Addons.NodeinfoMonitor.KeyGen.generate()
+    # `with_repo` starts the Repo (and its deps) just for this block and
+    # shuts it down after. Avoids the port-4000 conflict we'd get from
+    # `ensure_all_started(:sukhi_fedi)` while the release is already running.
+    {:ok, result, _apps} =
+      Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo ->
+        case SukhiFedi.Repo.get_by(SukhiFedi.Schema.Account, username: username) do
+          nil ->
+            keys = SukhiFedi.Addons.NodeinfoMonitor.KeyGen.generate()
 
-        %SukhiFedi.Schema.Account{}
-        |> Ecto.Changeset.change(%{
-          username: username,
-          display_name: display_name,
-          summary: summary,
-          is_bot: true,
-          public_key_pem: keys.public_pem,
-          public_key_jwk: keys.public_jwk,
-          private_key_jwk: keys.private_jwk
-        })
-        |> SukhiFedi.Repo.insert!()
+            %SukhiFedi.Schema.Account{}
+            |> Ecto.Changeset.change(%{
+              username: username,
+              display_name: display_name,
+              summary: summary,
+              is_bot: true,
+              public_key_pem: keys.public_pem,
+              public_key_jwk: keys.public_jwk,
+              private_key_jwk: keys.private_jwk
+            })
+            |> SukhiFedi.Repo.insert!()
 
-        {:ok, :created}
+            :created
 
-      _existing ->
-        {:ok, :already_exists}
-    end
+          _existing ->
+            :already_exists
+        end
+      end)
+
+    {:ok, result}
   end
 end
