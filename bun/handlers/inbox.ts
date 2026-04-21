@@ -38,13 +38,23 @@ export type InboxInstruction =
   | { action: "ignore" };
 
 export async function handleInbox(payload: InboxPayload): Promise<InboxInstruction> {
-  let documentLoader = cachedDocumentLoader;
+  // Two loaders:
+  //   contextLoader — unauthenticated. Fedify's default handles JSON-LD
+  //     context resolution (activitystreams, security/v1, identity/v1,
+  //     …) including the legacy redirect chains like w3id.org → web-
+  //     payments.org. Signing these GETs confuses hosts that don't
+  //     expect HTTP-Signature on context URLs.
+  //   actorLoader   — signed when the receiving actor has a keypair, so
+  //     Mastodon Secure Mode / Misskey auth-fetch-required servers
+  //     return 200 for actor dereference instead of 401.
+  const contextLoader = cachedDocumentLoader;
+  let actorLoader = contextLoader;
   if (payload.signAs) {
     const privateKey = await importJwk(
       payload.signAs.privateJwk as JsonWebKey,
       "private",
     );
-    documentLoader = getAuthenticatedDocumentLoader({
+    actorLoader = getAuthenticatedDocumentLoader({
       keyId: new URL(payload.signAs.keyId),
       privateKey,
     });
@@ -53,31 +63,15 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
   const type = raw["type"];
 
   if (type === "Follow") {
-    console.log("[handleInbox] Follow: parsing", { hasSignAs: !!payload.signAs });
-    let follow;
-    try {
-      follow = await Follow.fromJsonLd(raw, { documentLoader });
-    } catch (e) {
-      console.error("[handleInbox] Follow.fromJsonLd failed:", e);
-      throw e;
-    }
-    const actorId = follow.actorId;
-    console.log("[handleInbox] actorId=", actorId?.href);
-    if (actorId == null) return { action: "ignore" };
+    const follow = await Follow.fromJsonLd(raw, { documentLoader: contextLoader });
+    if (follow.actorId == null) return { action: "ignore" };
 
-    let remoteActor;
-    try {
-      remoteActor = await follow.getActor({ documentLoader });
-    } catch (e) {
-      console.error("[handleInbox] follow.getActor failed:", e);
-      throw e;
-    }
-    console.log("[handleInbox] remoteActor=", remoteActor?.id?.href, "inboxId=", remoteActor?.inboxId?.href);
+    const remoteActor = await follow.getActor({ documentLoader: actorLoader });
     if (remoteActor == null || remoteActor.inboxId == null) return { action: "ignore" };
     const inboxUrl = remoteActor.inboxId.href;
 
     const followeeUri = follow.objectId?.href;
-    const followJson = await follow.toJsonLd({ contextLoader: documentLoader });
+    const followJson = await follow.toJsonLd({ contextLoader });
     return {
       action: "save_and_reply",
       save: { follow: followJson, followeeUri },
@@ -87,68 +81,68 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
   }
 
   if (type === "Announce") {
-    const announce = await Announce.fromJsonLd(raw, { documentLoader });
-    const announceJson = await announce.toJsonLd({ contextLoader: documentLoader });
+    const announce = await Announce.fromJsonLd(raw, { documentLoader: contextLoader });
+    const announceJson = await announce.toJsonLd({ contextLoader });
     return { action: "save", object: announceJson };
   }
   if (type === "Create" || type === "Update" || type === "Delete") {
     let activity: Activity;
     if (type === "Create") {
-      activity = await Create.fromJsonLd(raw, { documentLoader });
+      activity = await Create.fromJsonLd(raw, { documentLoader: contextLoader });
     } else if (type === "Update") {
-      activity = await Update.fromJsonLd(raw, { documentLoader });
+      activity = await Update.fromJsonLd(raw, { documentLoader: contextLoader });
     } else {
-      activity = await Delete.fromJsonLd(raw, { documentLoader });
+      activity = await Delete.fromJsonLd(raw, { documentLoader: contextLoader });
     }
-    const activityJson = await activity.toJsonLd({ contextLoader: documentLoader });
+    const activityJson = await activity.toJsonLd({ contextLoader });
     return { action: "save", object: activityJson };
   }
 
   if (type === "Like" || type === "EmojiReact") {
     const activity: Activity = type === "Like"
-      ? await Like.fromJsonLd(raw, { documentLoader })
-      : await EmojiReact.fromJsonLd(raw, { documentLoader });
-    const activityJson = await activity.toJsonLd({ contextLoader: documentLoader });
+      ? await Like.fromJsonLd(raw, { documentLoader: contextLoader })
+      : await EmojiReact.fromJsonLd(raw, { documentLoader: contextLoader });
+    const activityJson = await activity.toJsonLd({ contextLoader });
     return { action: "save", object: activityJson };
   }
 
   if (type === "Undo") {
-    const undo = await Undo.fromJsonLd(raw, { documentLoader });
-    const undoJson = await undo.toJsonLd({ contextLoader: documentLoader });
+    const undo = await Undo.fromJsonLd(raw, { documentLoader: contextLoader });
+    const undoJson = await undo.toJsonLd({ contextLoader });
     return { action: "save", object: undoJson };
   }
 
   if (type === "Accept" || type === "Reject") {
     const activity: Activity = type === "Accept"
-      ? await Accept.fromJsonLd(raw, { documentLoader })
-      : await Reject.fromJsonLd(raw, { documentLoader });
-    const activityJson = await activity.toJsonLd({ contextLoader: documentLoader });
+      ? await Accept.fromJsonLd(raw, { documentLoader: contextLoader })
+      : await Reject.fromJsonLd(raw, { documentLoader: contextLoader });
+    const activityJson = await activity.toJsonLd({ contextLoader });
     return { action: "save", object: activityJson };
   }
 
   if (type === "Move") {
-    const move = await Move.fromJsonLd(raw, { documentLoader });
-    const moveJson = await move.toJsonLd({ contextLoader: documentLoader });
+    const move = await Move.fromJsonLd(raw, { documentLoader: contextLoader });
+    const moveJson = await move.toJsonLd({ contextLoader });
     return { action: "save", object: moveJson };
   }
 
   if (type === "Block") {
-    const block = await Block.fromJsonLd(raw, { documentLoader });
-    const blockJson = await block.toJsonLd({ contextLoader: documentLoader });
+    const block = await Block.fromJsonLd(raw, { documentLoader: contextLoader });
+    const blockJson = await block.toJsonLd({ contextLoader });
     return { action: "save", object: blockJson };
   }
 
   if (type === "Flag") {
-    const flag = await Flag.fromJsonLd(raw, { documentLoader });
-    const flagJson = await flag.toJsonLd({ contextLoader: documentLoader });
+    const flag = await Flag.fromJsonLd(raw, { documentLoader: contextLoader });
+    const flagJson = await flag.toJsonLd({ contextLoader });
     return { action: "save", object: flagJson };
   }
 
   if (type === "Add" || type === "Remove") {
     const activity: Activity = type === "Add"
-      ? await Add.fromJsonLd(raw, { documentLoader })
-      : await Remove.fromJsonLd(raw, { documentLoader });
-    const activityJson = await activity.toJsonLd({ contextLoader: documentLoader });
+      ? await Add.fromJsonLd(raw, { documentLoader: contextLoader })
+      : await Remove.fromJsonLd(raw, { documentLoader: contextLoader });
+    const activityJson = await activity.toJsonLd({ contextLoader });
     return { action: "save", object: activityJson };
   }
 
