@@ -48,8 +48,6 @@ services:
   gateway:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-gateway:${SUKHI_VERSION:-v1}
     hostname: elixir
-    ports:
-      - "4000:4000"
     environment:
       DB_HOST: postgres
       DB_USER: postgres
@@ -62,6 +60,7 @@ services:
       RELEASE_NODE: gateway@elixir
       RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
       PLUGIN_NODES: api@api
+      DOMAIN: ${DOMAIN:-localhost:4000}
       # Addon selection. Comma list of ids, or "all". See docs/ADDONS.md.
       ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
       DISABLE_ADDONS: ${DISABLE_ADDONS:-}
@@ -108,8 +107,6 @@ services:
       NATS_HOST: nats
       NATS_PORT: "4222"
       METRICS_PORT: "4001"
-    ports:
-      - "4001:4001"
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     depends_on:

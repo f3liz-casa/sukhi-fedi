@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import Config
 
+# Public-facing domain used in nodeinfo/webfinger/ActivityPub URLs.
+if domain = System.get_env("DOMAIN") do
+  config :sukhi_fedi, :domain, domain
+end
+
 # Addon selection.
 #   ENABLED_ADDONS: comma list of ids, or "all" (default).
 #   ADDON_PRESETS:  comma list of preset ids (see SukhiFedi.Addon.Presets).
