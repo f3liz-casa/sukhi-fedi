@@ -52,6 +52,7 @@ Nothing else is a hard dependency.
  ║    fedify.translate.v1           ║  ║  :rpc-invoked from gateway  ║
  ║    fedify.sign.v1                ║  ║  Mastodon / Misskey APIs    ║
  ║    fedify.verify.v1              ║  ║  capabilities auto-register ║
+ ║    fedify.inbox.v1               ║  ║                             ║
  ║    fedify.ping.v1                ║  ║                             ║
  ║  queue group "fedify-workers"    ║  ║                             ║
  ║  NO HTTP server — NATS-only      ║  ║                             ║
@@ -99,18 +100,11 @@ sukhi-fedi/
 │   │   │   └── outbox_event.ex            # `outbox` table
 │   │   ├── cache/ets.ex                   # ETS TTL cache
 │   │   ├── ap/                            # ActivityPub helpers
-│   │   │   ├── client.ex                  # legacy NATS req/reply (ap.*)
 │   │   │   └── instructions.ex            # inbox activity dispatcher
-│   │   ├── nats/                          # db.* topic handlers
-│   │   │   ├── helpers.ex
-│   │   │   ├── accounts.ex                # db.account.* / db.auth.* / db.social.*
-│   │   │   ├── notes.ex                   # db.note.* / db.bookmark.* / db.dm.*
-│   │   │   ├── content.ex                 # db.article.* / db.media.* / db.emoji.* / db.feed.*
-│   │   │   └── admin.ex                   # db.moderation.* / db.admin.*
 │   │   ├── addons/                        # first-party addons
 │   │   │   ├── nodeinfo_monitor.ex + nodeinfo_monitor/
 │   │   │   ├── streaming.ex + streaming/
-│   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex / mfm.ex
+│   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex
 │   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # controllers + plugs
 │   │       ├── router.ex
@@ -120,7 +114,8 @@ sukhi-fedi/
 │   │       ├── webfinger_controller.ex
 │   │       ├── nodeinfo_controller.ex
 │   │       ├── collection_controller.ex   # followers / following collections
-│   │       └── …
+│   │       ├── actor_controller.ex
+│   │       └── featured_controller.ex
 │   ├── priv/repo/migrations/
 │   │   ├── core/                          # core schema (notes, follows, outbox, …)
 │   │   └── addons/<id>/                   # per-addon migrations
@@ -157,14 +152,13 @@ sukhi-fedi/
 │   └── Dockerfile
 │
 ├── bun/                                   # 翻訳家 + 印鑑職人
-│   ├── services/fedify_service.ts         # ★ NATS Micro service
-│   ├── main.ts                            # legacy ap.verify + ap.inbox
+│   ├── services/fedify_service.ts         # ★ NATS Micro service (only entrypoint)
 │   ├── handlers/
 │   │   ├── build/{note,follow,accept,announce,actor,dm,collection_op,
 │   │   │           like,undo,delete}.ts   # one translator per type
 │   │   ├── verify.ts                      # HTTP Signature verify
 │   │   ├── sign_delivery.ts               # HTTP Signature sign
-│   │   ├── inbox.ts                       # legacy ap.inbox dispatcher
+│   │   ├── inbox.ts                       # incoming activity → instruction
 │   │   └── inbox_test.ts
 │   ├── fedify/
 │   │   ├── context.ts                     # cachedDocumentLoader
@@ -230,11 +224,11 @@ sns.<context>.<aggregate>.<op>[.<variant>]
 | Subject                            | Direction | Emitted by                    | Consumed by                  |
 | ---------------------------------- | --------- | ----------------------------- | ---------------------------- |
 | `sns.outbox.note.created`          | pub       | `Notes.create_note/1`         | deliverer / timeline-updater |
-| `sns.outbox.note.deleted`          | pub       | `Notes.delete_note/1`         | deliverer                    |
-| `sns.outbox.follow.requested`      | pub       | `Social.follow/2`             | deliverer                    |
-| `sns.outbox.like.created`          | pub       | `Notes.create_like/2`         | deliverer                    |
-| `sns.outbox.like.undone`           | pub       | `Notes.delete_like/2`         | deliverer                    |
-| `sns.outbox.announce.created`      | pub       | `Notes.create_boost/2`        | deliverer                    |
+| `sns.outbox.note.deleted`          | pub       | _(future capability)_         | deliverer                    |
+| `sns.outbox.follow.requested`      | pub       | _(future capability)_         | deliverer                    |
+| `sns.outbox.like.created`          | pub       | _(future capability)_         | deliverer                    |
+| `sns.outbox.like.undone`           | pub       | _(future capability)_         | deliverer                    |
+| `sns.outbox.announce.created`      | pub       | _(future capability)_         | deliverer                    |
 | `sns.events.timeline.home.updated` | pub       | timeline-updater (addon)      | streaming-fanout             |
 | `sns.events.notification.mention`  | pub       | inbox handler                 | streaming-fanout             |
 
@@ -249,6 +243,7 @@ Multiple Bun replicas auto-share load.
 | `fedify.translate.v1` | `{object_type, payload}`                                      | `{ok:true, data:{…}}`                    |
 | `fedify.sign.v1`      | `{actorUri, inbox, body, privateKeyJwk, keyId, algorithm?}`   | `{ok:true, data:{headers:{…}}}`          |
 | `fedify.verify.v1`    | `{method, url, headers, body}`                                | `{ok:true, data:{ok:bool, …}}`           |
+| `fedify.inbox.v1`     | `{raw}` (incoming AP activity as parsed JSON)                 | `{ok:true, data:{action, …}}` instruction|
 
 Core `object_type` values accepted by translate (in
 `bun/services/fedify_service.ts`): `note`, `follow`, `accept`,
@@ -258,22 +253,6 @@ namespace; core keys cannot be overridden (`addons/loader.ts` enforces
 this at startup).
 
 Service discovery: NATS Micro auto-publishes `$SRV.{PING,INFO,STATS}.fedify`.
-
-### 4.4 Legacy NATS surface
-
-Two legacy surfaces still live during the ongoing strangler-fig
-migration:
-
-- **`ap.verify` / `ap.inbox`** on `bun/main.ts` — subscribe-loop handlers
-  for incoming signature verification and inbox activity dispatch. The
-  inbox controller still calls these via `SukhiFedi.AP.Client.request/2`.
-  Everything else graduated to `fedify.*`.
-- **`db.>`** wildcard on `SukhiFedi.Web.DbNatsListener` — request/reply
-  for Postgres reads/writes from the Bun HTTP API that used to live in
-  `bun/` before stage 3-b. The HTTP layer is gone; the `db.*` topics
-  remain only because the api plugin node and a handful of addons still
-  use them as a convenient RPC shim. Handlers live in
-  `SukhiFedi.Nats.{Accounts, Notes, Content, Admin}`.
 
 ## 5. Transactional Outbox
 
@@ -348,15 +327,16 @@ DB commit ⇒ outbox row is durable. Period.
 
 Implemented call sites:
 - `SukhiFedi.Notes.create_note/1`  → `sns.outbox.note.created`
-- `SukhiFedi.Notes.delete_note/1`  → `sns.outbox.note.deleted`
-- `SukhiFedi.Notes.create_like/2`  → `sns.outbox.like.created`
-- `SukhiFedi.Notes.delete_like/2`  → `sns.outbox.like.undone`
-- `SukhiFedi.Notes.create_boost/2` → `sns.outbox.announce.created`
-- `SukhiFedi.Social.follow/2`      → `sns.outbox.follow.requested`
+  (called by `SukhiFedi.Addons.NodeinfoMonitor`)
+
+Additional call sites (deletes / likes / boosts / follow) will land
+when the api plugin node grows the matching capabilities. Those
+capabilities call back over distributed Erlang via
+`SukhiApi.GatewayRpc` — no NATS RPC layer.
 
 ### 5.3 Relay path (consumer of outbox, producer to NATS)
 
-`SukhiFedi.Outbox.Relay` is a singleton GenServer in the supervision tree:
+`SukhiDelivery.Outbox.Relay` is a singleton GenServer in the supervision tree:
 
 1. On boot: `Postgrex.Notifications.listen/2` on `outbox_new`, then
    force an immediate tick to catch rows left from a prior run.
@@ -381,27 +361,31 @@ Implemented call sites:
 
 ### 6.1 Local user posts a Note
 
+The full target flow. The pieces marked _(future)_ are not yet wired
+up — only the relay tick and delivery worker are live today; the
+post-a-status capability and the OUTBOX→FanOut consumer arrive together
+when api/ grows the matching capability.
+
 ```
-POST /api/v1/statuses
-   │  (matched by /api/v1/*_ in router.ex → PluginPlug → :rpc api node)
-   │   The capability there calls SukhiFedi.Notes.create_note/1 via
-   │   gateway_rpc.
+POST /api/v1/statuses                                              _(future)_
+   │  matched by /api/v1/*_ in router.ex → PluginPlug → :rpc api node
+   │  the capability calls SukhiFedi.Notes.create_note/1 via SukhiApi.GatewayRpc
    ▼
-Elixir Notes.create_note/1
+Elixir Notes.create_note/1                                         (live)
    Ecto.Multi:
      insert notes
      insert outbox(sns.outbox.note.created)
    commit  ──▶ AFTER INSERT STATEMENT TRIGGER fires NOTIFY outbox_new
                          │
                          ▼
-              Outbox.Relay (wakes up)
+              Outbox.Relay (wakes up)                              (live)
                          │  Gnat.pub to JetStream OUTBOX
                          ▼
-         (consumer — future work: ap-deliverer reads OUTBOX and calls
-          Delivery.FanOut.enqueue/2)
+         OUTBOX → FanOut consumer                                  _(future)_
                          │  fan out to each follower inbox
                          ▼
-         Delivery.FanOut.enqueue(object, inbox_urls)
+         SukhiDelivery.Delivery.FanOut.enqueue(object, inbox_urls) (live module,
+                                                                    awaiting caller)
            1. read Object's raw_json once
            2. compute FEP-8fcf header_value(actor_uri) once
            3. build a list of job args with
@@ -422,7 +406,7 @@ Elixir Notes.create_note/1
 
 All the work that is invariant across a fan-out (body encode, follower
 digest, signing key import) happens exactly once per activity rather
-than once per recipient. See `SukhiFedi.Delivery.FanOut` for the
+than once per recipient. See `SukhiDelivery.Delivery.FanOut` for the
 precomputation, `bun/fedify/key_cache.ts` for the Bun CryptoKey reuse.
 
 ### 6.2 Remote server delivers to our inbox
@@ -434,12 +418,12 @@ POST /users/alice/inbox  (external Mastodon)
 Elixir InboxController (captures raw body + headers)
    │
    ▼
-AP.Client.request("ap.verify", {payload})
-   │   legacy NATS req/reply → Bun main.ts handleVerify
+FedifyClient.verify(%{raw: body})
+   │   NATS Micro → fedify.verify.v1 → Bun handleVerify
    │   {ok: true} or {ok: false}
    ▼
-AP.Client.request("ap.inbox", {payload})
-   │   legacy NATS req/reply → Bun main.ts handleInbox
+FedifyClient.inbox(%{raw: body})
+   │   NATS Micro → fedify.inbox.v1 → Bun handleInbox
    │   returns an Instructions map
    ▼
 Instructions.execute(instruction)
@@ -524,8 +508,9 @@ export default myAddon;
 ```
 
 Register in `bun/addons/loader.ts` (static list — Bun imports are
-compile-time). Addons contribute extra `fedify.translate.v1` keys and
-legacy `ap.*` subscribes. Core translators cannot be overridden.
+compile-time). Addons contribute extra `fedify.translate.v1` keys
+under their own `<addon_id>.<type>` namespace. Core translators
+cannot be overridden.
 
 ### API plugin node (`api/lib/sukhi_api/capabilities/`)
 
@@ -692,18 +677,24 @@ independently.
 0   scaffolding            ✅ done
 1   Outbox infra           ✅ done
 2   NATS Micro (additive)  ✅ done
-2-b remove old ap.*        ✅ FedifyClient-scope done; legacy ap.verify/inbox still live
+2-b remove old ap.*        ✅ all moved to fedify.*; ap.* surface and bun/main.ts deleted
 3   HTTP consolidation     ✅ WebFinger / NodeInfo / ActorFetcher / RateLimitPlug
 3-b Bun HTTP removal       ✅ bun/lib/ deleted (no Hono server); bun/api/ handlers removed
 3-c Plugin API (api/)      ✅ distributed-Erlang plugin node; capabilities auto-register
 4   Delivery to Elixir     ✅ Worker uses FedifyClient + delivery_receipts
 4-b Finch pool + E2E       ✅ Finch pool 50×4 per host
-5   God-module split       ✅ db_nats_listener 617 → 80 line dispatcher + 5 Nats.* modules
+5   God-module split       ✅ db_nats_listener split into 5 Nats.* modules,
+                              then the whole db.* surface was removed once no
+                              caller remained
 6   docs + dead-code purge ✅ stale docs removed; README/ARCHITECTURE align
 7   Hot-path optimisation  ✅ FanOut precomputes (body, digest), Oban.insert_all,
                               Outbox.Relay bulk update_all, partial outbox index,
                               per-statement NOTIFY, notes/follows indexes,
                               Bun CryptoKey cache
+8   Strangler-fig sweep    ✅ removed pre-refactor web controllers (16),
+                              ap.* surface, db.* surface, mfm/key_cache addons,
+                              streaming HTTP controller; context modules pruned
+                              to live functions only
 ```
 
 If you're adding a feature, first decide which stage it belongs in and

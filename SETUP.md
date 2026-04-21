@@ -8,7 +8,7 @@
 | ---------------- | ------------------------------ |
 | Elixir           | ~> 1.16                        |
 | OTP              | 26+ (bundled with Elixir 1.16) |
-| Deno             | 2.3.1                          |
+| Bun              | 1.x                            |
 | PostgreSQL       | 16                             |
 | NATS             | 2 (JetStream enabled)          |
 | Docker + Compose | any recent version             |
@@ -58,16 +58,17 @@ mix ecto.migrate
 iex -S mix
 ```
 
-### 3. Deno
+### 3. Bun
 
 ```bash
-cd deno
-deno install
-deno task start
+cd bun
+bun install
+bun run start
 ```
 
-Deno connects to NATS at `nats://localhost:4222` by default and listens on port
-`8000`.
+The `fedify` NATS Micro service connects to `nats://localhost:4222`
+by default. It exposes endpoints `fedify.{ping,translate,sign,verify,inbox}.v1`
+on the queue group `fedify-workers` — no HTTP listener.
 
 ---
 
@@ -87,15 +88,13 @@ Deno connects to NATS at `nats://localhost:4222` by default and listens on port
 | `PORT`                        | HTTP listen port            | `4000`                  |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | `http://localhost:4318` |
 
-### Deno
+### Bun
 
-| Variable                      | Description                 | Default (dev)           |
-| ----------------------------- | --------------------------- | ----------------------- |
-| `NATS_URL`                    | NATS broker URL             | `nats://localhost:4222` |
-| `PORT`                        | HTTP listen port            | `8000`                  |
-| `OTEL_DENO`                   | Enable OpenTelemetry        | `1`                     |
-| `OTEL_SERVICE_NAME`           | Service name in traces      | `sukhi-fedi-deno`       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | `http://localhost:4318` |
+| Variable          | Description                                    | Default (dev)           |
+| ----------------- | ---------------------------------------------- | ----------------------- |
+| `NATS_URL`        | NATS broker URL                                | `nats://localhost:4222` |
+| `ENABLED_ADDONS`  | Comma list of enabled addon ids, or `all`      | `all`                   |
+| `DISABLE_ADDONS`  | Comma list of disabled addon ids               | _(empty)_               |
 
 ---
 
@@ -103,15 +102,11 @@ Deno connects to NATS at `nats://localhost:4222` by default and listens on port
 
 | Service                        | Port  | Exposure                       |
 | ------------------------------ | ----- | ------------------------------ |
-| Elixir web                     | 4000  | Public                         |
-| Deno HTTP                      | 8000  | Internal only (Docker network) |
+| Gateway (Elixir)               | 4000  | Public (incl. `/metrics`)      |
+| Delivery metrics               | 4001  | Internal (`/metrics`)          |
 | PostgreSQL                     | 5432  | Loopback only                  |
 | NATS                           | 4222  | Internal                       |
 | NATS HTTP API                  | 8222  | Internal                       |
-| OpenTelemetry collector (OTLP) | 4318  | Internal                       |
-| Jaeger UI                      | 16686 | Loopback only                  |
-| Prometheus                     | 9090  | Loopback only                  |
-| Grafana                        | 3000  | Loopback only                  |
 
 ---
 
@@ -139,16 +134,13 @@ docker compose exec gateway bin/sukhi_fedi eval 'SukhiFedi.Release.migrate_all()
 
 ## Observability
 
-The Docker Compose stack includes a full observability setup:
+PromEx exposes Prometheus scrape endpoints inside each Elixir node:
 
-- **Jaeger** — distributed traces at `http://localhost:16686`
-- **Prometheus** — metrics at `http://localhost:9090`
-- **Grafana** — dashboards at `http://localhost:3000`
+- **Gateway** — `GET http://localhost:4000/metrics`
+- **Delivery** — `GET http://localhost:4001/metrics`
 
-Elixir exposes a Prometheus scrape endpoint at `GET /metrics`.
-
-Deno emits OTLP traces when `OTEL_DENO=1` and `--unstable-otel` is passed
-(included in `deno task start`).
+Point any external Prometheus / Grafana / Jaeger stack at those
+endpoints; the compose file does not bundle one.
 
 ---
 

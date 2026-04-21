@@ -8,7 +8,7 @@ defmodule SukhiFedi.Web.NodeinfoController do
     GET /.well-known/nodeinfo  → discovery JSON with links
     GET /nodeinfo/2.1          → actual NodeInfo 2.1 document
 
-  Pure Elixir — no Deno round-trip. Counts are best-effort Ecto queries;
+  Pure Elixir — no NATS round-trip. Counts are best-effort Ecto queries;
   they fall back to 0 if the query fails so the endpoint never 500s.
   """
 

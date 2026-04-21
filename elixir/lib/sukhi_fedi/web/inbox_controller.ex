@@ -2,8 +2,8 @@
 defmodule SukhiFedi.Web.InboxController do
   import Plug.Conn
 
-  alias SukhiFedi.AP.Client
   alias SukhiFedi.AP.Instructions
+  alias SukhiFedi.Federation.FedifyClient
 
   # FEP-8fcf Collection-Synchronization format:
   #   collectionId="<uri>", url="<uri>", digest="<hex>"
@@ -24,8 +24,8 @@ defmodule SukhiFedi.Web.InboxController do
     raw_json = conn.body_params
     sync_header = get_req_header(conn, "collection-synchronization") |> List.first()
 
-    with {:ok, _} <- Client.request("ap.verify", %{payload: raw_json}),
-         {:ok, instruction} <- Client.request("ap.inbox", %{payload: raw_json}) do
+    with {:ok, _} <- FedifyClient.verify(%{raw: raw_json}),
+         {:ok, instruction} <- FedifyClient.inbox(%{raw: raw_json}) do
       Instructions.execute(instruction)
       maybe_enqueue_follower_sync(raw_json, sync_header)
       send_resp(conn, 202, "")

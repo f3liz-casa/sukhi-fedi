@@ -8,6 +8,7 @@ defmodule SukhiFedi.Federation.FedifyClient do
     * `fedify.translate.v1` — build ActivityPub JSON-LD from a domain object
     * `fedify.sign.v1`      — sign an outbound HTTP request envelope
     * `fedify.verify.v1`    — verify an incoming signed HTTP request
+    * `fedify.inbox.v1`     — parse an incoming activity into an instruction
 
   The service is queue-grouped (`fedify-workers`) on the Bun side so
   multiple replicas share load automatically.
@@ -28,6 +29,11 @@ defmodule SukhiFedi.Federation.FedifyClient do
   @spec verify(map()) :: {:ok, term()} | {:error, term()}
   def verify(payload) when is_map(payload) do
     request("fedify.verify.v1", payload)
+  end
+
+  @spec inbox(map()) :: {:ok, term()} | {:error, term()}
+  def inbox(payload) when is_map(payload) do
+    request("fedify.inbox.v1", payload)
   end
 
   @spec ping() :: :ok | {:ok, binary()} | {:error, term()}

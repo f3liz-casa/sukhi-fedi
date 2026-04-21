@@ -8,4 +8,4 @@ RUN bun install --frozen-lockfile || bun install
 
 COPY . .
 
-CMD ["bun", "run", "main.ts"]
+CMD ["bun", "run", "services/fedify_service.ts"]

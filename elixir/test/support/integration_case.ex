@@ -8,7 +8,7 @@ defmodule SukhiFedi.IntegrationCase do
   Expected services (see docker-compose.test.yml):
     * Postgres on localhost:15432 (database: sukhi_fedi_test)
     * NATS on localhost:14222 (with OUTBOX and DOMAIN_EVENTS streams)
-    * Deno fedify NATS Micro service connected to the above NATS
+    * Bun fedify NATS Micro service connected to the above NATS
 
   Bring up the stack:
 

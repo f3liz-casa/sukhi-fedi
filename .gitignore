@@ -12,4 +12,3 @@ infra/ansible/inventory.ini
 # Kamal secrets and generated configs
 .kamal/secrets
 config/deploy.yml
-config/deploy_deno.yml

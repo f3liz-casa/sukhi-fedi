@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "bun run main.ts",
-    "fedify-service": "bun run services/fedify_service.ts",
+    "start": "bun run services/fedify_service.ts",
     "test": "bun test",
     "check": "bun x tsc --noEmit"
   },

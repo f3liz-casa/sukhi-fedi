@@ -3,9 +3,8 @@ defmodule SukhiFedi.Web.WebfingerController do
   @moduledoc """
   `/.well-known/webfinger` handler.
 
-  Elixir-native implementation — replaces the prior 3-hop round trip
-  (Elixir → Deno → Elixir → ETS → response). Now it's Accounts lookup
-  + JRD build + single ETS write.
+  Elixir-native implementation: Accounts lookup + JRD build + single
+  ETS write. No NATS round-trip.
   """
 
   import Plug.Conn

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.AP.Instructions do
   @moduledoc """
-  Parses and executes instructions returned by Deno workers.
+  Parses and executes instructions returned by the Bun
+  `fedify.inbox.v1` NATS Micro endpoint.
   """
 
   import Ecto.Query
@@ -22,7 +23,7 @@ defmodule SukhiFedi.AP.Instructions do
   @as_public "Public"
 
   @doc """
-  Executes an instruction map returned from the ap.inbox NATS topic.
+  Executes an instruction map returned from the fedify.inbox.v1 endpoint.
   """
   @spec execute(map()) :: :ok
   def execute(%{"action" => "save", "object" => object_data}) do

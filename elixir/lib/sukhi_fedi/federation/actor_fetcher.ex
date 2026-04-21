@@ -4,7 +4,7 @@ defmodule SukhiFedi.Federation.ActorFetcher do
   Fetches remote ActivityPub Actor JSON documents over HTTPS and caches
   them in ETS (`:actor_remote` table).
 
-  Replaces the old 3-hop pattern (Elixir → Deno → Elixir → cache → reply)
+  Replaces the old 3-hop pattern (Elixir → Bun → Elixir → cache → reply)
   with a single direct GET from Elixir + node-local cache.
   """
 

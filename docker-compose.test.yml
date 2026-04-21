@@ -3,7 +3,7 @@
 # Compose file for integration / E2E tests.
 #
 # Brings up an isolated Postgres, NATS (with OUTBOX + DOMAIN_EVENTS streams),
-# and the Deno fedify NATS Micro service. Elixir tests run on the host via
+# and the Bun fedify NATS Micro service. Elixir tests run on the host via
 # `mix test --only integration` and connect to these services on the ports
 # below.
 #
