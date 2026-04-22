@@ -154,6 +154,12 @@ defmodule SukhiFedi.Web.ViewerController do
       pre { background: #8881; padding: .75rem; border-radius: 4px; overflow: auto; font-size: 12px; }
       footer { margin-top: 3rem; color: #888; font-size: .85rem; }
       footer code { background: #8881; padding: 1px 4px; border-radius: 3px; }
+      .bar { margin-top: .35rem; height: 6px; background: #8882; border-radius: 3px; overflow: hidden; }
+      .bar > i { display: block; height: 100%; background: #2563eb; width: 0; transition: width .3s ease; }
+      .bar > i.hot { background: #dc2626; }
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; vertical-align: middle; margin-right: .4rem; }
+      .dot.live { background: #16a34a; }
+      .dot.dead { background: #dc2626; }
     </style>
     </head>
     <body>
@@ -169,6 +175,23 @@ defmodule SukhiFedi.Web.ViewerController do
 
     <h2 style="font-size:1.1rem;margin-top:2.5rem">Currently watching</h2>
     <div id="watchers"><p class="sub">Loading…</p></div>
+
+    <h2 style="font-size:1.1rem;margin-top:2.5rem">Host</h2>
+    <p class="sub"><span id="stats-dot" class="dot"></span><span id="stats-status">connecting…</span> · 1 Hz · <code>:cpu_sup</code> / <code>:memsup</code></p>
+    <div class="card">
+      <div class="row">
+        <div class="k">CPU</div>
+        <div class="v"><span id="stats-cpu">—</span>%<div class="bar"><i id="stats-cpu-bar"></i></div></div>
+      </div>
+      <div class="row">
+        <div class="k">Memory</div>
+        <div class="v"><span id="stats-mem-used">—</span> / <span id="stats-mem-total">—</span> MiB<div class="bar"><i id="stats-mem-bar"></i></div></div>
+      </div>
+      <div class="row">
+        <div class="k">Load avg</div>
+        <div class="v"><span id="stats-l1">—</span> / <span id="stats-l5">—</span> / <span id="stats-l15">—</span> <span style="color:#888">(1/5/15 min)</span></div>
+      </div>
+    </div>
 
     <footer>
       Default bot: <code>@watcher@#{self_domain}</code>
@@ -288,6 +311,35 @@ defmodule SukhiFedi.Web.ViewerController do
     }
 
     loadWatchers();
+
+    // Host stats SSE — streams CPU, memory, load avg once per second.
+    const mib = (b) => (b / 1048576).toFixed(0);
+    const statsEs = new EventSource('/api/stats/stream');
+    const statsDot = document.getElementById('stats-dot');
+    const statsStatus = document.getElementById('stats-status');
+
+    statsEs.onopen = () => { statsDot.className = 'dot live'; statsStatus.textContent = 'live'; };
+    statsEs.onerror = () => { statsDot.className = 'dot dead'; statsStatus.textContent = 'disconnected — retrying'; };
+    statsEs.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      document.getElementById('stats-cpu').textContent = d.cpu.toFixed(1);
+      const cb = document.getElementById('stats-cpu-bar');
+      cb.style.width = Math.min(100, d.cpu) + '%';
+      cb.classList.toggle('hot', d.cpu > 80);
+
+      const m = d.memory;
+      document.getElementById('stats-mem-used').textContent = mib(m.used);
+      document.getElementById('stats-mem-total').textContent = mib(m.total);
+      const memPct = m.total > 0 ? (m.used / m.total) * 100 : 0;
+      const mb = document.getElementById('stats-mem-bar');
+      mb.style.width = memPct + '%';
+      mb.classList.toggle('hot', memPct > 85);
+
+      const fmt = (n) => (n == null ? '—' : n.toFixed(2));
+      document.getElementById('stats-l1').textContent = fmt(d.load['1m']);
+      document.getElementById('stats-l5').textContent = fmt(d.load['5m']);
+      document.getElementById('stats-l15').textContent = fmt(d.load['15m']);
+    };
     </script>
     </body>
     </html>

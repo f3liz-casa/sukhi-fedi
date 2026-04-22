@@ -9,6 +9,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
   alias SukhiFedi.Web.ViewerController
+  alias SukhiFedi.Web.StatsController
 
   plug(Plug.Logger)
   # Global per-peer rate limit. Conservative ceiling; internal probes
@@ -90,6 +91,11 @@ defmodule SukhiFedi.Web.Router do
 
   post "/api/watchers" do
     ViewerController.register_watcher(conn, [])
+  end
+
+  # SSE stream feeding the host-stats card on `/`. One JSON tick per second.
+  get "/api/stats/stream" do
+    StatsController.stream(conn, [])
   end
 
   # ── Health + metrics ─────────────────────────────────────────────────────
