@@ -49,6 +49,10 @@ defmodule SukhiFedi.AP.Instructions do
       )
     )
 
+    # Nudge the follower to refresh our cached actor (so their follower
+    # count reflects us immediately instead of after their 24h TTL).
+    maybe_enqueue_actor_update(followee_uri, inbox_url)
+
     :ok
   end
 
@@ -105,6 +109,34 @@ defmodule SukhiFedi.AP.Instructions do
   defp extract_uri(uri) when is_binary(uri), do: uri
   defp extract_uri(%{"id" => id}) when is_binary(id), do: id
   defp extract_uri(_), do: nil
+
+  defp maybe_enqueue_actor_update(followee_uri, inbox_url)
+       when is_binary(followee_uri) and is_binary(inbox_url) do
+    username =
+      followee_uri
+      |> URI.parse()
+      |> Map.get(:path, "")
+      |> String.split("/")
+      |> List.last()
+
+    case Repo.get_by(Account, username: username) do
+      %Account{} = account ->
+        update_json = SukhiFedi.AP.ActorJson.build_update(account)
+
+        Oban.insert!(
+          Oban.Job.new(
+            %{raw_json: update_json, inbox_url: inbox_url, actor_uri: followee_uri},
+            worker: @delivery_worker,
+            queue: @delivery_queue
+          )
+        )
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_enqueue_actor_update(_, _), do: :ok
 
   defp insert_follow(_), do: :ok
 
