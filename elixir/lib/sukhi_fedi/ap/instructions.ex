@@ -277,6 +277,12 @@ defmodule SukhiFedi.AP.Instructions do
             where: f.follower_uri == ^actor_uri and f.followee_id == ^followee_id
           )
           |> Repo.delete_all()
+
+          # Nudge the ex-follower to refresh our actor cache so its
+          # follower count drops immediately instead of on the next
+          # 24-hour TTL sweep. Heuristic inbox = `<actor>/inbox`;
+          # works for Mastodon + fedify-based servers.
+          maybe_enqueue_actor_update(followee_uri, actor_uri <> "/inbox")
         end
 
         :ok
