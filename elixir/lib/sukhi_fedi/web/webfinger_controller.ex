@@ -43,7 +43,7 @@ defmodule SukhiFedi.Web.WebfingerController do
     end
   end
 
-  # Only responds for acct:USER@OUR_DOMAIN. Foreign webfingers aren't proxied.
+  # `acct:user@domain` — Mastodon-style webfinger lookup.
   defp build_jrd("acct:" <> rest) do
     case String.split(rest, "@", parts: 2) do
       [user, domain] ->
@@ -60,7 +60,26 @@ defmodule SukhiFedi.Web.WebfingerController do
     end
   end
 
+  # `https://.../users/:name` — some servers (iceshrimp, fedify-based)
+  # reverse-webfinger from an actor URL back to the canonical acct
+  # before trusting actor JSON. Rejecting this causes the remote
+  # profile to be marked "unknown" and downstream deref to be skipped.
+  defp build_jrd("http://" <> _ = url), do: build_jrd_from_url(url)
+  defp build_jrd("https://" <> _ = url), do: build_jrd_from_url(url)
+
   defp build_jrd(_), do: {:error, :invalid_resource}
+
+  defp build_jrd_from_url(url) do
+    our_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+    with %URI{host: host, path: path} when host == our_domain and is_binary(path) <-
+           URI.parse(url),
+         ["users", username] <- path |> String.trim("/") |> String.split("/") do
+      lookup_local_actor(username, our_domain)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
 
   defp lookup_local_actor(username, domain) do
     case Accounts.get_account_by_username(username) do
