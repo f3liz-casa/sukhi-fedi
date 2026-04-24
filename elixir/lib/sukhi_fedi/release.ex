@@ -125,30 +125,38 @@ defmodule SukhiFedi.Release do
       alias SukhiFedi.Addons.NodeinfoMonitor
       alias SukhiFedi.Schema.{MonitoredInstance, NodeinfoSnapshot}
 
-      from(m in MonitoredInstance, order_by: [asc: m.domain])
-      |> Repo.all()
-      |> Enum.map(fn mi ->
-        snap =
-          from(s in NodeinfoSnapshot,
-            where: s.monitored_instance_id == ^mi.id,
-            order_by: [desc: s.polled_at],
-            limit: 1
-          )
-          |> Repo.one()
+      per_instance =
+        from(m in MonitoredInstance, order_by: [asc: m.domain])
+        |> Repo.all()
+        |> Enum.map(fn mi ->
+          snap =
+            from(s in NodeinfoSnapshot,
+              where: s.monitored_instance_id == ^mi.id,
+              order_by: [desc: s.polled_at],
+              limit: 1
+            )
+            |> Repo.one()
 
-        if snap do
-          NodeinfoMonitor.publish_initial_note(mi, %{
-            software_name: snap.software_name,
-            version: snap.version
-          })
-          |> case do
-            {:ok, _note} -> {mi.domain, :ok}
-            other -> {mi.domain, other}
+          if snap do
+            NodeinfoMonitor.publish_initial_note(
+              mi,
+              %{software_name: snap.software_name, version: snap.version},
+              summary?: false
+            )
+            |> case do
+              {:ok, _note} -> {mi.domain, :ok}
+              other -> {mi.domain, other}
+            end
+          else
+            {mi.domain, :no_snapshot}
           end
-        else
-          {mi.domain, :no_snapshot}
-        end
-      end)
+        end)
+
+      # Fire the @watcher aggregate exactly once after all per-instance
+      # posts land, instead of N times from inside the loop.
+      NodeinfoMonitor.publish_summary_to_default_watcher()
+
+      per_instance
     end
 
     result =
@@ -160,6 +168,51 @@ defmodule SukhiFedi.Release do
       end
 
     IO.inspect(result, label: :publish_initial_notes_for_backfill)
+    {:ok, result}
+  end
+
+  @doc """
+  One-shot: delete every Note owned by the default `@watcher` account
+  (aggregate summaries) via the standard Notes.delete_note path, so
+  each removal fans out as a Delete(Note). Pair with
+  `NodeinfoMonitor.publish_summary_to_default_watcher/0` to re-seed
+  a single fresh summary.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.resync_default_watcher_summary()'
+  """
+  def resync_default_watcher_summary do
+    load_app()
+
+    do_resync = fn ->
+      alias SukhiFedi.{Repo, Notes}
+      alias SukhiFedi.Addons.NodeinfoMonitor
+      alias SukhiFedi.Schema.{Account, Note}
+
+      case Repo.get_by(Account, username: "watcher") do
+        nil ->
+          :no_default_watcher
+
+        %Account{id: account_id} ->
+          deleted =
+            from(n in Note, where: n.account_id == ^account_id, select: n.id)
+            |> Repo.all()
+            |> Enum.map(fn note_id ->
+              {note_id, Notes.delete_note(account_id, note_id) |> elem(0)}
+            end)
+
+          {:deleted, deleted, NodeinfoMonitor.publish_summary_to_default_watcher()}
+      end
+    end
+
+    result =
+      if Process.whereis(SukhiFedi.Repo) do
+        do_resync.()
+      else
+        {:ok, r, _apps} = Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_resync.() end)
+        r
+      end
+
+    IO.inspect(result, label: :resync_default_watcher_summary)
     {:ok, result}
   end
 

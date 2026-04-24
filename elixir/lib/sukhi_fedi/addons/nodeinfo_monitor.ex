@@ -49,10 +49,10 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   snapshot. Publishes an "監視を始めました" Note when record_snapshot
   returns `:initial` (i.e. no prior snapshot).
   """
-  def register_and_record(domain, snap) do
+  def register_and_record(domain, snap, opts \\ []) do
     with {:ok, mi, account} <- register(domain),
          {:ok, change} <- record_snapshot(mi, snap) do
-      if change == :initial, do: publish_initial_note(mi, snap)
+      if change == :initial, do: publish_initial_note(mi, snap, opts)
       {:ok, mi, account}
     end
   end
@@ -188,7 +188,7 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
     result
   end
 
-  def publish_initial_note(%MonitoredInstance{} = mi, snap) do
+  def publish_initial_note(%MonitoredInstance{} = mi, snap, opts \\ []) do
     sw = snap[:software_name] || snap["software_name"] || mi.software_name || "unknown"
     ver = snap[:version] || snap["version"] || mi.last_version || "?"
 
@@ -204,7 +204,13 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
         "visibility" => "public"
       })
 
-    publish_summary_to_default_watcher()
+    # Callers batching many individual posts (backfill) pass
+    # `summary?: false` and fire the aggregate once at the end to
+    # avoid N duplicate @watcher summaries.
+    if Keyword.get(opts, :summary?, true) do
+      publish_summary_to_default_watcher()
+    end
+
     result
   end
 
