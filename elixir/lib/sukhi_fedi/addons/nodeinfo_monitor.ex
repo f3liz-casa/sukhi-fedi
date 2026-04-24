@@ -177,11 +177,15 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   def publish_change_note(%MonitoredInstance{} = mi, old_version, new_version) do
     content = format_note(mi, old_version, new_version)
 
-    Notes.create_note(%{
-      "account_id" => mi.actor_id,
-      "content" => content,
-      "visibility" => "public"
-    })
+    result =
+      Notes.create_note(%{
+        "account_id" => mi.actor_id,
+        "content" => content,
+        "visibility" => "public"
+      })
+
+    publish_summary_to_default_watcher()
+    result
   end
 
   def publish_initial_note(%MonitoredInstance{} = mi, snap) do
@@ -193,11 +197,58 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
         "software: #{sw}\n" <>
         "version: #{ver}"
 
-    Notes.create_note(%{
-      "account_id" => mi.actor_id,
-      "content" => content,
-      "visibility" => "public"
-    })
+    result =
+      Notes.create_note(%{
+        "account_id" => mi.actor_id,
+        "content" => content,
+        "visibility" => "public"
+      })
+
+    publish_summary_to_default_watcher()
+    result
+  end
+
+  @doc """
+  Post a single Note from the `@watcher` default bot summarising the
+  current status of every active MonitoredInstance. Called alongside
+  the per-instance publish paths so the default bot always has a
+  fresh aggregate feed.
+  """
+  def publish_summary_to_default_watcher do
+    case Repo.get_by(Account, username: "watcher") do
+      nil ->
+        Logger.debug("NodeinfoMonitor: no default @watcher account; skipping summary")
+        :no_default_watcher
+
+      %Account{} = default ->
+        instances =
+          from(m in MonitoredInstance,
+            where: m.inactive == false,
+            order_by: [asc: m.domain]
+          )
+          |> Repo.all()
+
+        case instances do
+          [] ->
+            :no_instances
+
+          list ->
+            lines =
+              Enum.map(list, fn mi ->
+                "#{mi.domain}: #{mi.software_name || "?"} #{mi.last_version || "?"}"
+              end)
+
+            content =
+              "\u{1F4E1} Watch status (#{length(list)} instances)\n" <>
+                Enum.join(lines, "\n")
+
+            Notes.create_note(%{
+              "account_id" => default.id,
+              "content" => content,
+              "visibility" => "public"
+            })
+        end
+    end
   end
 
   defp format_note(mi, old, new) do
