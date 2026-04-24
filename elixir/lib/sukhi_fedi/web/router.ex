@@ -8,6 +8,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.ActorController
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
+  alias SukhiFedi.Web.NoteController
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
 
@@ -50,6 +51,10 @@ defmodule SukhiFedi.Web.Router do
 
   get "/users/:name/outbox" do
     CollectionController.outbox(conn, [])
+  end
+
+  get "/users/:name/notes/:note_id" do
+    NoteController.show(conn, [])
   end
 
   post "/users/:name/inbox" do
