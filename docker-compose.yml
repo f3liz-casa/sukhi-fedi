@@ -99,6 +99,7 @@ services:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-delivery:${SUKHI_VERSION:-v1}
     hostname: delivery
     environment:
+      DOMAIN: ${DOMAIN:-localhost:4000}
       DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: postgres
