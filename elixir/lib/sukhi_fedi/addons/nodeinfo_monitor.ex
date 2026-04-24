@@ -189,7 +189,7 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
     ver = snap[:version] || snap["version"] || mi.last_version || "?"
 
     content =
-      "\u{1F440} #{mi.domain} の監視を始めました\n" <>
+      "\u{1F440} Now monitoring #{mi.domain}\n" <>
         "software: #{sw}\n" <>
         "version: #{ver}"
 
