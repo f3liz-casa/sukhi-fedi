@@ -109,6 +109,61 @@ defmodule SukhiFedi.Release do
   end
 
   @doc """
+  One-shot: for every `MonitoredInstance` that already has at least one
+  snapshot, publish an "監視を始めました" Note using the latest snapshot.
+  Use after `backfill_monitored_instances/0` on a deployment where the
+  initial polls already ran through PollWorker's old :initial branch
+  (pre-v0.1.22), which recorded snapshots but did not publish.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.publish_initial_notes_for_backfill()'
+  """
+  def publish_initial_notes_for_backfill do
+    load_app()
+
+    do_publish = fn ->
+      alias SukhiFedi.Repo
+      alias SukhiFedi.Addons.NodeinfoMonitor
+      alias SukhiFedi.Schema.{MonitoredInstance, NodeinfoSnapshot}
+
+      from(m in MonitoredInstance, order_by: [asc: m.domain])
+      |> Repo.all()
+      |> Enum.map(fn mi ->
+        snap =
+          from(s in NodeinfoSnapshot,
+            where: s.monitored_instance_id == ^mi.id,
+            order_by: [desc: s.polled_at],
+            limit: 1
+          )
+          |> Repo.one()
+
+        if snap do
+          NodeinfoMonitor.publish_initial_note(mi, %{
+            software_name: snap.software_name,
+            version: snap.version
+          })
+          |> case do
+            {:ok, _note} -> {mi.domain, :ok}
+            other -> {mi.domain, other}
+          end
+        else
+          {mi.domain, :no_snapshot}
+        end
+      end)
+    end
+
+    result =
+      if Process.whereis(SukhiFedi.Repo) do
+        do_publish.()
+      else
+        {:ok, r, _apps} = Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_publish.() end)
+        r
+      end
+
+    IO.inspect(result, label: :publish_initial_notes_for_backfill)
+    {:ok, result}
+  end
+
+  @doc """
   One-shot: insert a `monitored_instances` row for every existing
   watcher `Account` that doesn't have one yet. Safe to run multiple
   times (no-op on conflict).
