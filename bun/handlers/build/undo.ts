@@ -2,6 +2,7 @@ import { Like, Follow, Undo, signObject } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
 import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
 import { getOrCreateKey } from "../../fedify/keys.ts";
+import { mirrorAudience } from "../../fedify/addressing.ts";
 
 export interface BuildUndoPayload {
   actor: string;
@@ -39,11 +40,15 @@ export async function handleBuildUndo(
         object: new URL(payload.inner.object),
       });
 
+  const audience = mirrorAudience(payload.inner.object);
+
   const undo = new Undo({
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: inner,
     published: Temporal.Now.instant(),
+    tos: audience.tos,
+    ccs: audience.ccs,
   });
 
   const signed = await signObject(undo, privateKey, new URL(keyId), {

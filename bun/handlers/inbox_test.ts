@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { test } from "bun:test";
+import { test, expect } from "bun:test";
 import { strictEqual, notStrictEqual } from "node:assert/strict";
 import { handleInbox } from "./inbox.ts";
+
+import mastodonCreateNote from "./__fixtures__/mastodon_create_note.json" with { type: "json" };
+import mastodonAnnounce from "./__fixtures__/mastodon_announce.json" with { type: "json" };
+import mastodonLike from "./__fixtures__/mastodon_like.json" with { type: "json" };
+import iceshrimpDelete from "./__fixtures__/iceshrimp_delete.json" with { type: "json" };
+import mastodonUndoFollow from "./__fixtures__/mastodon_undo_follow.json" with { type: "json" };
+import unknownType from "./__fixtures__/unknown_type.json" with { type: "json" };
 
 // Minimal Follow JSON-LD payload for testing the inbox handler.
 // The actor field points to a fake remote actor; we mock the document loader
@@ -60,4 +67,63 @@ test("handleInbox Follow — followeeUri is included in save data", async () => 
   } catch {
     console.warn("Skipping network-dependent inbox test (offline)");
   }
+});
+
+// Dispatch tests for non-Follow activity types. These do not fetch
+// remote actors and are safe to run offline. Assertion: classifier
+// picks the right handler and the instruction action is "save".
+
+test("handleInbox Create(Note) — dispatches to generic save", async () => {
+  const result = await handleInbox({ raw: mastodonCreateNote as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Create");
+  }
+});
+
+test("handleInbox Announce — dispatches to generic save", async () => {
+  const result = await handleInbox({ raw: mastodonAnnounce as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Announce");
+  }
+});
+
+test("handleInbox Like — dispatches to generic save", async () => {
+  const result = await handleInbox({ raw: mastodonLike as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Like");
+  }
+});
+
+test("handleInbox Delete — dispatches to generic save", async () => {
+  const result = await handleInbox({ raw: iceshrimpDelete as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Delete");
+  }
+});
+
+test("handleInbox Undo(Follow) — dispatches to generic save", async () => {
+  const result = await handleInbox({ raw: mastodonUndoFollow as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Undo");
+  }
+});
+
+test("handleInbox unknown type — returns ignore and logs warning", async () => {
+  const result = await handleInbox({ raw: unknownType as Record<string, unknown> });
+  expect(result.action).toBe("ignore");
+});
+
+test("handleInbox malformed (no type field) — returns ignore", async () => {
+  const result = await handleInbox({ raw: { hello: "world" } });
+  expect(result.action).toBe("ignore");
 });

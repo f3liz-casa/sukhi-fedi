@@ -2,6 +2,7 @@
 import { Create, Note } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
 import { signAndSerialize, injectDefined } from "../../fedify/utils.ts";
+import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildDmPayload {
   /** Local actor URI of the sender. */
@@ -28,13 +29,15 @@ export interface BuildDmResult {
 }
 
 export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmResult> {
+  const audience = resolveAudience({ kind: "direct", actors: payload.recipientActors });
+
   const note = new Note({
     id: new URL(payload.noteId),
     attribution: new URL(payload.actor),
     content: payload.content,
     published: Temporal.Now.instant(),
-    tos: payload.recipientActors.map((u) => new URL(u)),
-    // No `ccs` — direct message means explicitly addressed, not broadcast
+    tos: audience.tos,
+    ccs: audience.ccs,
     ...(payload.inReplyToId ? { replyTarget: new URL(payload.inReplyToId) } : {}),
     ...(payload.conversationId ? { context: new URL(payload.conversationId) } : {}),
   });
@@ -43,7 +46,8 @@ export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmRes
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: note,
-    tos: payload.recipientActors.map((u) => new URL(u)),
+    tos: audience.tos,
+    ccs: audience.ccs,
   });
 
   const noteJson = await signAndSerialize(payload.actor, create) as Record<string, unknown>;
