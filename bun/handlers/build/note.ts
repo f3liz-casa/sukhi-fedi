@@ -23,17 +23,28 @@ export async function handleBuildNote(
   const documentLoader = fetchDocumentLoader;
   const { privateKey, keyId } = await getOrCreateKey(payload.actor);
 
+  // Public addressing. Without `tos: [Public]` receivers like iceshrimp
+  // can't classify visibility and silently drop the note from timelines
+  // even though it sits in their inbox. `ccs: [followers]` is the
+  // Mastodon-compatible shape for a public, follower-visible post.
+  const publicNs = new URL("https://www.w3.org/ns/activitystreams#Public");
+  const followers = new URL(`${payload.actor}/followers`);
+
   const note = new Note({
     id: new URL(payload.noteId),
     attribution: new URL(payload.actor),
     content: payload.content,
     published: Temporal.Now.instant(),
+    tos: [publicNs],
+    ccs: [followers],
   });
 
   const create = new Create({
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: note,
+    tos: [publicNs],
+    ccs: [followers],
   });
 
   const signed = await signObject(create, privateKey, new URL(keyId), {
