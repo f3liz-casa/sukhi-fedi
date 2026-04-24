@@ -164,6 +164,47 @@ defmodule SukhiFedi.Release do
   end
 
   @doc """
+  One-shot: delete every Note owned by a watcher bot via the standard
+  Notes.delete_note path, so each removal fans out as a proper
+  Delete(Note) to federation instead of vanishing silently. Useful
+  when republishing watcher notes after a Bun translator fix — the
+  old ghost copies on remote timelines need a Delete to clear first.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.delete_all_watcher_notes()'
+  """
+  def delete_all_watcher_notes do
+    load_app()
+
+    do_delete = fn ->
+      alias SukhiFedi.{Repo, Notes}
+      alias SukhiFedi.Schema.{Account, Note}
+
+      Repo.all(
+        from(n in Note,
+          join: a in Account,
+          on: a.id == n.account_id,
+          where: not is_nil(a.monitored_domain),
+          select: {a.id, n.id}
+        )
+      )
+      |> Enum.map(fn {account_id, note_id} ->
+        Notes.delete_note(account_id, note_id) |> elem(0) |> then(&{note_id, &1})
+      end)
+    end
+
+    result =
+      if Process.whereis(SukhiFedi.Repo) do
+        do_delete.()
+      else
+        {:ok, r, _apps} = Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_delete.() end)
+        r
+      end
+
+    IO.inspect(result, label: :delete_all_watcher_notes)
+    {:ok, result}
+  end
+
+  @doc """
   One-shot: insert a `monitored_instances` row for every existing
   watcher `Account` that doesn't have one yet. Safe to run multiple
   times (no-op on conflict).
