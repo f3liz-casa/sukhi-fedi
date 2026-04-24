@@ -50,7 +50,11 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.PollWorker do
     case NodeinfoMonitor.record_snapshot(mi, snapshot) do
       {:ok, :initial} ->
         Logger.info("PollWorker: #{mi.domain} initial snapshot v#{snapshot[:version]}")
-        :ok
+
+        case NodeinfoMonitor.publish_initial_note(mi, snapshot) do
+          {:ok, _note} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
 
       {:ok, :unchanged} ->
         :ok
