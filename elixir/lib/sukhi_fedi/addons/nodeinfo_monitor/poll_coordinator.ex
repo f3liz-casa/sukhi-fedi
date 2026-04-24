@@ -16,8 +16,10 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator do
   alias SukhiFedi.Addons.NodeinfoMonitor
   alias SukhiFedi.Addons.NodeinfoMonitor.PollWorker
 
-  @default_max_age_seconds 3_000
-  @unique_period_seconds 3_000
+  # Cron fires every 10 minutes. Give each instance a bit over-window so
+  # we never skip a tick if the previous coordinator run ran long.
+  @default_max_age_seconds 500
+  @unique_period_seconds 500
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
@@ -29,7 +31,7 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator do
     Enum.each(instances, fn mi ->
       %{"instance_id" => mi.id}
       |> PollWorker.new(unique: [period: @unique_period_seconds, keys: [:instance_id]])
-      |> Oban.insert()
+      |> then(&Oban.insert(SukhiFedi.Oban, &1))
     end)
 
     :ok

@@ -7,8 +7,9 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.PollWorker do
     2. persist a snapshot + update last-polled state
     3. if the version changed, publish a Note from the bot actor
        (falling through Outbox → FanOut → Delivery)
-    4. on failure: bump consecutive_failures; at 168 failures in a row
-       the instance becomes `inactive` and stops being polled
+    4. on failure: bump consecutive_failures; when the last successful
+       poll is older than 7 days *and* failures are still accruing, the
+       instance is flipped to `inactive` and stops being polled.
   """
 
   use Oban.Worker, queue: :monitor, max_attempts: 3

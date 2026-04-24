@@ -13,11 +13,11 @@ config :sukhi_fedi, Oban,
   repo: SukhiFedi.Repo,
   queues: [monitor: 5],
   plugins: [
-    # Hourly NodeInfo monitor poll. PollCoordinator enumerates due
-    # MonitoredInstances and enqueues one PollWorker per instance.
+    # NodeInfo monitor poll every 10 minutes. PollCoordinator enumerates
+    # due MonitoredInstances and enqueues one PollWorker per instance.
     {Oban.Plugins.Cron,
      crontab: [
-       {"0 * * * *", SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator}
+       {"*/10 * * * *", SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator}
      ]}
   ]
 

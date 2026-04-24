@@ -9,6 +9,8 @@ defmodule SukhiFedi.Release do
   `migrations_path/0`, in that order.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   @app :sukhi_fedi
 
   def migrate_all do
@@ -101,6 +103,39 @@ defmodule SukhiFedi.Release do
       # Invoked via `eval` as a one-shot — start the Repo for this call.
       {:ok, result, _apps} =
         Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_seed.() end)
+
+      {:ok, result}
+    end
+  end
+
+  @doc """
+  One-shot: insert a `monitored_instances` row for every existing
+  watcher `Account` that doesn't have one yet. Safe to run multiple
+  times (no-op on conflict).
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.backfill_monitored_instances()'
+  """
+  def backfill_monitored_instances do
+    load_app()
+
+    do_backfill = fn ->
+      alias SukhiFedi.Repo
+      alias SukhiFedi.Schema.{Account, MonitoredInstance}
+
+      from(a in Account, where: not is_nil(a.monitored_domain))
+      |> Repo.all()
+      |> Enum.map(fn a ->
+        %MonitoredInstance{}
+        |> MonitoredInstance.changeset(%{domain: a.monitored_domain, actor_id: a.id})
+        |> Repo.insert(on_conflict: :nothing, conflict_target: :domain)
+      end)
+    end
+
+    if Process.whereis(SukhiFedi.Repo) do
+      {:ok, do_backfill.()}
+    else
+      {:ok, result, _apps} =
+        Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_backfill.() end)
 
       {:ok, result}
     end

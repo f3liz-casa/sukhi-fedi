@@ -45,7 +45,7 @@ defmodule SukhiDelivery.Delivery.FanOut do
         |> Worker.new()
       end)
 
-    Oban.insert_all(changesets)
+    Oban.insert_all(SukhiDelivery.Oban, changesets)
     :ok
   end
 end

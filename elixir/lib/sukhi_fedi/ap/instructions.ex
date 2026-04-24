@@ -42,6 +42,7 @@ defmodule SukhiFedi.AP.Instructions do
     followee_uri = save_data["followeeUri"]
 
     Oban.insert!(
+      SukhiFedi.Oban,
       Oban.Job.new(
         %{raw_json: reply, inbox_url: inbox_url, actor_uri: followee_uri},
         worker: @delivery_worker,
@@ -124,6 +125,7 @@ defmodule SukhiFedi.AP.Instructions do
         update_json = SukhiFedi.AP.ActorJson.build_update(account)
 
         Oban.insert!(
+          SukhiFedi.Oban,
           Oban.Job.new(
             %{raw_json: update_json, inbox_url: inbox_url, actor_uri: followee_uri},
             worker: @delivery_worker,

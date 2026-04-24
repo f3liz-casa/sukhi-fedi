@@ -22,7 +22,7 @@ defmodule SukhiFedi.Application do
        pools: %{
          default: [size: 50, count: 4]
        }},
-      {Oban, Application.fetch_env!(:sukhi_fedi, Oban)}
+      {Oban, [name: SukhiFedi.Oban] ++ Application.fetch_env!(:sukhi_fedi, Oban)}
     ]
 
     children = core_children ++ SukhiFedi.Addon.Registry.children()

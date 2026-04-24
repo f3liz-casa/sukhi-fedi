@@ -20,41 +20,74 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   alias SukhiFedi.Addons.NodeinfoMonitor.KeyGen
 
   @doc """
-  Register a new domain to monitor. Creates a bot Account and a
-  MonitoredInstance atomically in one transaction.
+  Register a domain to monitor. Upserts the bot Account and ensures a
+  MonitoredInstance row. Idempotent: re-calling with the same domain
+  returns the existing pair instead of raising on the unique index.
   """
   def register(domain) when is_binary(domain) do
     cleaned = domain |> String.trim() |> String.downcase()
 
     if valid_domain?(cleaned) do
-      keys = KeyGen.generate()
-      username = username_for(cleaned)
-
-      account = %Account{
-        username: username,
-        display_name: cleaned,
-        summary: "NodeInfo monitor bot for #{cleaned}",
-        public_key_jwk: keys.public_jwk,
-        private_key_jwk: keys.private_jwk,
-        public_key_pem: keys.public_pem,
-        is_bot: true,
-        monitored_domain: cleaned
-      }
-
       Ecto.Multi.new()
-      |> Ecto.Multi.insert(:account, account)
-      |> Ecto.Multi.run(:monitored_instance, fn _, %{account: a} ->
-        %MonitoredInstance{}
-        |> MonitoredInstance.changeset(%{domain: cleaned, actor_id: a.id})
-        |> Repo.insert()
+      |> Ecto.Multi.run(:account, fn repo, _ -> upsert_watcher_account(repo, cleaned) end)
+      |> Ecto.Multi.run(:monitored_instance, fn repo, %{account: a} ->
+        upsert_monitored_instance(repo, cleaned, a.id)
       end)
       |> Repo.transaction()
       |> case do
-        {:ok, %{monitored_instance: mi}} -> {:ok, mi}
+        {:ok, %{monitored_instance: mi, account: a}} -> {:ok, mi, a}
         {:error, _step, reason, _} -> {:error, reason}
       end
     else
       {:error, :invalid_domain}
+    end
+  end
+
+  @doc """
+  Register + record the first snapshot in one go. Used by the public
+  `POST /api/watchers` endpoint, which has already fetched the
+  snapshot. Publishes an "監視を始めました" Note when record_snapshot
+  returns `:initial` (i.e. no prior snapshot).
+  """
+  def register_and_record(domain, snap) do
+    with {:ok, mi, account} <- register(domain),
+         {:ok, change} <- record_snapshot(mi, snap) do
+      if change == :initial, do: publish_initial_note(mi, snap)
+      {:ok, mi, account}
+    end
+  end
+
+  defp upsert_watcher_account(repo, domain) do
+    case repo.get_by(Account, monitored_domain: domain) do
+      %Account{} = existing ->
+        {:ok, existing}
+
+      nil ->
+        keys = KeyGen.generate()
+
+        %Account{
+          username: username_for(domain),
+          display_name: domain,
+          summary: "NodeInfo monitor bot for #{domain}",
+          public_key_jwk: keys.public_jwk,
+          private_key_jwk: keys.private_jwk,
+          public_key_pem: keys.public_pem,
+          is_bot: true,
+          monitored_domain: domain
+        }
+        |> repo.insert()
+    end
+  end
+
+  defp upsert_monitored_instance(repo, domain, actor_id) do
+    case repo.get_by(MonitoredInstance, domain: domain) do
+      %MonitoredInstance{} = existing ->
+        {:ok, existing}
+
+      nil ->
+        %MonitoredInstance{}
+        |> MonitoredInstance.changeset(%{domain: domain, actor_id: actor_id})
+        |> repo.insert()
     end
   end
 
@@ -116,17 +149,49 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   def detect_change(old, new) when old == new, do: :unchanged
   def detect_change(old, new), do: {:changed, old, new}
 
-  def record_failure(%MonitoredInstance{} = mi, inactive_threshold \\ 168) do
+  @inactive_after_days 7
+
+  @doc """
+  Bump consecutive failure count. Mark inactive when the instance has
+  been failing *and* the last successful poll is older than
+  `@inactive_after_days`. Period-based instead of count-based so the
+  cron cadence can be tuned without changing the week-of-grace semantic.
+  """
+  def record_failure(%MonitoredInstance{} = mi) do
     fails = (mi.consecutive_failures || 0) + 1
-    inactive? = fails >= inactive_threshold
+    updated = %MonitoredInstance{mi | consecutive_failures: fails}
 
     mi
-    |> Ecto.Changeset.change(%{consecutive_failures: fails, inactive: inactive?})
+    |> Ecto.Changeset.change(%{consecutive_failures: fails, inactive: stale?(updated)})
     |> Repo.update()
+  end
+
+  defp stale?(%MonitoredInstance{consecutive_failures: fails}) when fails <= 0, do: false
+  defp stale?(%MonitoredInstance{last_polled_at: nil}), do: false
+
+  defp stale?(%MonitoredInstance{last_polled_at: last}) do
+    threshold = DateTime.add(DateTime.utc_now(), -@inactive_after_days, :day)
+    DateTime.before?(last, threshold)
   end
 
   def publish_change_note(%MonitoredInstance{} = mi, old_version, new_version) do
     content = format_note(mi, old_version, new_version)
+
+    Notes.create_note(%{
+      "account_id" => mi.actor_id,
+      "content" => content,
+      "visibility" => "public"
+    })
+  end
+
+  def publish_initial_note(%MonitoredInstance{} = mi, snap) do
+    sw = snap[:software_name] || snap["software_name"] || mi.software_name || "unknown"
+    ver = snap[:version] || snap["version"] || mi.last_version || "?"
+
+    content =
+      "\u{1F440} #{mi.domain} の監視を始めました\n" <>
+        "software: #{sw}\n" <>
+        "version: #{ver}"
 
     Notes.create_note(%{
       "account_id" => mi.actor_id,
@@ -148,5 +213,5 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
       String.match?(d, ~r/^[a-z0-9.-]+\.[a-z]{2,}$/i)
   end
 
-  defp username_for(domain), do: String.replace(domain, ".", "-")
+  defp username_for(domain), do: "watcher-" <> String.replace(domain, ".", "_")
 end

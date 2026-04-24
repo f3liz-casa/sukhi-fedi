@@ -395,7 +395,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
     changesets =
       Enum.map(inboxes, fn inbox -> base |> Map.put(:inbox_url, inbox) |> Worker.new() end)
 
-    Oban.insert_all(changesets)
+    Oban.insert_all(SukhiDelivery.Oban, changesets)
     :ok
   end
 

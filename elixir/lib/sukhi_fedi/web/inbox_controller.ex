@@ -93,6 +93,7 @@ defmodule SukhiFedi.Web.InboxController do
     with true <- is_binary(actor_uri),
          [_, collection_url] <- Regex.run(@sync_url_regex, sync_header) do
       Oban.insert(
+        SukhiFedi.Oban,
         Oban.Job.new(
           %{actor_uri: actor_uri, collection_url: collection_url},
           worker: @follower_sync_worker,

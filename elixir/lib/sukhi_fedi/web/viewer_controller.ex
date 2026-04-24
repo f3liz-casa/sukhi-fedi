@@ -10,6 +10,7 @@ defmodule SukhiFedi.Web.ViewerController do
   import Plug.Conn
   import Ecto.Query
 
+  alias SukhiFedi.Addons.NodeinfoMonitor
   alias SukhiFedi.Addons.NodeinfoMonitor.NodeinfoFetcher
   alias SukhiFedi.{Repo, Schema.Account}
 
@@ -48,18 +49,24 @@ defmodule SukhiFedi.Web.ViewerController do
          domain <- normalize_domain(raw),
          true <- valid_domain?(domain) || :invalid,
          {:ok, snap} <- NodeinfoFetcher.fetch(domain) do
-      {:ok, result} = SukhiFedi.Release.seed_watcher(domain)
-      username = "watcher-" <> String.replace(domain, ".", "_")
-      self_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+      status = if Repo.get_by(Account, monitored_domain: domain), do: :already_exists, else: :created
 
-      send_json(conn, 200, %{
-        status: to_string(result),
-        username: username,
-        handle: "@#{username}@#{self_domain}",
-        domain: domain,
-        software_name: snap.software_name,
-        version: snap.version
-      })
+      case NodeinfoMonitor.register_and_record(domain, snap) do
+        {:ok, _mi, account} ->
+          self_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+
+          send_json(conn, 200, %{
+            status: to_string(status),
+            username: account.username,
+            handle: "@#{account.username}@#{self_domain}",
+            domain: domain,
+            software_name: snap.software_name,
+            version: snap.version
+          })
+
+        {:error, reason} ->
+          send_json(conn, 502, %{error: "register failed", reason: inspect(reason)})
+      end
     else
       :missing ->
         send_json(conn, 400, %{error: "missing 'domain'"})

@@ -17,7 +17,7 @@ defmodule SukhiDelivery.Application do
        pools: %{
          default: [size: 50, count: 4]
        }},
-      {Oban, Application.fetch_env!(:sukhi_delivery, Oban)},
+      {Oban, [name: SukhiDelivery.Oban] ++ Application.fetch_env!(:sukhi_delivery, Oban)},
       # Transactional Outbox relay: publishes `outbox` rows (written by
       # the gateway) to NATS JetStream.
       SukhiDelivery.Outbox.Relay,
