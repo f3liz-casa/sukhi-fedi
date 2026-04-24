@@ -48,6 +48,10 @@ defmodule SukhiFedi.Web.Router do
     CollectionController.following(conn, [])
   end
 
+  get "/users/:name/outbox" do
+    CollectionController.outbox(conn, [])
+  end
+
   post "/users/:name/inbox" do
     InboxController.user_inbox(conn, [])
   end
