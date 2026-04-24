@@ -13,6 +13,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.StatsController
 
   plug(Plug.Logger)
+  plug(SukhiFedi.Web.AccessLogPlug)
   # Global per-peer rate limit. Conservative ceiling; internal probes
   # like /up from k8s LBs still fit easily. Tighten per-endpoint via
   # dedicated forwarders when needed.
