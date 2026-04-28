@@ -7,10 +7,14 @@ defmodule SukhiFedi.AP.Instructions do
 
   import Ecto.Query
 
-  alias SukhiFedi.Repo
+  alias SukhiFedi.{Outbox, Repo}
   alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account, Note}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
+
+  # How many recent public posts to replay to a brand-new follower so
+  # their timeline isn't blank until our next outbound post.
+  @backfill_limit 20
 
   # Delivery runs on a separate BEAM node with its own Oban supervisor
   # polling the :delivery queue. We reach its worker via the fully-
@@ -53,6 +57,12 @@ defmodule SukhiFedi.AP.Instructions do
     # Nudge the follower to refresh our cached actor (so their follower
     # count reflects us immediately instead of after their 24h TTL).
     maybe_enqueue_actor_update(followee_uri, inbox_url)
+
+    # Replay our recent public posts to the new follower's inbox. Without
+    # this they only see posts published after the Accept lands, which
+    # means a quiet account looks empty on their server until we post
+    # something new.
+    maybe_backfill_recent_notes(followee_uri, inbox_url)
 
     :ok
   end
@@ -104,6 +114,8 @@ defmodule SukhiFedi.AP.Instructions do
     end
   end
 
+  defp insert_follow(_), do: :ok
+
   # fedify's `follow.toJsonLd({ contextLoader })` inlines the resolved
   # actor object (full Person JSON-LD) into the `actor` field instead of
   # leaving it as a bare ID string. Accept both shapes.
@@ -140,7 +152,44 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_enqueue_actor_update(_, _), do: :ok
 
-  defp insert_follow(_), do: :ok
+  defp maybe_backfill_recent_notes(followee_uri, follower_inbox)
+       when is_binary(followee_uri) and is_binary(follower_inbox) do
+    username =
+      followee_uri
+      |> URI.parse()
+      |> Map.get(:path, "")
+      |> String.split("/")
+      |> List.last()
+
+    case Repo.get_by(Account, username: username) do
+      %Account{id: account_id} ->
+        from(n in Note,
+          where: n.account_id == ^account_id and n.visibility == "public",
+          order_by: [desc: n.created_at],
+          limit: ^@backfill_limit,
+          select: %{id: n.id, content: n.content}
+        )
+        |> Repo.all()
+        |> Enum.each(fn n ->
+          Outbox.enqueue(
+            "sns.outbox.follow.backfill",
+            "note",
+            to_string(n.id),
+            %{
+              account_id: account_id,
+              note_id: n.id,
+              content: n.content,
+              follower_inbox: follower_inbox
+            }
+          )
+        end)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_backfill_recent_notes(_, _), do: :ok
 
   # Detect incoming DMs: Create activity wrapping a Note whose `to` doesn't
   # include the AS#Public URI. Record conversation participants for inbox queries.

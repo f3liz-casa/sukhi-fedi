@@ -16,6 +16,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
       sns.outbox.announce.undone    → Bun `undo` (Announce)   → note author + followers
       sns.outbox.add.created        → Bun `add` (featured)    → followers
       sns.outbox.remove.created     → Bun `remove` (featured) → followers
+      sns.outbox.follow.backfill    → Bun `note` translator   → single new-follower inbox
 
   Skipped today (TODO):
     * `sns.outbox.actor.updated` — needs Bun-side `Update(Actor)` wrapper
@@ -127,6 +128,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   def dispatch("sns.outbox.announce.undone", p), do: handle_announce(p, :undo)
   def dispatch("sns.outbox.add.created", p), do: handle_collection_op(p, :add)
   def dispatch("sns.outbox.remove.created", p), do: handle_collection_op(p, :remove)
+  def dispatch("sns.outbox.follow.backfill", p), do: handle_follow_backfill(p)
 
   def dispatch("sns.outbox.actor.updated", _p) do
     # TODO: Update(Actor) translator on Bun side
@@ -348,6 +350,39 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp handle_collection_op(_, _), do: :missing_fields
+
+  defp handle_follow_backfill(
+         %{
+           "account_id" => account_id,
+           "note_id" => note_id,
+           "follower_inbox" => follower_inbox
+         } = p
+       )
+       when is_binary(follower_inbox) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipients = [follower_inbox]
+        ap_id = note_ap_id(actor_uri, note_id)
+        activity_id = "#{ap_id}/activity"
+
+        translator_payload = %{
+          actor: actor_uri,
+          content: p["content"] || "",
+          recipientInboxes: recipients,
+          noteId: ap_id,
+          activityId: activity_id
+        }
+
+        translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
+          extract_note: true
+        )
+    end
+  end
+
+  defp handle_follow_backfill(_), do: :missing_fields
 
   # ── translation + fan-out ────────────────────────────────────────────────
 
