@@ -32,7 +32,7 @@ defmodule SukhiApi.Views.MastodonAccount do
   def render(nil, _counts), do: nil
 
   def render(account, counts) do
-    domain = Application.get_env(:sukhi_api, :domain, "localhost:4000")
+    domain = SukhiApi.Config.domain!()
     username = account.username
     actor_uri = "https://#{domain}/users/#{username}"
 

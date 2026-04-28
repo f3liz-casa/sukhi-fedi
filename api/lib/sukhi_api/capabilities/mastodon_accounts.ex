@@ -323,7 +323,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
   end
 
   defp local_actor_uri(username) do
-    domain = Application.get_env(:sukhi_api, :domain, "localhost:4000")
+    domain = SukhiApi.Config.domain!()
     "https://#{domain}/users/#{username}"
   end
 

@@ -211,7 +211,7 @@ defmodule SukhiFedi.AP.Instructions do
       record_participant(conversation_ap_id, actor_uri)
 
       # Record each local recipient as a participant
-      domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+      domain = SukhiFedi.Config.domain!()
 
       Enum.each(to_list, fn recipient_uri ->
         record_participant(conversation_ap_id, recipient_uri)
@@ -225,7 +225,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp maybe_handle_dm(_), do: :ok
 
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
     account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
 
@@ -273,7 +273,7 @@ defmodule SukhiFedi.AP.Instructions do
   # Handle Add/Remove targeting a featured collection (pinned/unpinned posts).
   defp maybe_handle_pin_unpin(%{"type" => "Add", "actor" => actor_uri, "object" => note_uri, "target" => target_uri})
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
     account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
 
@@ -285,7 +285,7 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_pin_unpin(%{"type" => "Remove", "actor" => actor_uri, "object" => note_uri, "target" => target_uri})
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
     account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
 
@@ -350,7 +350,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp extract_object_id(_), do: nil
 
   defp local_account_id_from_uri(uri) when is_binary(uri) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     if String.contains?(uri, domain) do
       username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()

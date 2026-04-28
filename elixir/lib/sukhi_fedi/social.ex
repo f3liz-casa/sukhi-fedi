@@ -230,7 +230,7 @@ defmodule SukhiFedi.Social do
   end
 
   defp load_target_uris(target_ids) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     from(a in Account, where: a.id in ^target_ids, select: {a.id, a.username})
     |> Repo.all()
@@ -238,7 +238,7 @@ defmodule SukhiFedi.Social do
   end
 
   defp local_actor_uri(%Account{username: u}) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     "https://#{domain}/users/#{u}"
   end
 

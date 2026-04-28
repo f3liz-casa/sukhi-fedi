@@ -15,7 +15,7 @@ defmodule SukhiFedi.Web.ViewerController do
   alias SukhiFedi.{Repo, Schema.Account}
 
   def home(conn, _opts) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     conn
     |> put_resp_content_type("text/html; charset=utf-8")
@@ -23,7 +23,7 @@ defmodule SukhiFedi.Web.ViewerController do
   end
 
   def list_watchers(conn, _opts) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     watchers =
       Account
@@ -53,7 +53,7 @@ defmodule SukhiFedi.Web.ViewerController do
 
       case NodeinfoMonitor.register_and_record(domain, snap) do
         {:ok, _mi, account} ->
-          self_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+          self_domain = SukhiFedi.Config.domain!()
 
           send_json(conn, 200, %{
             status: to_string(status),

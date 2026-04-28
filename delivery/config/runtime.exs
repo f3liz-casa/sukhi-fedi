@@ -4,9 +4,12 @@ import Config
 # Public-facing domain used to mint activity ids, actor URIs, and
 # HTTP-Signature keyIds on outbound deliveries. Must match the
 # gateway's DOMAIN — otherwise keyId dereference on the receiving
-# server fails and every POST comes back 401.
-if domain = System.get_env("DOMAIN") do
-  config :sukhi_delivery, :domain, domain
+# server fails and every POST comes back 401. Prod requires it via
+# fetch_env! so the release dies at boot on a missing/mismatched env.
+if config_env() == :prod do
+  config :sukhi_delivery, :domain, System.fetch_env!("DOMAIN")
+else
+  config :sukhi_delivery, :domain, System.get_env("DOMAIN", "localhost:4000")
 end
 
 if config_env() == :prod do

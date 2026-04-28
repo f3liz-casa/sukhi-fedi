@@ -47,7 +47,7 @@ defmodule SukhiFedi.Web.WebfingerController do
   defp build_jrd("acct:" <> rest) do
     case String.split(rest, "@", parts: 2) do
       [user, domain] ->
-        our_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+        our_domain = SukhiFedi.Config.domain!()
 
         if domain == our_domain do
           lookup_local_actor(user, domain)
@@ -70,7 +70,7 @@ defmodule SukhiFedi.Web.WebfingerController do
   defp build_jrd(_), do: {:error, :invalid_resource}
 
   defp build_jrd_from_url(url) do
-    our_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    our_domain = SukhiFedi.Config.domain!()
 
     with %URI{host: host, path: path} when host == our_domain and is_binary(path) <-
            URI.parse(url),

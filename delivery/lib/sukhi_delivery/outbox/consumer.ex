@@ -207,7 +207,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
         followee = Repo.get(Account, followee_id)
 
         if followee do
-          domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+          domain = SukhiDelivery.Config.domain!()
           followee_uri = "https://#{domain}/users/#{followee.username}"
           followee_inbox = "#{followee_uri}/inbox"
 
@@ -248,7 +248,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
       %{actor_uri: actor_uri} ->
         recipients = note_author_inbox(note_ap_id) ++ relay_inboxes()
-        domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+        domain = SukhiDelivery.Config.domain!()
 
         activity_id =
           "https://#{domain}/likes/#{p["reaction_id"]}#{if mode == :undo, do: "/undo", else: ""}"
@@ -291,7 +291,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
       %{actor_uri: actor_uri} ->
         recipients = followers_inboxes(actor_uri) ++ note_author_inbox(note_ap_id) ++ relay_inboxes()
         recipients = Enum.uniq(recipients)
-        domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+        domain = SukhiDelivery.Config.domain!()
 
         activity_id =
           "https://#{domain}/announces/#{p["boost_id"]}#{if mode == :undo, do: "/undo", else: ""}"
@@ -333,7 +333,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
       %{actor_uri: actor_uri} ->
         recipients = followers_inboxes(actor_uri) ++ relay_inboxes()
-        domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+        domain = SukhiDelivery.Config.domain!()
         activity_id = "https://#{domain}/#{op}/#{p["pinned_id"]}"
         target_uri = "#{actor_uri}/featured"
 
@@ -444,7 +444,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
         nil
 
       %Account{username: u} ->
-        domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+        domain = SukhiDelivery.Config.domain!()
         %{actor_uri: "https://#{domain}/users/#{u}", username: u}
     end
   rescue
@@ -452,7 +452,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp follower_uri_to_account(follower_uri) when is_binary(follower_uri) do
-    domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+    domain = SukhiDelivery.Config.domain!()
     expected_prefix = "https://#{domain}/users/"
 
     if String.starts_with?(follower_uri, expected_prefix) do
@@ -469,7 +469,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp followers_inboxes(actor_uri) do
-    domain = Application.get_env(:sukhi_delivery, :domain, "localhost:4000")
+    domain = SukhiDelivery.Config.domain!()
     expected_prefix = "https://#{domain}/users/"
 
     if String.starts_with?(actor_uri, expected_prefix) do

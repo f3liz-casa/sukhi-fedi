@@ -13,7 +13,7 @@ defmodule SukhiFedi.Web.CollectionController do
 
   def followers(conn, _opts) do
     username = conn.path_params["name"]
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
     account = Repo.get_by(Account, username: username)
@@ -40,7 +40,7 @@ defmodule SukhiFedi.Web.CollectionController do
 
   def outbox(conn, _opts) do
     username = conn.path_params["name"]
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
     account = Repo.get_by(Account, username: username)
@@ -98,7 +98,7 @@ defmodule SukhiFedi.Web.CollectionController do
 
   def following(conn, _opts) do
     username = conn.path_params["name"]
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
     account = Repo.get_by(Account, username: username)

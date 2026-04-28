@@ -105,7 +105,7 @@ defmodule SukhiFedi.Timelines do
   end
 
   defp local_actor_uri(username) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     "https://#{domain}/users/#{username}"
   end
 

@@ -115,8 +115,8 @@ defmodule SukhiFedi.Addons.Media do
   end
 
   defp public_local_url(key) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
-    scheme = if domain in ["localhost", "localhost:4000"] or String.starts_with?(domain, "localhost"), do: "http", else: "https"
+    domain = SukhiFedi.Config.domain!()
+    scheme = if String.starts_with?(domain, "localhost"), do: "http", else: "https"
     "#{scheme}://#{domain}/uploads/#{key}"
   end
 

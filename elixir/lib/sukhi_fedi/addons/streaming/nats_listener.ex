@@ -51,12 +51,12 @@ defmodule SukhiFedi.Addons.Streaming.NatsListener do
   end
 
   defp local_actor?(actor_id) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     String.starts_with?(actor_id, "https://#{domain}")
   end
 
   defp extract_account_id(actor_id) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     case Regex.run(~r|https://#{Regex.escape(domain)}/users/(.+)|, actor_id) do
       [_, username] ->
@@ -72,7 +72,7 @@ defmodule SukhiFedi.Addons.Streaming.NatsListener do
 
   defp get_follower_account_ids(account_id) do
     import Ecto.Query
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     SukhiFedi.Repo.all(
       from(f in SukhiFedi.Schema.Follow,

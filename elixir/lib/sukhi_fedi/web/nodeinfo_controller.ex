@@ -19,7 +19,7 @@ defmodule SukhiFedi.Web.NodeinfoController do
   alias SukhiFedi.Schema.{Account, Note}
 
   def discovery(conn, _opts) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
 
     body = %{
       links: [

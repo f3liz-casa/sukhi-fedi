@@ -12,7 +12,7 @@ defmodule SukhiFedi.Web.ActorController do
         send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
       
       account ->
-        domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+        domain = SukhiFedi.Config.domain!()
         actor_uri = "https://#{domain}/users/#{username}"
         
         actor = %{

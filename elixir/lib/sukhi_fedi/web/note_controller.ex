@@ -18,7 +18,7 @@ defmodule SukhiFedi.Web.NoteController do
   def show(conn, _opts) do
     username = conn.path_params["name"]
     note_id_raw = conn.path_params["note_id"]
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
     with {note_id, ""} <- Integer.parse(note_id_raw || ""),

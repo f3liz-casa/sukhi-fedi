@@ -14,7 +14,7 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
   def routes, do: [{:get, "/api/v1/instance", &instance/1}]
 
   def instance(_req) do
-    domain = Application.get_env(:sukhi_api, :domain, "localhost:4000")
+    domain = SukhiApi.Config.domain!()
     title = Application.get_env(:sukhi_api, :title, "sukhi-fedi")
 
     body = %{

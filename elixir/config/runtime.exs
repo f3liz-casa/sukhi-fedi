@@ -2,8 +2,12 @@
 import Config
 
 # Public-facing domain used in nodeinfo/webfinger/ActivityPub URLs.
-if domain = System.get_env("DOMAIN") do
-  config :sukhi_fedi, :domain, domain
+# In prod, fetch_env! crashes the release on a missing DOMAIN rather than
+# silently minting localhost:4000 URIs into outbound IDs and keyIds.
+if config_env() == :prod do
+  config :sukhi_fedi, :domain, System.fetch_env!("DOMAIN")
+else
+  config :sukhi_fedi, :domain, System.get_env("DOMAIN", "localhost:4000")
 end
 
 # Addon selection.

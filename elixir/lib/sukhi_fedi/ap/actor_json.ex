@@ -12,7 +12,7 @@ defmodule SukhiFedi.AP.ActorJson do
 
   @spec build_person(Account.t()) :: map()
   def build_person(%Account{} = account) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{account.username}"
 
     %{
@@ -44,7 +44,7 @@ defmodule SukhiFedi.AP.ActorJson do
 
   @spec build_update(Account.t()) :: map()
   def build_update(%Account{} = account) do
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{account.username}"
 
     %{

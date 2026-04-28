@@ -10,7 +10,7 @@ defmodule SukhiFedi.Web.FeaturedController do
 
   def show(conn, _opts) do
     username = conn.path_params["name"]
-    domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+    domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
     notes = PinnedNotes.list_for_username(username)

@@ -56,7 +56,7 @@ defmodule SukhiFedi.Accounts do
         end
 
       [username, host] ->
-        local_domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+        local_domain = SukhiFedi.Config.domain!()
 
         if host == local_domain do
           case get_account_by_username(username) do
@@ -372,7 +372,7 @@ defmodule SukhiFedi.Accounts do
         nil
 
       %Account{username: u} ->
-        domain = Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+        domain = SukhiFedi.Config.domain!()
         "https://#{domain}/users/#{u}"
     end
   end

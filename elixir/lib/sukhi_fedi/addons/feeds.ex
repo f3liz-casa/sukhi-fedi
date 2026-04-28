@@ -122,5 +122,5 @@ defmodule SukhiFedi.Addons.Feeds do
     Repo.get!(SukhiFedi.Schema.Account, account_id).username
   end
 
-  defp domain, do: Application.get_env(:sukhi_fedi, :domain, "localhost:4000")
+  defp domain, do: SukhiFedi.Config.domain!()
 end

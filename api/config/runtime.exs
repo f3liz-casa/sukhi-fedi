@@ -41,10 +41,16 @@ disabled_addons =
 config :sukhi_api, :enabled_addons, enabled_addons
 config :sukhi_api, :disabled_addons, disabled_addons
 
+# Public-facing domain. fetch_env! in prod so a misconfigured release
+# crashes at boot instead of returning localhost:4000 in /api/v1/instance.
 if config_env() == :prod do
-  config :sukhi_api,
-    domain: System.get_env("DOMAIN", "localhost:4000"),
-    title: System.get_env("INSTANCE_TITLE", "sukhi-fedi")
+  config :sukhi_api, :domain, System.fetch_env!("DOMAIN")
+else
+  config :sukhi_api, :domain, System.get_env("DOMAIN", "localhost:4000")
+end
+
+if config_env() == :prod do
+  config :sukhi_api, :title, System.get_env("INSTANCE_TITLE", "sukhi-fedi")
 
   # GATEWAY_NODE overrides the default gateway@elixir node for
   # `SukhiApi.GatewayRpc`.
