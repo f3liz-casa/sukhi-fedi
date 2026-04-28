@@ -1,8 +1,6 @@
-import { Create, Note, signObject } from "@fedify/fedify";
+import { Create, Note } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
-import { injectDefined } from "../../fedify/utils.ts";
+import { injectMisskey, signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildNotePayload {
@@ -21,9 +19,6 @@ export interface BuildNoteResult {
 export async function handleBuildNote(
   payload: BuildNotePayload,
 ): Promise<BuildNoteResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const audience = resolveAudience({ kind: "public", actor: payload.actor });
 
   const note = new Note({
@@ -43,17 +38,8 @@ export async function handleBuildNote(
     ccs: audience.ccs,
   });
 
-  const signed = await signObject(create, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const noteJson = await signed.toJsonLd({ contextLoader: documentLoader }) as Record<string, unknown>;
-  // Inject _misskey_content so Misskey can render the plain-text/MFM content
-  if (noteJson["object"] && typeof noteJson["object"] === "object") {
-    injectDefined(noteJson["object"] as Record<string, unknown>, {
-      _misskey_content: payload.content,
-    });
-  }
+  const noteJson = await signAndSerialize(payload.actor, create);
+  injectMisskey(noteJson, payload.content);
 
   return {
     note: noteJson,

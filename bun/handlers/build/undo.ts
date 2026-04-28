@@ -1,7 +1,6 @@
-import { Like, Follow, Undo, signObject } from "@fedify/fedify";
+import { Like, Follow, Undo } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
+import { signAndSerialize } from "../../fedify/utils.ts";
 import { mirrorAudience } from "../../fedify/addressing.ts";
 
 export interface BuildUndoPayload {
@@ -25,9 +24,6 @@ export interface BuildUndoResult {
 export async function handleBuildUndo(
   payload: BuildUndoPayload,
 ): Promise<BuildUndoResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const inner = payload.inner.type === "Like"
     ? new Like({
         id: new URL(payload.inner.id),
@@ -51,11 +47,7 @@ export async function handleBuildUndo(
     ccs: audience.ccs,
   });
 
-  const signed = await signObject(undo, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const undoJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const undoJson = await signAndSerialize(payload.actor, undo);
 
   return {
     undo: undoJson,

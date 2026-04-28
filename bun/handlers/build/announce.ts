@@ -1,7 +1,6 @@
-import { Announce, signObject } from "@fedify/fedify";
+import { Announce } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
+import { signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildAnnouncePayload {
@@ -19,9 +18,6 @@ export interface BuildAnnounceResult {
 export async function handleBuildAnnounce(
   payload: BuildAnnouncePayload,
 ): Promise<BuildAnnounceResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const audience = resolveAudience({ kind: "public", actor: payload.actor });
 
   const announce = new Announce({
@@ -33,11 +29,7 @@ export async function handleBuildAnnounce(
     ccs: audience.ccs,
   });
 
-  const signed = await signObject(announce, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const announceJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const announceJson = await signAndSerialize(payload.actor, announce);
 
   return {
     announce: announceJson,

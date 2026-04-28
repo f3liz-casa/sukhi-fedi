@@ -1,7 +1,6 @@
-import { Delete, Tombstone, signObject } from "@fedify/fedify";
+import { Delete, Tombstone } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
+import { signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildDeletePayload {
@@ -20,9 +19,6 @@ export interface BuildDeleteResult {
 export async function handleBuildDelete(
   payload: BuildDeletePayload,
 ): Promise<BuildDeleteResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const audience = resolveAudience({ kind: "public", actor: payload.actor });
 
   const tombstone = new Tombstone({ id: new URL(payload.objectId) });
@@ -36,11 +32,7 @@ export async function handleBuildDelete(
     ccs: audience.ccs,
   });
 
-  const signed = await signObject(del, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const deleteJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const deleteJson = await signAndSerialize(payload.actor, del);
 
   return {
     delete: deleteJson,

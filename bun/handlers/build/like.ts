@@ -1,7 +1,6 @@
-import { Like, signObject } from "@fedify/fedify";
+import { Like } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
+import { signAndSerialize } from "../../fedify/utils.ts";
 
 export interface BuildLikePayload {
   actor: string;
@@ -18,9 +17,6 @@ export interface BuildLikeResult {
 export async function handleBuildLike(
   payload: BuildLikePayload,
 ): Promise<BuildLikeResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const like = new Like({
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
@@ -28,11 +24,7 @@ export async function handleBuildLike(
     published: Temporal.Now.instant(),
   });
 
-  const signed = await signObject(like, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const likeJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const likeJson = await signAndSerialize(payload.actor, like);
 
   return {
     like: likeJson,

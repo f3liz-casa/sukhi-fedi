@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Create, Note } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { signAndSerialize, injectDefined } from "../../fedify/utils.ts";
+import { injectMisskey, signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildDmPayload {
@@ -50,14 +50,8 @@ export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmRes
     ccs: audience.ccs,
   });
 
-  const noteJson = await signAndSerialize(payload.actor, create) as Record<string, unknown>;
-
-  // Inject _misskey_content for Misskey compatibility
-  if (noteJson["object"] && typeof noteJson["object"] === "object") {
-    injectDefined(noteJson["object"] as Record<string, unknown>, {
-      _misskey_content: payload.content,
-    });
-  }
+  const noteJson = await signAndSerialize(payload.actor, create);
+  injectMisskey(noteJson, payload.content);
 
   return {
     note: noteJson,

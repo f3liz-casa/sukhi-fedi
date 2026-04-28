@@ -28,3 +28,17 @@ export function injectDefined(
     if (v !== undefined) obj[k] = v;
   }
 }
+
+export function injectMisskey(activityJson: unknown, content: string): void {
+  if (
+    activityJson && typeof activityJson === "object" &&
+    "object" in activityJson
+  ) {
+    const obj = (activityJson as Record<string, unknown>).object;
+    if (obj && typeof obj === "object") {
+      injectDefined(obj as Record<string, unknown>, {
+        _misskey_content: content,
+      });
+    }
+  }
+}

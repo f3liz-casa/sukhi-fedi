@@ -1,6 +1,5 @@
-import { Follow, signObject } from "@fedify/fedify";
-import { cachedDocumentLoader as fetchDocumentLoader } from "../../fedify/context.ts";
-import { getOrCreateKey } from "../../fedify/keys.ts";
+import { Follow } from "@fedify/fedify";
+import { signAndSerialize } from "../../fedify/utils.ts";
 
 export interface BuildFollowPayload {
   actor: string;
@@ -15,20 +14,13 @@ export interface BuildFollowResult {
 export async function handleBuildFollow(
   payload: BuildFollowPayload,
 ): Promise<BuildFollowResult> {
-  const documentLoader = fetchDocumentLoader;
-  const { privateKey, keyId } = await getOrCreateKey(payload.actor);
-
   const follow = new Follow({
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: new URL(payload.object),
   });
 
-  const signed = await signObject(follow, privateKey, new URL(keyId), {
-    documentLoader,
-  });
-
-  const followJson = await signed.toJsonLd({ contextLoader: documentLoader });
+  const followJson = await signAndSerialize(payload.actor, follow);
 
   return { follow: followJson };
 }
