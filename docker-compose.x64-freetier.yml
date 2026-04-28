@@ -73,6 +73,10 @@ services:
 
   delivery:
     environment:
+      # Re-declared from the base file because in practice this override
+      # block was not merging cleanly here — without an explicit DOMAIN
+      # the delivery worker mints activity ids under `localhost:4000`.
+      DOMAIN: ${DOMAIN:-localhost:4000}
       DB_POOL_SIZE: "3"
       ERL_FLAGS: >-
         +S 1:1
