@@ -9,7 +9,7 @@ defmodule SukhiFedi.Addons.PinnedNotes do
 
   import Ecto.Query
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{PinnedNote, Account}
+  alias SukhiFedi.Schema.PinnedNote
 
   def pin(account_id, note_id) do
     %PinnedNote{}
@@ -37,7 +37,7 @@ defmodule SukhiFedi.Addons.PinnedNotes do
   end
 
   def list_for_username(username) do
-    account = Repo.get_by(Account, username: username, domain: nil)
+    account = SukhiFedi.Accounts.by_local_username(username)
     if account, do: list_for_account(account.id), else: []
   end
 

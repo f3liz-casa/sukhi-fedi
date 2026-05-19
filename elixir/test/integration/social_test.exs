@@ -18,14 +18,14 @@ defmodule SukhiFedi.Integration.SocialTest do
   alias SukhiFedi.{Accounts, Social}
   alias SukhiFedi.Schema.{Account, Follow, OutboxEvent}
 
-  describe "request_follow/2" do
-    test "inserts a Follow row + outbox event" do
+  describe "request_follow/2 (remote target)" do
+    test "inserts pending Follow + sns.outbox.follow.requested" do
       alice = create_account!("alice_rf")
-      bob = create_account!("bob_rf")
+      bob_remote = create_remote_account!("bob_rf", "social.example")
 
-      {:ok, follow} = Social.request_follow(alice, bob.id)
+      {:ok, follow} = Social.request_follow(alice, bob_remote.id)
 
-      assert follow.followee_id == bob.id
+      assert follow.followee_id == bob_remote.id
       assert follow.follower_uri =~ "/users/alice_rf"
       assert follow.state == "pending"
 
@@ -36,15 +36,15 @@ defmodule SukhiFedi.Integration.SocialTest do
         )
 
       assert ev.payload["follow_id"] == follow.id
-      assert ev.payload["followee_id"] == bob.id
+      assert ev.payload["followee_id"] == bob_remote.id
     end
 
     test "is idempotent — second call returns the same row, no extra outbox" do
       alice = create_account!("alice_idemp")
-      bob = create_account!("bob_idemp")
+      bob_remote = create_remote_account!("bob_idemp", "social.example")
 
-      {:ok, f1} = Social.request_follow(alice, bob.id)
-      {:ok, f2} = Social.request_follow(alice, bob.id)
+      {:ok, f1} = Social.request_follow(alice, bob_remote.id)
+      {:ok, f2} = Social.request_follow(alice, bob_remote.id)
 
       assert f1.id == f2.id
 
@@ -71,13 +71,36 @@ defmodule SukhiFedi.Integration.SocialTest do
     end
   end
 
-  describe "unfollow/2" do
-    test "deletes the Follow row + emits sns.outbox.follow.undone" do
-      alice = create_account!("alice_unf")
-      bob = create_account!("bob_unf")
+  describe "request_follow/2 (local target)" do
+    test "lands as accepted with NO outbox event" do
+      alice = create_account!("alice_local_rf")
+      bob = create_account!("bob_local_rf")
+
       {:ok, follow} = Social.request_follow(alice, bob.id)
 
-      assert {:ok, deleted} = Social.unfollow(alice, bob.id)
+      assert follow.followee_id == bob.id
+      assert follow.state == "accepted"
+
+      n =
+        Repo.aggregate(
+          from(e in OutboxEvent,
+            where: e.subject == "sns.outbox.follow.requested" and e.aggregate_id == ^to_string(follow.id)
+          ),
+          :count,
+          :id
+        )
+
+      assert n == 0
+    end
+  end
+
+  describe "unfollow/2" do
+    test "deletes the Follow row + emits sns.outbox.follow.undone (remote target)" do
+      alice = create_account!("alice_unf")
+      bob_remote = create_remote_account!("bob_unf", "social.example")
+      {:ok, follow} = Social.request_follow(alice, bob_remote.id)
+
+      assert {:ok, deleted} = Social.unfollow(alice, bob_remote.id)
       assert deleted.id == follow.id
       refute Repo.get(Follow, follow.id)
 
@@ -87,7 +110,25 @@ defmodule SukhiFedi.Integration.SocialTest do
             where: e.subject == "sns.outbox.follow.undone" and e.aggregate_id == ^to_string(follow.id)
         )
 
-      assert ev.payload["followee_id"] == bob.id
+      assert ev.payload["followee_id"] == bob_remote.id
+    end
+
+    test "local-target unfollow deletes the row but skips the outbox event" do
+      alice = create_account!("alice_local_unf")
+      bob = create_account!("bob_local_unf")
+      {:ok, follow} = Social.request_follow(alice, bob.id)
+
+      assert {:ok, _deleted} = Social.unfollow(alice, bob.id)
+      refute Repo.get(Follow, follow.id)
+
+      n =
+        Repo.aggregate(
+          from(e in OutboxEvent, where: e.subject == "sns.outbox.follow.undone"),
+          :count,
+          :id
+        )
+
+      assert n == 0
     end
 
     test "unfollowing when no follow exists → :not_found" do
@@ -200,6 +241,18 @@ defmodule SukhiFedi.Integration.SocialTest do
 
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
+    |> Repo.insert!()
+  end
+
+  defp create_remote_account!(username, domain) do
+    %Account{
+      username: username,
+      display_name: username,
+      summary: "",
+      domain: domain,
+      actor_uri: "https://#{domain}/users/#{username}",
+      inbox_url: "https://#{domain}/users/#{username}/inbox"
+    }
     |> Repo.insert!()
   end
 end

@@ -25,11 +25,16 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   ## Stream cleanup
 
-  This consumer uses plain `Gnat.sub`, so messages are delivered as
-  they're published but the JetStream OUTBOX stream is never ACKed
-  and will grow forever. A durable JetStream consumer with explicit
-  ACK is the proper next step; for the MVP we accept the growth and
-  rely on the worker's `delivery_receipts` table for idempotency.
+  This module is the *dispatch* surface. Subscription + ACK happens in
+  `SukhiDelivery.Outbox.PullConsumer`, which uses a durable JetStream
+  consumer with explicit ACK — the OUTBOX stream is a WorkQueue, so
+  each message is deleted as soon as it's ACKed.
+
+  Return values inform the PullConsumer's ack policy: anything that
+  could succeed on retry returns `:translate_failed` or `:crashed`
+  (→ NACK); structural problems (`:missing_*`, `:no_*`, `:bad_json`,
+  `:ignored`, `:no_handler`) return immediately (→ ACK; retry can't
+  help).
 
   ## Recipient inbox resolution
 
@@ -39,7 +44,6 @@ defmodule SukhiDelivery.Outbox.Consumer do
   remote's actor JSON and falls back to the convention.
   """
 
-  use GenServer
   require Logger
 
   import Ecto.Query
@@ -47,51 +51,6 @@ defmodule SukhiDelivery.Outbox.Consumer do
   alias SukhiDelivery.{Repo, Relays}
   alias SukhiDelivery.Delivery.{FedifyClient, Worker}
   alias SukhiDelivery.Schema.{Account, Follow}
-
-  @subject_filter "sns.outbox.>"
-
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @impl true
-  def init(_opts) do
-    case :timer.send_interval(1_000, :ensure_subscription) do
-      {:ok, _ref} -> {:ok, %{subscribed: false, sid: nil}}
-      _ -> {:ok, %{subscribed: false, sid: nil}}
-    end
-  end
-
-  @impl true
-  def handle_info(:ensure_subscription, %{subscribed: true} = state), do: {:noreply, state}
-
-  def handle_info(:ensure_subscription, state) do
-    case Process.whereis(:gnat) do
-      nil ->
-        {:noreply, state}
-
-      _pid ->
-        case Gnat.sub(:gnat, self(), @subject_filter) do
-          {:ok, sid} ->
-            Logger.info("Outbox.Consumer subscribed to #{@subject_filter} (sid=#{sid})")
-            {:noreply, %{state | subscribed: true, sid: sid}}
-
-          {:error, reason} ->
-            Logger.warning("Outbox.Consumer subscribe failed: #{inspect(reason)}")
-            {:noreply, state}
-        end
-    end
-  end
-
-  def handle_info({:msg, %{topic: subject, body: body}}, state) do
-    handle_event(subject, body)
-    {:noreply, state}
-  end
-
-  def handle_info(msg, state) do
-    Logger.debug("Outbox.Consumer ignoring: #{inspect(msg)}")
-    {:noreply, state}
-  end
 
   # ── event dispatch ───────────────────────────────────────────────────────
 
@@ -480,7 +439,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
     if String.starts_with?(follower_uri, expected_prefix) do
       username = String.replace_prefix(follower_uri, expected_prefix, "")
 
-      case Repo.get_by(Account, username: username, domain: nil) do
+      case SukhiDelivery.Accounts.by_local_username(username) do
         nil -> nil
         _ -> %{actor_uri: follower_uri, username: username}
       end
@@ -497,7 +456,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
     if String.starts_with?(actor_uri, expected_prefix) do
       username = String.replace_prefix(actor_uri, expected_prefix, "")
 
-      case Repo.get_by(Account, username: username, domain: nil) do
+      case SukhiDelivery.Accounts.by_local_username(username) do
         nil ->
           []
 

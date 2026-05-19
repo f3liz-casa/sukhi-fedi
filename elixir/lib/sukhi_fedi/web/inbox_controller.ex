@@ -4,7 +4,6 @@ defmodule SukhiFedi.Web.InboxController do
 
   alias SukhiFedi.AP.Instructions
   alias SukhiFedi.Federation.FedifyClient
-  alias SukhiFedi.Repo
   alias SukhiFedi.Schema.Account
 
   # FEP-8fcf Collection-Synchronization format:
@@ -74,7 +73,7 @@ defmodule SukhiFedi.Web.InboxController do
 
     with username when is_binary(username) <- conn.path_params["name"],
          %Account{private_key_jwk: priv, public_key_jwk: pub} when not is_nil(priv) <-
-           Repo.get_by(Account, username: username, domain: nil) do
+           SukhiFedi.Accounts.by_local_username(username) do
       %{
         keyId: "https://#{domain}/users/#{username}#main-key",
         privateJwk: priv,

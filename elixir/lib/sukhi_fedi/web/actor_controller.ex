@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Web.ActorController do
   import Plug.Conn
-  alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.Account
 
   def show(conn, _opts) do
     username = conn.path_params["name"]
     
-    case Repo.get_by(Account, username: username, domain: nil) do
+    case SukhiFedi.Accounts.by_local_username(username) do
       nil ->
         send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
       

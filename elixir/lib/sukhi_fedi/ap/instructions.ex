@@ -7,7 +7,7 @@ defmodule SukhiFedi.AP.Instructions do
 
   import Ecto.Query
 
-  alias SukhiFedi.{Outbox, Repo}
+  alias SukhiFedi.{Notifications, Outbox, Repo}
   alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account, Note}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
@@ -36,6 +36,8 @@ defmodule SukhiFedi.AP.Instructions do
     maybe_handle_relay_accept(object_data)
     maybe_handle_follow_accept(object_data)
     maybe_mirror_create_note(object_data)
+    maybe_notify_like(object_data)
+    maybe_notify_announce(object_data)
     maybe_handle_pin_unpin(object_data)
     maybe_handle_delete(object_data)
     maybe_handle_undo(object_data)
@@ -44,6 +46,7 @@ defmodule SukhiFedi.AP.Instructions do
 
   def execute(%{"action" => "save_and_reply", "save" => save_data, "reply" => reply, "inbox" => inbox_url}) do
     insert_follow(save_data)
+    maybe_notify_follow(save_data)
 
     followee_uri = save_data["followeeUri"]
 
@@ -97,9 +100,9 @@ defmodule SukhiFedi.AP.Instructions do
           |> String.split("/")
           |> List.last()
 
-        Repo.get_by(Account, username: username, domain: nil)
+        SukhiFedi.Accounts.by_local_username(username)
       else
-        Repo.get_by(Account, username: data["followee_username"], domain: nil)
+        SukhiFedi.Accounts.by_local_username(data["followee_username"])
       end
 
     if account && follow_data do
@@ -135,7 +138,7 @@ defmodule SukhiFedi.AP.Instructions do
       |> String.split("/")
       |> List.last()
 
-    case Repo.get_by(Account, username: username, domain: nil) do
+    case SukhiFedi.Accounts.by_local_username(username) do
       %Account{} = account ->
         update_json = SukhiFedi.AP.ActorJson.build_update(account)
 
@@ -164,7 +167,7 @@ defmodule SukhiFedi.AP.Instructions do
       |> String.split("/")
       |> List.last()
 
-    case Repo.get_by(Account, username: username, domain: nil) do
+    case SukhiFedi.Accounts.by_local_username(username) do
       %Account{id: account_id} ->
         from(n in Note,
           where: n.account_id == ^account_id and n.visibility == "public",
@@ -230,7 +233,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
+    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
 
     if account do
       %ConversationParticipant{}
@@ -247,7 +250,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp maybe_save_dm_note(recipient_uri, domain, object, _actor_uri, conversation_ap_id) do
     if String.contains?(recipient_uri, domain) do
       username = recipient_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-      account = Repo.get_by(Account, username: username, domain: nil)
+      account = SukhiFedi.Accounts.by_local_username(username)
 
       if account do
         attrs = %{
@@ -335,6 +338,75 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_mirror_create_note(_), do: :ok
 
+  # Inbound `Like` on a local note → favourite notification for the
+  # local author. We don't materialise the like itself yet, so look
+  # up the target note by its AP id and notify if we own it.
+  defp maybe_notify_like(%{"type" => "Like", "actor" => actor_uri, "object" => object_uri}) do
+    with object_id when is_binary(object_id) <- extract_object_id(object_uri),
+         %Note{id: note_id, account_id: recipient_id} <-
+           Repo.get_by(Note, ap_id: object_id),
+         {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(actor_uri) do
+      Notifications.create(%{
+        account_id: recipient_id,
+        from_account_id: from_id,
+        note_id: note_id,
+        type: "favourite"
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_like(_), do: :ok
+
+  # Inbound `Announce` of a local note → reblog notification.
+  defp maybe_notify_announce(%{"type" => "Announce", "actor" => actor_uri, "object" => object_uri}) do
+    with object_id when is_binary(object_id) <- extract_object_id(object_uri),
+         %Note{id: note_id, account_id: recipient_id} <-
+           Repo.get_by(Note, ap_id: object_id),
+         {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(actor_uri) do
+      Notifications.create(%{
+        account_id: recipient_id,
+        from_account_id: from_id,
+        note_id: note_id,
+        type: "reblog"
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_announce(_), do: :ok
+
+  # Inbound `Follow` (already auto-accepted via save_and_reply) → follow
+  # notification for the local followee.
+  defp maybe_notify_follow(%{"follow" => follow_data} = data) do
+    with %Account{id: followee_id} <- local_followee(data),
+         follower_uri when is_binary(follower_uri) <- extract_uri(follow_data["actor"]),
+         {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(follower_uri) do
+      Notifications.create(%{
+        account_id: followee_id,
+        from_account_id: from_id,
+        type: "follow"
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_follow(_), do: :ok
+
+  defp local_followee(%{"followeeUri" => uri}) when is_binary(uri) do
+    username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+    SukhiFedi.Accounts.by_local_username(username)
+  end
+
+  defp local_followee(%{"followee_username" => u}) when is_binary(u) do
+    SukhiFedi.Accounts.by_local_username(u)
+  end
+
+  defp local_followee(_), do: nil
+
   # AS#Public in to/cc ⇒ not a DM. We treat absence-of-public as the DM
   # signal (matches `maybe_handle_dm`'s heuristic).
   defp dm_addressing?(note) do
@@ -375,7 +447,7 @@ defmodule SukhiFedi.AP.Instructions do
       String.contains?(actor_uri, domain) ->
         username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
 
-        case Repo.get_by(Account, username: username, domain: nil) do
+        case SukhiFedi.Accounts.by_local_username(username) do
           %Account{} = a -> {:ok, a}
           nil -> {:error, :no_local_actor}
         end
@@ -401,7 +473,7 @@ defmodule SukhiFedi.AP.Instructions do
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
+    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -413,7 +485,7 @@ defmodule SukhiFedi.AP.Instructions do
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
+    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -480,7 +552,7 @@ defmodule SukhiFedi.AP.Instructions do
 
     if String.contains?(uri, domain) do
       username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-      case Repo.get_by(Account, username: username, domain: nil) do
+      case SukhiFedi.Accounts.by_local_username(username) do
         nil -> nil
         account -> account.id
       end

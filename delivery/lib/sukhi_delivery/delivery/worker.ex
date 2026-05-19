@@ -137,7 +137,7 @@ defmodule SukhiDelivery.Delivery.Worker do
       |> String.split("/")
       |> List.last()
 
-    case Repo.get_by(Account, username: username, domain: nil) do
+    case SukhiDelivery.Accounts.by_local_username(username) do
       %Account{private_key_jwk: jwk} when not is_nil(jwk) -> jwk
       _ -> nil
     end

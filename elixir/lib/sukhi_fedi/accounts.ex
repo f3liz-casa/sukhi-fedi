@@ -13,11 +13,22 @@ defmodule SukhiFedi.Accounts do
 
   # ── reads ─────────────────────────────────────────────────────────────────
 
-  def get_account_by_username(username) do
-    # Local-only: a remote actor `alice@social.example` is stored with
-    # the same `username` field but `domain IS NOT NULL`, so we have to
-    # filter by `domain IS NULL` to disambiguate.
-    Repo.get_by(Account, username: username, domain: nil)
+  def get_account_by_username(username), do: by_local_username(username)
+
+  @doc """
+  Look up an account by username, restricted to local rows (`domain IS NULL`).
+
+  Used everywhere a caller specifically wants the local user. Stays
+  out of `Repo.get_by/2` because Ecto 3.12+ refuses `domain: nil` in
+  keyword filters — it warns about the silent-always-false trap of
+  `WHERE domain = NULL`. We spell `is_nil/1` here once and let every
+  call site reach for this helper instead of repeating the query.
+  """
+  @spec by_local_username(String.t() | nil) :: Account.t() | nil
+  def by_local_username(nil), do: nil
+
+  def by_local_username(username) when is_binary(username) do
+    Repo.one(from a in Account, where: a.username == ^username and is_nil(a.domain), limit: 1)
   end
 
   @doc """

@@ -22,9 +22,10 @@ defmodule SukhiDelivery.Application do
       # Transactional Outbox relay: publishes `outbox` rows (written by
       # the gateway) to NATS JetStream.
       SukhiDelivery.Outbox.Relay,
-      # JetStream subscriber that turns published outbox events into
-      # Oban delivery jobs (FedifyClient.translate → Worker fan-out).
-      SukhiDelivery.Outbox.Consumer
+      # Durable JetStream consumer that turns published outbox events
+      # into Oban delivery jobs (FedifyClient.translate → Worker fan-out).
+      # Routing lives in SukhiDelivery.Outbox.Consumer.
+      SukhiDelivery.Outbox.PullConsumer
     ]
 
     opts = [strategy: :one_for_one, name: SukhiDelivery.Supervisor]

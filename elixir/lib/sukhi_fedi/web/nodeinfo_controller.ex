@@ -13,7 +13,6 @@ defmodule SukhiFedi.Web.NodeinfoController do
   """
 
   import Plug.Conn
-  import Ecto.Query
 
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}

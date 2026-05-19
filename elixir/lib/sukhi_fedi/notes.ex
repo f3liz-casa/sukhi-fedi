@@ -108,7 +108,7 @@ defmodule SukhiFedi.Notes do
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
           {:error, {:validation, changeset_errors(cs)}}
 
-        {:error, :media_not_owned, _, _} ->
+        {:error, :media_check, :not_owned, _} ->
           {:error, :media_not_owned}
 
         {:error, _step, reason, _} ->
@@ -162,14 +162,20 @@ defmodule SukhiFedi.Notes do
       end
     end)
     |> Multi.run(:media_attached, fn repo, %{note: note, media_check: media_ids} ->
+      # note_media is a pure join table — no timestamps in the schema.
+      rows = Enum.map(media_ids, fn mid -> %{note_id: note.id, media_id: mid} end)
+      {n, _} = repo.insert_all("note_media", rows)
+
+      # Stamp attached_at so subsequent attach attempts (or the
+      # idempotency check in MediaCtx.attach/3) treat these rows as
+      # claimed. Only flips rows that haven't been claimed yet.
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      rows =
-        Enum.map(media_ids, fn mid ->
-          %{note_id: note.id, media_id: mid, inserted_at: now, updated_at: now}
-        end)
+      repo.update_all(
+        from(m in Media, where: m.id in ^media_ids and is_nil(m.attached_at)),
+        set: [attached_at: now]
+      )
 
-      {n, _} = repo.insert_all("note_media", rows)
       {:ok, n}
     end)
   end
@@ -359,8 +365,18 @@ defmodule SukhiFedi.Notes do
           )
           |> Repo.transaction()
           |> case do
-            {:ok, _} -> {:ok, note}
-            {:error, _step, reason, _} -> {:error, reason}
+            {:ok, _} ->
+              SukhiFedi.Notifications.create(%{
+                account_id: note.account_id,
+                from_account_id: account_id,
+                note_id: note.id,
+                type: "favourite"
+              })
+
+              {:ok, note}
+
+            {:error, _step, reason, _} ->
+              {:error, reason}
           end
       end
     end)
@@ -431,8 +447,18 @@ defmodule SukhiFedi.Notes do
           )
           |> Repo.transaction()
           |> case do
-            {:ok, _} -> {:ok, note}
-            {:error, _step, reason, _} -> {:error, reason}
+            {:ok, _} ->
+              SukhiFedi.Notifications.create(%{
+                account_id: note.account_id,
+                from_account_id: account_id,
+                note_id: note.id,
+                type: "reblog"
+              })
+
+              {:ok, note}
+
+            {:error, _step, reason, _} ->
+              {:error, reason}
           end
       end
     end)

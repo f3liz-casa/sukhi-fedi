@@ -7,7 +7,6 @@ defmodule SukhiFedi.Schema.Account do
     field :username, :string
     field :display_name, :string
     field :summary, :string
-    field :token, :string
     field :private_key_jwk, :map
     field :public_key_jwk, :map
     # PEM-encoded SubjectPublicKeyInfo — read by actor_controller.ex for

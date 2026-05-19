@@ -52,6 +52,32 @@ ensure_stream OUTBOX \
   --no-deny-delete \
   --no-deny-purge
 
+ensure_consumer() {
+  stream="$1"
+  consumer="$2"
+  shift 2
+  if nats_cli consumer info "$stream" "$consumer" >/dev/null 2>&1; then
+    echo "[bootstrap] consumer '$stream/$consumer' already exists, skipping"
+    return 0
+  fi
+  echo "[bootstrap] creating consumer '$stream/$consumer'"
+  nats_cli consumer add "$stream" "$consumer" "$@"
+}
+
+# Durable pull consumer for SukhiDelivery.Outbox.PullConsumer.
+# WorkQueue stream + explicit ACK = each event handled exactly once,
+# then removed from OUTBOX. Redelivery on NACK / ack timeout, capped
+# at --max-deliver so a poison message can't loop forever.
+ensure_consumer OUTBOX delivery-outbox \
+  --defaults \
+  --pull \
+  --deliver=all \
+  --filter="sns.outbox.>" \
+  --ack=explicit \
+  --wait=30s \
+  --max-deliver=5 \
+  --replay=instant
+
 # DOMAIN_EVENTS: broadcast events (WebSocket streaming, notifications).
 # Limits retention with 7-day TTL so consumers can replay after reconnect.
 ensure_stream DOMAIN_EVENTS \

@@ -9,14 +9,14 @@ defmodule SukhiFedi.Web.CollectionController do
   import Plug.Conn
   import Ecto.Query
   alias SukhiFedi.{Repo, Social}
-  alias SukhiFedi.Schema.{Account, Note}
+  alias SukhiFedi.Schema.Note
 
   def followers(conn, _opts) do
     username = conn.path_params["name"]
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username, domain: nil)
+    account = SukhiFedi.Accounts.by_local_username(username)
 
     if account do
       items = Social.list_followers(account.id)
@@ -43,7 +43,7 @@ defmodule SukhiFedi.Web.CollectionController do
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username, domain: nil)
+    account = SukhiFedi.Accounts.by_local_username(username)
 
     if account do
       notes =
@@ -101,7 +101,7 @@ defmodule SukhiFedi.Web.CollectionController do
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username, domain: nil)
+    account = SukhiFedi.Accounts.by_local_username(username)
 
     if account do
       follower_uri = actor_uri

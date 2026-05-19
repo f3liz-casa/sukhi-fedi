@@ -7,7 +7,7 @@ defmodule SukhiFedi.Schema.PollOption do
     field :title, :string
     field :position, :integer
     belongs_to :poll, SukhiFedi.Schema.Poll
-    has_many :votes, SukhiFedi.Schema.PollVote
+    has_many :votes, SukhiFedi.Schema.PollVote, foreign_key: :option_id
   end
 
   def changeset(option, attrs) do

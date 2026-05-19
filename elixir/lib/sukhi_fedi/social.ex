@@ -74,7 +74,7 @@ defmodule SukhiFedi.Social do
     end
   end
 
-  defp insert_follow_with_outbox(_follower, actor_uri, %Account{} = target) do
+  defp insert_follow_with_outbox(%Account{id: follower_id} = _follower, actor_uri, %Account{} = target) do
     # Local target ⇒ no federation round-trip needed. Skip the outbox
     # event entirely and stamp the follow as `accepted` so home-timeline
     # visibility kicks in immediately. Remote target ⇒ start in `pending`
@@ -118,8 +118,19 @@ defmodule SukhiFedi.Social do
     multi
     |> Repo.transaction()
     |> case do
-      {:ok, %{follow: f}} -> {:ok, f}
-      {:error, _step, reason, _} -> {:error, reason}
+      {:ok, %{follow: f}} ->
+        if local_target? do
+          SukhiFedi.Notifications.create(%{
+            account_id: target.id,
+            from_account_id: follower_id,
+            type: "follow"
+          })
+        end
+
+        {:ok, f}
+
+      {:error, _step, reason, _} ->
+        {:error, reason}
     end
   end
 

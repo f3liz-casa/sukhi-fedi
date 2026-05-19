@@ -192,6 +192,12 @@ defmodule SukhiFedi.OAuth do
       with :ok <- check_scope_subset(scopes, app.scopes) do
         mint_token(app.id, nil, scopes, refresh: false)
       end
+    else
+      # `find_app_by_client_id/1` distinguishes "no row" as `:not_found`,
+      # but the OAuth grant API speaks only RFC 6749's `invalid_client`.
+      # Same normalization happens upstream in `authorization_code_grant`.
+      {:error, :not_found} -> {:error, :invalid_client}
+      other -> other
     end
   end
 

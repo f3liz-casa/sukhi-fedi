@@ -3,6 +3,7 @@ import Config
 
 config :sukhi_delivery, SukhiDelivery.Repo,
   database: "sukhi_fedi_test",
+  port: String.to_integer(System.get_env("DB_PORT", "15432")),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 
