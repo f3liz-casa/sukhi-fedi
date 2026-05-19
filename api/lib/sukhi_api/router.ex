@@ -28,9 +28,7 @@ defmodule SukhiApi.Router do
 
   require Logger
 
-  alias SukhiApi.{GatewayRpc, Registry}
-
-  @gateway_oauth SukhiFedi.OAuth
+  alias SukhiApi.{Registry, TokenCache, TokenRateLimit}
 
   @spec handle(map()) :: {:ok, map()}
   def handle(%{} = req) do
@@ -92,8 +90,8 @@ defmodule SukhiApi.Router do
 
       required_scope when is_binary(required_scope) ->
         with {:ok, token} <- bearer_token(req),
-             {:ok, {:ok, %{scopes: granted} = ctx}} <-
-               GatewayRpc.call(@gateway_oauth, :verify_bearer, [token]),
+             :ok <- charge_rate_limit(token),
+             {:ok, {:ok, %{scopes: granted} = ctx}} <- TokenCache.verify(token),
              :ok <- check_scope(required_scope, granted) do
           assigns =
             req
@@ -126,9 +124,26 @@ defmodule SukhiApi.Router do
           {:error, {:badrpc, reason}} ->
             {:error, 503, %{error: "gateway_rpc_failed", detail: inspect(reason)}}
 
+          {:error, :rate_limited, retry_after} ->
+            {:error, 429,
+             %{
+               error: "rate_limited",
+               retry_after: retry_after
+             }}
+
           _ ->
             {:error, 401, %{error: "invalid_token"}}
         end
+    end
+  end
+
+  # Tests inject :gateway_rpc_impl; under that mode the rate-limiter
+  # is bypassed too, otherwise canned responses fail under iteration.
+  defp charge_rate_limit(token) do
+    if Application.get_env(:sukhi_api, :gateway_rpc_impl) == nil do
+      TokenRateLimit.hit(token)
+    else
+      :ok
     end
   end
 

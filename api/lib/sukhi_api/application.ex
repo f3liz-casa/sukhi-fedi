@@ -27,9 +27,14 @@ defmodule SukhiApi.Application do
       Logger.info("  #{m |> Atom.to_string() |> String.upcase()} #{p}#{scope_tag}")
     end)
 
-    # No children required right now — the plugin is driven entirely by
-    # inbound :rpc.call from the gateway. Supervisors go here when a
-    # capability grows background state.
-    Supervisor.start_link([], strategy: :one_for_one, name: SukhiApi.Supervisor)
+    children = [
+      # Positive-cache for bearer-token verification; see TokenCache for
+      # the (intentional) lack of negative caching.
+      SukhiApi.TokenCache,
+      # Per-token fixed-window rate limiter (300 / 5 min by default).
+      SukhiApi.TokenRateLimit
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one, name: SukhiApi.Supervisor)
   end
 end
