@@ -348,7 +348,7 @@ defmodule SukhiFedi.Accounts do
       query
       |> limit(^limit)
       |> Repo.all()
-      |> Repo.preload([:account, :media])
+      |> Repo.preload([:account, :media, :tags])
 
     if Map.get(opts, :only_media, false) do
       Enum.filter(notes, fn n -> length(n.media || []) > 0 end)

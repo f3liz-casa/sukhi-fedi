@@ -327,9 +327,16 @@ defmodule SukhiFedi.AP.Instructions do
           "in_reply_to_ap_id" => extract_uri(note["inReplyTo"])
         }
 
-        %Note{}
-        |> Note.changeset(attrs)
-        |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id)
+        case %Note{}
+             |> Note.changeset(attrs)
+             |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id) do
+          {:ok, %Note{id: nid}} when not is_nil(nid) ->
+            SukhiFedi.Tags.upsert_for_note(nid, note["content"])
+            :ok
+
+          _ ->
+            :ok
+        end
       else
         _ -> :ok
       end

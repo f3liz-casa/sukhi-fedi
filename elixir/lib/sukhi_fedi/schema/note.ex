@@ -14,6 +14,7 @@ defmodule SukhiFedi.Schema.Note do
     field :quote_of_ap_id, :string
     belongs_to :account, SukhiFedi.Schema.Account
     many_to_many :media, SukhiFedi.Schema.Media, join_through: "note_media"
+    many_to_many :tags, SukhiFedi.Schema.Tag, join_through: "note_tags"
     has_one :poll, SukhiFedi.Schema.Poll
     has_many :reactions, SukhiFedi.Schema.Reaction
 

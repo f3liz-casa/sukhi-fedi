@@ -18,7 +18,8 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
   def routes do
     [
       {:get, "/api/v1/timelines/home", &home/1, scope: "read:statuses"},
-      {:get, "/api/v1/timelines/public", &public/1}
+      {:get, "/api/v1/timelines/public", &public/1},
+      {:get, "/api/v1/timelines/tag/:hashtag", &tag/1}
     ]
   end
 
@@ -60,6 +61,30 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
     case GatewayRpc.call(SukhiFedi.Timelines, :public, [Map.to_list(opts)]) do
       {:ok, notes} when is_list(notes) ->
         render_page(notes, "/api/v1/timelines/public", opts)
+
+      {:error, :not_connected} ->
+        ok(503, %{error: "gateway_not_connected"})
+
+      {:error, {:badrpc, r}} ->
+        ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+
+      _ ->
+        ok(500, %{error: "internal_error"})
+    end
+  end
+
+  def tag(req) do
+    hashtag = req[:path_params]["hashtag"]
+    base_opts = Pagination.parse_opts(req[:query])
+    parsed = parse_query(req[:query])
+
+    opts =
+      base_opts
+      |> Map.put(:local, parsed["local"] in ["true", "1", nil])
+
+    case GatewayRpc.call(SukhiFedi.Timelines, :tag, [hashtag, Map.to_list(opts)]) do
+      {:ok, notes} when is_list(notes) ->
+        render_page(notes, "/api/v1/timelines/tag/#{hashtag}", opts)
 
       {:error, :not_connected} ->
         ok(503, %{error: "gateway_not_connected"})

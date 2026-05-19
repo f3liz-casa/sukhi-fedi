@@ -48,7 +48,7 @@ defmodule SukhiApi.Views.MastodonStatus do
       account: render_account(note),
       media_attachments: render_media(note),
       mentions: [],
-      tags: [],
+      tags: render_tags(note),
       emojis: [],
       card: nil,
       poll: nil,
@@ -93,6 +93,20 @@ defmodule SukhiApi.Views.MastodonStatus do
     case Map.get(note, :media) do
       media when is_list(media) -> Enum.map(media, &MastodonMedia.render/1)
       _ -> []
+    end
+  end
+
+  defp render_tags(note) do
+    domain = SukhiApi.Config.domain!()
+
+    case Map.get(note, :tags) do
+      tags when is_list(tags) ->
+        Enum.map(tags, fn t ->
+          %{name: t.name, url: "https://#{domain}/tags/#{t.name}"}
+        end)
+
+      _ ->
+        []
     end
   end
 

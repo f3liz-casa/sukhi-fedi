@@ -85,6 +85,9 @@ defmodule SukhiFedi.Notes do
       Multi.new()
       |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
       |> attach_media(media_ids, account_id)
+      |> Multi.run(:tags, fn _repo, %{note: n} ->
+        {:ok, SukhiFedi.Tags.upsert_for_note(n.id, n.content)}
+      end)
       |> Outbox.enqueue_multi(
         :outbox_event,
         "sns.outbox.note.created",
@@ -123,18 +126,44 @@ defmodule SukhiFedi.Notes do
         attrs
 
       id ->
-        case parse_int(id) do
-          nil ->
-            attrs
-
-          int_id ->
-            case Repo.one(from n in Note, where: n.id == ^int_id, select: n.ap_id) do
-              nil -> attrs
-              ap_id -> Map.put(attrs, :in_reply_to_ap_id, ap_id)
-            end
+        case resolve_in_reply_to_ap_id(id) do
+          nil -> attrs
+          ap_id -> Map.put(attrs, :in_reply_to_ap_id, ap_id)
         end
     end
   end
+
+  # Three shapes accepted:
+  #   1. A local Note id (integer or numeric string) — look up the row's ap_id.
+  #   2. An http(s) URI for a remote note already mirrored locally
+  #      (`notes.ap_id` match) — return as-is.
+  #   3. An http(s) URI we've never seen — fetch + mirror via
+  #      `Federation.NoteFetcher`, then return the mirrored ap_id.
+  #
+  # On any fetch error we return nil rather than failing the whole
+  # status-create so the user's reply still posts (just without the
+  # threading link).
+  defp resolve_in_reply_to_ap_id(id) when is_binary(id) do
+    cond do
+      String.starts_with?(id, "http://") or String.starts_with?(id, "https://") ->
+        case SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(id) do
+          {:ok, %Note{ap_id: ap_id}} when is_binary(ap_id) -> ap_id
+          _ -> nil
+        end
+
+      true ->
+        case parse_int(id) do
+          nil -> nil
+          int_id -> Repo.one(from n in Note, where: n.id == ^int_id, select: n.ap_id)
+        end
+    end
+  end
+
+  defp resolve_in_reply_to_ap_id(id) when is_integer(id) do
+    Repo.one(from n in Note, where: n.id == ^id, select: n.ap_id)
+  end
+
+  defp resolve_in_reply_to_ap_id(_), do: nil
 
   defp list_media_ids(params) do
     raw =
@@ -813,7 +842,7 @@ defmodule SukhiFedi.Notes do
       select: n
     )
     |> Repo.all()
-    |> Repo.preload([:account, :media])
+    |> Repo.preload([:account, :media, :tags])
   end
 
   @doc "Same as list_bookmarks but for favourites (Reactions with the favourite emoji)."
@@ -833,7 +862,7 @@ defmodule SukhiFedi.Notes do
       select: n
     )
     |> Repo.all()
-    |> Repo.preload([:account, :media])
+    |> Repo.preload([:account, :media, :tags])
   end
 
   defp with_loaded_note(note_id, fun) do

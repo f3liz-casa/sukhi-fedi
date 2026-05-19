@@ -16,7 +16,7 @@ defmodule SukhiFedi.Timelines do
   import Ecto.Query
 
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Account, Follow, Note}
+  alias SukhiFedi.Schema.{Account, Follow, Note, Tag}
 
   @default_limit 20
   @max_limit 40
@@ -39,7 +39,7 @@ defmodule SukhiFedi.Timelines do
     |> where([n], n.visibility in ["public", "unlisted", "followers"])
     |> apply_paging(opts)
     |> Repo.all()
-    |> Repo.preload([:account, :media])
+    |> Repo.preload([:account, :media, :tags])
   end
 
   @doc """
@@ -61,7 +61,7 @@ defmodule SukhiFedi.Timelines do
     |> apply_paging(opts)
     |> maybe_only_media(opts[:only_media])
     |> Repo.all()
-    |> Repo.preload([:account, :media])
+    |> Repo.preload([:account, :media, :tags])
   end
 
   defp maybe_local_only(query, true) do
@@ -73,6 +73,33 @@ defmodule SukhiFedi.Timelines do
   end
 
   defp maybe_local_only(query, _), do: query
+
+  @doc """
+  Hashtag timeline: public notes tagged with `hashtag` (lower-cased,
+  no leading `#`).
+
+  Opts: `:max_id`, `:since_id`, `:min_id`, `:limit`, `:local` (default true).
+  """
+  @spec tag(String.t(), keyword() | map()) :: [Note.t()]
+  def tag(hashtag, opts \\ []) when is_binary(hashtag) do
+    opts = normalize_opts(opts)
+    local? = Map.get(opts, :local, true)
+    name = hashtag |> String.trim_leading("#") |> String.downcase()
+
+    base =
+      from n in Note,
+        join: nt in "note_tags",
+        on: nt.note_id == n.id,
+        join: t in Tag,
+        on: t.id == nt.tag_id,
+        where: t.name == ^name and n.visibility == "public"
+
+    base
+    |> maybe_local_only(local?)
+    |> apply_paging(opts)
+    |> Repo.all()
+    |> Repo.preload([:account, :media, :tags])
+  end
 
   # ── paging ───────────────────────────────────────────────────────────────
 
