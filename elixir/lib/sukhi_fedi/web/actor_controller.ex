@@ -7,7 +7,7 @@ defmodule SukhiFedi.Web.ActorController do
   def show(conn, _opts) do
     username = conn.path_params["name"]
     
-    case Repo.get_by(Account, username: username) do
+    case Repo.get_by(Account, username: username, domain: nil) do
       nil ->
         send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
       

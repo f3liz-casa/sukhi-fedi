@@ -34,6 +34,8 @@ defmodule SukhiFedi.AP.Instructions do
     insert_object(object_data)
     maybe_handle_dm(object_data)
     maybe_handle_relay_accept(object_data)
+    maybe_handle_follow_accept(object_data)
+    maybe_mirror_create_note(object_data)
     maybe_handle_pin_unpin(object_data)
     maybe_handle_delete(object_data)
     maybe_handle_undo(object_data)
@@ -95,9 +97,9 @@ defmodule SukhiFedi.AP.Instructions do
           |> String.split("/")
           |> List.last()
 
-        Repo.get_by(Account, username: username)
+        Repo.get_by(Account, username: username, domain: nil)
       else
-        Repo.get_by(Account, username: data["followee_username"])
+        Repo.get_by(Account, username: data["followee_username"], domain: nil)
       end
 
     if account && follow_data do
@@ -121,6 +123,7 @@ defmodule SukhiFedi.AP.Instructions do
   # leaving it as a bare ID string. Accept both shapes.
   defp extract_uri(uri) when is_binary(uri), do: uri
   defp extract_uri(%{"id" => id}) when is_binary(id), do: id
+  defp extract_uri(%{"@id" => id}) when is_binary(id), do: id
   defp extract_uri(_), do: nil
 
   defp maybe_enqueue_actor_update(followee_uri, inbox_url)
@@ -132,7 +135,7 @@ defmodule SukhiFedi.AP.Instructions do
       |> String.split("/")
       |> List.last()
 
-    case Repo.get_by(Account, username: username) do
+    case Repo.get_by(Account, username: username, domain: nil) do
       %Account{} = account ->
         update_json = SukhiFedi.AP.ActorJson.build_update(account)
 
@@ -161,7 +164,7 @@ defmodule SukhiFedi.AP.Instructions do
       |> String.split("/")
       |> List.last()
 
-    case Repo.get_by(Account, username: username) do
+    case Repo.get_by(Account, username: username, domain: nil) do
       %Account{id: account_id} ->
         from(n in Note,
           where: n.account_id == ^account_id and n.visibility == "public",
@@ -227,7 +230,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
+    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
 
     if account do
       %ConversationParticipant{}
@@ -244,7 +247,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp maybe_save_dm_note(recipient_uri, domain, object, _actor_uri, conversation_ap_id) do
     if String.contains?(recipient_uri, domain) do
       username = recipient_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-      account = Repo.get_by(Account, username: username)
+      account = Repo.get_by(Account, username: username, domain: nil)
 
       if account do
         attrs = %{
@@ -270,12 +273,135 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_relay_accept(_), do: :ok
 
+  # Inbound Accept(Follow): the remote followee accepted our outbound
+  # Follow. Flip the local Follow row from `pending` → `accepted` so
+  # home-timeline visibility kicks in.
+  #
+  # We match on the inner Follow's `actor` (= our local actor URI) and
+  # `object` (= remote followee URI, which maps to a shadow Account).
+  # If the Accept embeds only the Follow's URI (a string), we skip —
+  # we don't currently persist the outbound Follow's AP id.
+  defp maybe_handle_follow_accept(%{
+         "type" => "Accept",
+         "object" => %{"type" => "Follow"} = inner
+       }) do
+    with follower_uri when is_binary(follower_uri) <- extract_uri(inner["actor"]),
+         followee_uri when is_binary(followee_uri) <- extract_uri(inner["object"]),
+         %Account{id: followee_id} <- Repo.get_by(Account, actor_uri: followee_uri) do
+      from(f in Follow,
+        where: f.follower_uri == ^follower_uri and f.followee_id == ^followee_id
+      )
+      |> Repo.update_all(set: [state: "accepted"])
+
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_handle_follow_accept(_), do: :ok
+
+  # Inbound Create(Note) → mirror to the `notes` table so Timelines.home /
+  # Timelines.public can see it. DMs (no AS#Public in `to`/`cc`) are
+  # routed by `maybe_handle_dm`, which writes its own Note row scoped
+  # to the local recipient; we skip them here to avoid double-insert.
+  defp maybe_mirror_create_note(%{"type" => "Create", "object" => %{"type" => type} = note} = activity)
+       when type in ["Note", "Article", "Question"] do
+    if dm_addressing?(note) do
+      :ok
+    else
+      ap_id = note["id"]
+      attributed_to = extract_uri(note["attributedTo"]) || extract_uri(activity["actor"])
+
+      with true <- is_binary(ap_id),
+           true <- is_binary(attributed_to),
+           {:ok, %Account{id: account_id}} <- resolve_or_ingest_actor(attributed_to) do
+        attrs = %{
+          "account_id" => account_id,
+          "content" => note["content"] || "",
+          "ap_id" => ap_id,
+          "visibility" => visibility_from(note),
+          "in_reply_to_ap_id" => extract_uri(note["inReplyTo"])
+        }
+
+        %Note{}
+        |> Note.changeset(attrs)
+        |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id)
+      else
+        _ -> :ok
+      end
+    end
+  end
+
+  defp maybe_mirror_create_note(_), do: :ok
+
+  # AS#Public in to/cc ⇒ not a DM. We treat absence-of-public as the DM
+  # signal (matches `maybe_handle_dm`'s heuristic).
+  defp dm_addressing?(note) do
+    to = normalize_collection(note["to"] || [])
+    cc = normalize_collection(note["cc"] || [])
+    audience = to ++ cc
+
+    audience != [] and
+      Enum.all?(audience, fn r -> r != @public_ns and r != @as_public end)
+  end
+
+  defp visibility_from(note) do
+    to = normalize_collection(note["to"] || [])
+    cc = normalize_collection(note["cc"] || [])
+
+    public_in_to = Enum.any?(to, &public?/1)
+    public_in_cc = Enum.any?(cc, &public?/1)
+    has_followers_addr = Enum.any?(to ++ cc, &String.ends_with?(&1 || "", "/followers"))
+
+    cond do
+      public_in_to -> "public"
+      public_in_cc -> "unlisted"
+      has_followers_addr -> "followers"
+      true -> "direct"
+    end
+  end
+
+  defp public?(uri) when is_binary(uri), do: uri == @public_ns or uri == @as_public
+  defp public?(_), do: false
+
+  # Look up an existing shadow Account by actor_uri, otherwise fetch +
+  # upsert via the federation client. Local actor URIs (host == ours)
+  # are matched by username.
+  defp resolve_or_ingest_actor(actor_uri) do
+    domain = SukhiFedi.Config.domain!()
+
+    cond do
+      String.contains?(actor_uri, domain) ->
+        username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+
+        case Repo.get_by(Account, username: username, domain: nil) do
+          %Account{} = a -> {:ok, a}
+          nil -> {:error, :no_local_actor}
+        end
+
+      true ->
+        case Repo.get_by(Account, actor_uri: actor_uri) do
+          %Account{} = a ->
+            {:ok, a}
+
+          nil ->
+            with {:ok, json} <- SukhiFedi.Federation.ActorFetcher.fetch(actor_uri),
+                 {:ok, %Account{} = a} <- SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(json) do
+              {:ok, a}
+            else
+              _ -> {:error, :ingest_failed}
+            end
+        end
+    end
+  end
+
   # Handle Add/Remove targeting a featured collection (pinned/unpinned posts).
   defp maybe_handle_pin_unpin(%{"type" => "Add", "actor" => actor_uri, "object" => note_uri, "target" => target_uri})
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
+    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -287,7 +413,7 @@ defmodule SukhiFedi.AP.Instructions do
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username), else: nil
+    account = if String.contains?(actor_uri, domain), do: Repo.get_by(Account, username: username, domain: nil), else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -354,7 +480,7 @@ defmodule SukhiFedi.AP.Instructions do
 
     if String.contains?(uri, domain) do
       username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-      case Repo.get_by(Account, username: username) do
+      case Repo.get_by(Account, username: username, domain: nil) do
         nil -> nil
         account -> account.id
       end

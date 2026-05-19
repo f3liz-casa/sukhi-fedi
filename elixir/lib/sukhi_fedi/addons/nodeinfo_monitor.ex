@@ -221,7 +221,7 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   fresh aggregate feed.
   """
   def publish_summary_to_default_watcher do
-    case Repo.get_by(Account, username: "watcher") do
+    case Repo.get_by(Account, username: "watcher", domain: nil) do
       nil ->
         Logger.debug("NodeinfoMonitor: no default @watcher account; skipping summary")
         :no_default_watcher

@@ -103,8 +103,9 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
   def lookup(req) do
     q = parse_query(req[:query])
     acct = q["acct"] || ""
+    resolve? = q["resolve"] in ["true", "1"]
 
-    case GatewayRpc.call(SukhiFedi.Accounts, :lookup_by_acct, [acct]) do
+    case GatewayRpc.call(SukhiFedi.Accounts, :lookup_by_acct, [acct, [resolve: resolve?]]) do
       {:ok, {:ok, account}} ->
         ok(200, MastodonAccount.render(account, counts_for(account.id)))
 

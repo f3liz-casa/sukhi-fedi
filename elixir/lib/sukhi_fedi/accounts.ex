@@ -14,7 +14,10 @@ defmodule SukhiFedi.Accounts do
   # ── reads ─────────────────────────────────────────────────────────────────
 
   def get_account_by_username(username) do
-    Repo.get_by(Account, username: username)
+    # Local-only: a remote actor `alice@social.example` is stored with
+    # the same `username` field but `domain IS NOT NULL`, so we have to
+    # filter by `domain IS NULL` to disambiguate.
+    Repo.get_by(Account, username: username, domain: nil)
   end
 
   @doc """
@@ -40,32 +43,52 @@ defmodule SukhiFedi.Accounts do
   end
 
   @doc """
-  Resolve a Mastodon-style `acct:` lookup. Today this is local-only.
-  Remote `user@host` returns `{:error, :not_found}` until WebFinger
-  fan-out lands in a future PR.
+  Resolve a Mastodon-style `acct:` lookup.
+
+  Default: local-only DB read. Pass `resolve: true` to fan out via
+  WebFinger + ActorFetcher and upsert a remote shadow Account on miss
+  (Mastodon's `?resolve=true` behaviour).
   """
-  @spec lookup_by_acct(String.t()) :: {:ok, Account.t()} | {:error, :not_found}
-  def lookup_by_acct(acct) when is_binary(acct) do
+  @spec lookup_by_acct(String.t(), keyword()) ::
+          {:ok, Account.t()} | {:error, :not_found | term()}
+  def lookup_by_acct(acct, opts \\ []) when is_binary(acct) do
     bare = String.trim_leading(acct, "@")
+    local_domain = SukhiFedi.Config.domain!()
+    resolve? = Keyword.get(opts, :resolve, false)
 
     case String.split(bare, "@", parts: 2) do
       [username] ->
-        case get_account_by_username(username) do
-          nil -> {:error, :not_found}
-          a -> {:ok, a}
-        end
+        local_lookup(username)
+
+      [username, host] when host == local_domain ->
+        local_lookup(username)
 
       [username, host] ->
-        local_domain = SukhiFedi.Config.domain!()
-
-        if host == local_domain do
-          case get_account_by_username(username) do
-            nil -> {:error, :not_found}
-            a -> {:ok, a}
-          end
-        else
-          {:error, :not_found}
+        case Repo.get_by(Account, username: username, domain: host) do
+          %Account{} = a -> {:ok, a}
+          nil when resolve? -> resolve_remote(bare)
+          nil -> {:error, :not_found}
         end
+    end
+  end
+
+  defp local_lookup(username) do
+    case get_account_by_username(username) do
+      nil -> {:error, :not_found}
+      a -> {:ok, a}
+    end
+  end
+
+  defp resolve_remote(handle) do
+    alias SukhiFedi.Federation.{ActorFetcher, RemoteAccounts, WebFinger}
+
+    with {:ok, self_url} <- WebFinger.resolve_self(handle),
+         {:ok, actor_json} <- ActorFetcher.fetch(self_url),
+         {:ok, %Account{} = a} <- RemoteAccounts.upsert_from_actor_json(actor_json) do
+      {:ok, a}
+    else
+      {:error, _} = e -> e
+      _ -> {:error, :resolve_failed}
     end
   end
 

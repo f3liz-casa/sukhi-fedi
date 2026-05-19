@@ -37,7 +37,7 @@ defmodule SukhiFedi.Addons.PinnedNotes do
   end
 
   def list_for_username(username) do
-    account = Repo.get_by(Account, username: username)
+    account = Repo.get_by(Account, username: username, domain: nil)
     if account, do: list_for_account(account.id), else: []
   end
 

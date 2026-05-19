@@ -10,7 +10,18 @@ defmodule SukhiDelivery.Schema.Account do
 
   schema "accounts" do
     field :username, :string
+    field :display_name, :string
+    field :summary, :string
+    field :public_key_pem, :string
+    field :avatar_url, :string
+    field :banner_url, :string
     field :private_key_jwk, :map
+    # Remote-actor mirror columns (gateway-side migration). NULL for
+    # locally-hosted accounts; set for upserted remote shadows.
+    field :domain, :string
+    field :actor_uri, :string
+    field :inbox_url, :string
+    field :shared_inbox_url, :string
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end

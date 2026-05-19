@@ -18,8 +18,9 @@ defmodule SukhiDelivery.Outbox.Consumer do
       sns.outbox.remove.created     → Bun `remove` (featured) → followers
       sns.outbox.follow.backfill    → Bun `note` translator   → single new-follower inbox
 
-  Skipped today (TODO):
-    * `sns.outbox.actor.updated` — needs Bun-side `Update(Actor)` wrapper
+      sns.outbox.actor.updated      → AP.ActorJson Update(Person)  → followers + relays
+
+  Ignored:
     * `sns.outbox.oauth.app_registered` — local-only, no federation
 
   ## Stream cleanup
@@ -32,11 +33,10 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   ## Recipient inbox resolution
 
-  Convention-based: `<actor_uri>/inbox`. Mastodon and most major
-  fediverse software follow this. For implementations that publish
-  a different inbox URL in their actor JSON, the gateway's
-  `ActorFetcher` (not yet mirrored on the delivery side) would be
-  the proper resolver — also tracked as a follow-up.
+  Local actor (`actor_uri` host == ours) → `<actor_uri>/inbox`
+  (no network hop). Remote actor → `Federation.ActorFetcher.inbox_for/1`,
+  which prefers `endpoints.sharedInbox` then `inbox` from the
+  remote's actor JSON and falls back to the convention.
   """
 
   use GenServer
@@ -130,10 +130,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   def dispatch("sns.outbox.remove.created", p), do: handle_collection_op(p, :remove)
   def dispatch("sns.outbox.follow.backfill", p), do: handle_follow_backfill(p)
 
-  def dispatch("sns.outbox.actor.updated", _p) do
-    # TODO: Update(Actor) translator on Bun side
-    :skipped
-  end
+  def dispatch("sns.outbox.actor.updated", p), do: handle_actor_updated(p)
 
   def dispatch("sns.outbox.oauth.app_registered", _p) do
     # local audit only — no federation
@@ -207,9 +204,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
         followee = Repo.get(Account, followee_id)
 
         if followee do
+          {followee_uri, followee_inbox} = followee_endpoints(followee)
           domain = SukhiDelivery.Config.domain!()
-          followee_uri = "https://#{domain}/users/#{followee.username}"
-          followee_inbox = "#{followee_uri}/inbox"
 
           activity_id =
             "https://#{domain}/follows/#{p["follow_id"]}#{if mode == :undo, do: "/undo", else: ""}"
@@ -384,6 +380,32 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   defp handle_follow_backfill(_), do: :missing_fields
 
+  defp handle_actor_updated(%{"account_id" => account_id}) do
+    case Repo.get(Account, parse_id(account_id)) do
+      nil ->
+        :no_actor
+
+      %Account{} = account ->
+        actor_uri = local_actor_uri(account)
+        recipients = followers_inboxes(actor_uri) ++ relay_inboxes()
+
+        update_json = SukhiDelivery.AP.ActorJson.build_update(account)
+        activity_id = update_json["id"]
+
+        enqueue_jobs(update_json, actor_uri, activity_id, recipients)
+    end
+  end
+
+  defp handle_actor_updated(_), do: :missing_fields
+
+  defp local_actor_uri(%Account{username: u}) do
+    domain = SukhiDelivery.Config.domain!()
+    "https://#{domain}/users/#{u}"
+  end
+
+  defp parse_id(id) when is_integer(id), do: id
+  defp parse_id(id) when is_binary(id), do: String.to_integer(id)
+
   # ── translation + fan-out ────────────────────────────────────────────────
 
   defp translate_and_fanout(object_type, payload, actor_uri, activity_id, inboxes, opts \\ []) do
@@ -458,7 +480,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
     if String.starts_with?(follower_uri, expected_prefix) do
       username = String.replace_prefix(follower_uri, expected_prefix, "")
 
-      case Repo.get_by(Account, username: username) do
+      case Repo.get_by(Account, username: username, domain: nil) do
         nil -> nil
         _ -> %{actor_uri: follower_uri, username: username}
       end
@@ -475,7 +497,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
     if String.starts_with?(actor_uri, expected_prefix) do
       username = String.replace_prefix(actor_uri, expected_prefix, "")
 
-      case Repo.get_by(Account, username: username) do
+      case Repo.get_by(Account, username: username, domain: nil) do
         nil ->
           []
 
@@ -523,10 +545,32 @@ defmodule SukhiDelivery.Outbox.Consumer do
   defp note_author_inbox(_), do: []
 
   defp inbox_for_actor_uri(actor_uri) when is_binary(actor_uri) do
-    "#{actor_uri}/inbox"
+    domain = SukhiDelivery.Config.domain!()
+
+    if String.contains?(actor_uri, domain) do
+      # Local actor: skip the network hop, use convention.
+      "#{actor_uri}/inbox"
+    else
+      # Remote actor: prefer sharedInbox / actor.inbox from the actor JSON.
+      SukhiDelivery.Federation.ActorFetcher.inbox_for(actor_uri)
+    end
   end
 
   defp inbox_for_actor_uri(_), do: nil
+
+  # Local accounts (domain IS NULL) use the convention; remote shadow
+  # accounts carry the actual `actor_uri` + `inbox_url` (or
+  # `shared_inbox_url`) from the actor JSON.
+  defp followee_endpoints(%Account{domain: nil, username: u}) do
+    domain = SukhiDelivery.Config.domain!()
+    uri = "https://#{domain}/users/#{u}"
+    {uri, "#{uri}/inbox"}
+  end
+
+  defp followee_endpoints(%Account{actor_uri: uri} = a) when is_binary(uri) do
+    inbox = a.shared_inbox_url || a.inbox_url || "#{uri}/inbox"
+    {uri, inbox}
+  end
 
   defp relay_inboxes, do: Relays.get_active_inbox_urls()
 

@@ -24,7 +24,41 @@ defmodule SukhiFedi.Schema.Account do
     field :suspended_by_id, :id
     field :suspension_reason, :string
 
+    # Remote-actor mirror columns. `domain IS NULL` ⇔ local account.
+    # For remote rows `actor_uri` is the canonical AP id and `inbox_url`
+    # / `shared_inbox_url` come from the actor JSON.
+    field :domain, :string
+    field :actor_uri, :string
+    field :inbox_url, :string
+    field :shared_inbox_url, :string
+    field :public_key_id, :string
+    field :last_fetched_at, :utc_datetime
+
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
+  end
+
+  @doc """
+  Changeset used by `RemoteAccounts.upsert_from_actor_json/1` to mirror
+  a remote actor into the local directory. `domain` must be set
+  (NOT NULL ⇔ remote). Idempotent on `actor_uri`.
+  """
+  def changeset_remote(account, attrs) do
+    account
+    |> cast(attrs, [
+      :username,
+      :domain,
+      :display_name,
+      :summary,
+      :actor_uri,
+      :inbox_url,
+      :shared_inbox_url,
+      :public_key_id,
+      :public_key_pem,
+      :avatar_url,
+      :banner_url,
+      :last_fetched_at
+    ])
+    |> validate_required([:username, :domain, :actor_uri])
   end
 
   @doc """

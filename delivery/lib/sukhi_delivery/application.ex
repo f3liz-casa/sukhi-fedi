@@ -9,6 +9,7 @@ defmodule SukhiDelivery.Application do
     children = [
       SukhiDelivery.PromEx,
       SukhiDelivery.Repo,
+      SukhiDelivery.Cache.Ets,
       {Gnat.ConnectionSupervisor, nats_connection_settings()},
       # Outbound HTTP pool for remote inbox POSTs. Tune via
       # `sukhi_delivery_pool_utilization` (stays near 1.0 → scale up).

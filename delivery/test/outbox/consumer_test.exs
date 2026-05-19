@@ -5,12 +5,9 @@ defmodule SukhiDelivery.Outbox.ConsumerTest do
   alias SukhiDelivery.Outbox.Consumer
 
   describe "handle_event/2 — routing without DB" do
-    test "actor.updated is explicitly skipped" do
-      assert :skipped =
-               Consumer.handle_event(
-                 "sns.outbox.actor.updated",
-                 ~s({"account_id":1,"username":"alice"})
-               )
+    test "actor.updated without account_id field → :missing_fields" do
+      # Hits the routing surface without touching the DB.
+      assert :missing_fields = Consumer.dispatch("sns.outbox.actor.updated", %{})
     end
 
     test "oauth.app_registered is explicitly ignored (local-only)" do

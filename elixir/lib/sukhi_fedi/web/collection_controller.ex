@@ -16,7 +16,7 @@ defmodule SukhiFedi.Web.CollectionController do
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username)
+    account = Repo.get_by(Account, username: username, domain: nil)
 
     if account do
       items = Social.list_followers(account.id)
@@ -43,7 +43,7 @@ defmodule SukhiFedi.Web.CollectionController do
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username)
+    account = Repo.get_by(Account, username: username, domain: nil)
 
     if account do
       notes =
@@ -101,7 +101,7 @@ defmodule SukhiFedi.Web.CollectionController do
     domain = SukhiFedi.Config.domain!()
     actor_uri = "https://#{domain}/users/#{username}"
 
-    account = Repo.get_by(Account, username: username)
+    account = Repo.get_by(Account, username: username, domain: nil)
 
     if account do
       follower_uri = actor_uri

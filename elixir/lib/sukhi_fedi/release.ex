@@ -188,7 +188,7 @@ defmodule SukhiFedi.Release do
       alias SukhiFedi.Addons.NodeinfoMonitor
       alias SukhiFedi.Schema.{Account, Note}
 
-      case Repo.get_by(Account, username: "watcher") do
+      case Repo.get_by(Account, username: "watcher", domain: nil) do
         nil ->
           :no_default_watcher
 

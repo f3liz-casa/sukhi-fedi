@@ -20,7 +20,7 @@ defmodule SukhiDelivery.Delivery.FollowersSync do
   """
   def compute_digest(actor_uri) do
     username = username_from_uri(actor_uri)
-    account = Repo.get_by(Account, username: username)
+    account = Repo.get_by(Account, username: username, domain: nil)
 
     if account do
       follower_uris =

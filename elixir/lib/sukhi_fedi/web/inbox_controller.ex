@@ -74,7 +74,7 @@ defmodule SukhiFedi.Web.InboxController do
 
     with username when is_binary(username) <- conn.path_params["name"],
          %Account{private_key_jwk: priv, public_key_jwk: pub} when not is_nil(priv) <-
-           Repo.get_by(Account, username: username) do
+           Repo.get_by(Account, username: username, domain: nil) do
       %{
         keyId: "https://#{domain}/users/#{username}#main-key",
         privateJwk: priv,

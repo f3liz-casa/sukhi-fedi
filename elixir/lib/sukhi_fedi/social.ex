@@ -232,9 +232,15 @@ defmodule SukhiFedi.Social do
   defp load_target_uris(target_ids) do
     domain = SukhiFedi.Config.domain!()
 
-    from(a in Account, where: a.id in ^target_ids, select: {a.id, a.username})
+    from(a in Account,
+      where: a.id in ^target_ids,
+      select: {a.id, a.username, a.actor_uri}
+    )
     |> Repo.all()
-    |> Enum.map(fn {id, username} -> {id, "https://#{domain}/users/#{username}"} end)
+    |> Enum.map(fn
+      {id, _u, actor_uri} when is_binary(actor_uri) -> {id, actor_uri}
+      {id, username, _} -> {id, "https://#{domain}/users/#{username}"}
+    end)
   end
 
   defp local_actor_uri(%Account{username: u}) do

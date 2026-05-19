@@ -15,28 +15,15 @@ what got done. Cross-link to the PR/issue that closes it if it helps.
       uses plain `Gnat.sub`, so the OUTBOX stream grows forever (no ACK). Wire a
       durable JetStream consumer with explicit ACK. Worker idempotency
       (`delivery_receipts`) already covers the at-least-once redelivery case.
-- [ ] **`sns.outbox.actor.updated` translator.** Bun has the `actor` builder but
-      no `Update(Actor)` wrapper. Add one and let `Outbox.Consumer` route
-      `actor.updated` to it (currently `:skipped`).
-- [ ] **`ActorFetcher` mirror on the delivery side.** Today inbox URL is derived
-      by convention `<actor_uri>/inbox`. Mastodon and most software follow this,
-      but spec-compliant resolution requires fetching the actor JSON for the
-      `inbox` field. Mirror the gateway's `SukhiFedi.Federation.ActorFetcher`
-      with an ETS cache.
 - [ ] **Local-target follow auto-Accept.** When a local user follows another
       local user, `request_follow/2` writes a `Follow(state: pending)` and an
       outbox event — but no local Accept loop. Add an inbox-side shortcut so
       local follows go straight to `accepted` without the HTTP round-trip.
-- [ ] **Inbound Create(Note) → write a `notes` row.** Currently
-      `AP.Instructions` only stores raw JSON in `objects` (except for DMs).
-      `SukhiFedi.Timelines` queries `notes` so remote content never appears in
-      home/public timelines until a Note row exists for it. Either:
-      (a) write a Note row alongside Object on inbound Create, or
-      (b) switch Timelines to read Object too.
 - [ ] **Reply to a remote note.** `Notes.create_status/2` only resolves
       `in_reply_to_id` against local Note ids. Replying to a remote thread
       needs the remote post mirrored locally first; either auto-mirror on
-      lookup or surface a 404.
+      lookup or surface a 404. (Inbound Create(Note) already mirrors remote
+      posts into `notes`; this is about local→remote reply resolution.)
 - [ ] **DM (`visibility: "direct"`) support.** `create_status/2` rejects direct
       visibility today. Needs mention extraction from content + addressing
       derivation; Bun's `dm` translator is already in place.

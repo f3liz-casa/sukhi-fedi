@@ -22,7 +22,7 @@ defmodule SukhiFedi.Web.NoteController do
     actor_uri = "https://#{domain}/users/#{username}"
 
     with {note_id, ""} <- Integer.parse(note_id_raw || ""),
-         %Account{id: aid} <- Repo.get_by(Account, username: username),
+         %Account{id: aid} <- Repo.get_by(Account, username: username, domain: nil),
          %Note{} = note <- Repo.get(Note, note_id),
          true <- note.account_id == aid,
          true <- note.visibility == "public" do
