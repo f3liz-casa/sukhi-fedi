@@ -123,83 +123,33 @@ IAM role か。MVP は env でいい。
 
 ---
 
-## Q6. Snowflake id 移行 — タイミング
+## Q9. Admin REST — `:admin_api` を新 addon にするか
 
-**Goal.** `MastodonAccount`/`MastodonStatus` の id がスケール時に
-他鯖と被らないようにする。
-
-**候補:**
-
-1. **当面 bigserial のまま、`SukhiApi.Views.Id.encode/1` で出力だけラップ**
-   (**Recommended** for now)。`encode/1` は既に通っている。
-2. **`bigserial → bigint` migration で Snowflake**。全 PK 1-shot ALTER は
-   ダウンタイム要る。シャドーカラム → backfill → swap が安全。
-3. **新規 PK 全部 ULID.** Mastodon クライアントが文字列 id を許す前提なので
-   行ける。既存データの一括変換が必要。
-
-**判定.** ピアリング規模になるまで 1 で十分。**この問いは結論済み、
-TODO 削除候補。** 削るなら下記の動作を保証することだけ確認。
-
----
-
-## Q7. Per-token rate limit — どこで計測するか
-
-**Goal.** 認証済み REST に 300 req / 5 min。
+**Goal.** `/api/v1/admin/*` のスコープ整理。block/mute/report/
+domain_blocks のユーザー面はすでに `MastodonModeration` capability で
+公開済み(`Moderation` addon に乗せている)。admin 面は権限スコープが
+別物なので扱いを揃える必要がある。
 
 **候補:**
 
-1. **`:sukhi_api` ノードの `RateLimitPlug` を token-key 対応に拡張**
-   (**Recommended**)。既存の per-IP と同じ `:ets` ストア。
-2. **gateway 側で計測.** API → gateway RPC のフロアで止まるが、API ノードで
-   さばける軽い読みリクエストまで gateway へ届いてしまう。却下。
-3. **Redis に外出し.** マルチノードの :sukhi_api ならこちらが正しいが、
-   現状シングルノード前提。1 で出してから水平展開時に変える。
-
-**影響範囲.** `:sukhi_api` の RateLimitPlug 拡張のみ。
-
----
-
-## Q8. 通知 (Notifications) — 生成元
-
-**Goal.** `GET /api/v1/notifications` を返せる。
-
-**候補:**
-
-1. **`notifications` テーブル + inbox 経路で書き込み**(**Recommended**)。
-   `AP.Instructions` が Create/Like/Follow/Announce を入れる際に
-   通知行を Multi で同時挿入。pull 専用、push は別問題。
-2. **既存テーブル (`reactions`, `boosts`, `follows`) を JOIN して合成.**
-   schema 追加なしで読めるが、`dismiss` / `clear` が表現できず詰む。
-3. **WebPush と一体で実装.** スコープが二倍。後回し。
-
-**影響範囲.** schema 1 + capability 1 + Instructions 4 箇所追記。
-`SukhiFedi.Notifications` モジュール新設。
-
----
-
-## Q9. Moderation REST — addon の境界
-
-**Goal.** `block/mute/report/domain_blocks` と admin 一式。
-
-**候補:**
-
-1. **既存 `Moderation` addon に capability を追加**(**Recommended** for
-   block/mute/report/domain_blocks)。
-2. **新 addon `:admin_api`** を作って admin 系だけ分ける。権限スコープが
-   違うので分割は妥当。
+1. **新 addon `:admin_api`** を切り出して `Moderation` の admin 系
+   capability をそこへ分離(**Recommended**)。`enabled_addons` で
+   admin 面だけオン/オフできる。
+2. **`Moderation` のまま admin 系も同居.** capability を 1 ファイルに
+   まとめて運用シンプル。スコープは route 単位で分かれる。
 3. **両方コア化.** addon 思想が崩れる。却下。
 
-**影響範囲.** capability 群追加、`SukhiFedi.Addons.Moderation` 拡張、
-admin は別ファイル群。
+**影響範囲.** 1 → 新 addon ファイル + capability 群 +
+`SukhiFedi.Addons.Moderation` の admin ヘルパーを移譲。
 
 ---
 
 ## 結論を要するメタ問い
 
 - **`/goal` で言う「Misskey と通信できる」のスコープは「フォロー +
-  受信 + 投稿の最小ループ」で達成しているか、それとも DM / reaction
-  / 通知まで揃うか?** 現状の commit は前者。後者なら DM (Q4) と通知
-  (Q8) と Misskey 互換 capability (Q3) が次の優先。
-- **デプロイは 1 ホスト想定か複数ホストか?** Q2 / Q7 の答えが変わる。
+  受信 + 投稿 + 通知 + reblog/like 通知」まで達成(現状)。残るのは
+  DM (Q4) と Misskey ネイティブ surface (Q3)。どちらを次にする?**
+- **デプロイは 1 ホスト想定か複数ホストか?** Q2 (streaming 配置) の
+  答えが変わる。
 - **検索の主目的は誰の体験か?** 自分のタイムライン振り返り→ FTS 不要、
   サーバー横断検索→ Meilisearch、Q1 の判定が変わる。

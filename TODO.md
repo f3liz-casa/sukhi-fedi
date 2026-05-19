@@ -33,11 +33,9 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 - [ ] **Push delivery side.** `Addons.WebPush.send_notification/2`
       is still a stub; subscribe/get/put/delete REST is live, but
       no Notification → Push happens yet. Needs a push-web library
-      + VAPID encryption.
-- [ ] **`poll[…]` params in `create_status`.** Standalone polls
-      REST is live; status creation can't carry a poll definition
-      yet. Wire `poll[options][]`, `poll[expires_in]`,
-      `poll[multiple]`.
+      + VAPID encryption. Pairs with an Oban worker that consumes
+      notification rows and POSTs each subscription's
+      encrypted-payload endpoint.
 - [ ] **Scheduled statuses.** `/api/v1/scheduled_statuses` — no
       table yet. Same Multi+outbox pattern as `create_status`, with
       an Oban-scheduled `publish_at` worker.
@@ -71,7 +69,7 @@ Shares the existing contexts; only the view layer differs.
 - [ ] **`/api/v1/admin/*`** — accounts, reports, domain_blocks.
       `SukhiFedi.Addons.Moderation` already has the writes (suspend,
       resolve_report, block_instance). New addon
-      `:admin_api` (per [OPEN_QUESTIONS Q9](OPEN_QUESTIONS.md#q9-moderation-rest--addon-の境界)) so
+      `:admin_api` (per [OPEN_QUESTIONS Q9](OPEN_QUESTIONS.md#q9-admin-rest--admin_api-を新-addon-にするか)) so
       admin can be toggled independently from user-facing
       block/mute/report.
 
@@ -82,16 +80,3 @@ Shares the existing contexts; only the view layer differs.
       `SukhiFedi.Addons.Media.generate_upload_url/3` over a new
       capability that returns `{upload_url, fields}`. Design in
       [OPEN_QUESTIONS Q5](OPEN_QUESTIONS.md#q5-メディア-8-mib--presigned-url-の-capability-形).
-- [ ] **Snowflake id migration.** Deferred until peering at scale —
-      see [OPEN_QUESTIONS Q6](OPEN_QUESTIONS.md#q6-snowflake-id-移行--タイミング). Currently `bigserial` PKs are
-      rendered as decimal strings via `SukhiApi.Views.Id.encode/1`,
-      which is enough for Mastodon-client wire compatibility.
-- [ ] **HTTP push delivery worker.** Pair with the Push REST
-      surface above. Oban worker that consumes notification rows
-      and POSTs to the encrypted-payload endpoint of each
-      subscription.
-
-## Cleanup
-
-- [ ] **`SukhiFedi.Release` `@doc` redefinition warning** at
-      `lib/sukhi_fedi/release.ex:51`. Pre-existing.

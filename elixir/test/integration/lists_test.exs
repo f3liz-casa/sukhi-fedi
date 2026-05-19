@@ -5,7 +5,7 @@ defmodule SukhiFedi.Integration.ListsTest do
   @moduletag :integration
 
   alias SukhiFedi.{Lists, Notes, Social}
-  alias SukhiFedi.Schema.{Account, Follow}
+  alias SukhiFedi.Schema.Account
 
   describe "create/3 + list_for/1" do
     test "owner-scoped — alice's lists don't show in bob's index" do
@@ -86,8 +86,4 @@ defmodule SukhiFedi.Integration.ListsTest do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()
   end
-
-  # Suppress unused alias warning — Follow is referenced for clarity
-  # in the test moduledoc above but not strictly needed at runtime.
-  _ = Follow
 end

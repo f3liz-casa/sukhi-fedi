@@ -9,7 +9,7 @@ defmodule SukhiFedi.Accounts do
 
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
-  alias SukhiFedi.Schema.{Account, Boost, Follow, Note, Session}
+  alias SukhiFedi.Schema.{Account, Follow, Note, Session}
 
   # ── reads ─────────────────────────────────────────────────────────────────
 
@@ -422,7 +422,4 @@ defmodule SukhiFedi.Accounts do
     end)
   end
 
-  # Suppress "unused alias" — Boost will be referenced by a future PR
-  # (favourite/reblog) but kept here so the alias matches the schema set.
-  _ = Boost
 end
