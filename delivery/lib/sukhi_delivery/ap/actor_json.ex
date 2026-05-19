@@ -12,7 +12,8 @@ defmodule SukhiDelivery.AP.ActorJson do
 
   @spec build_person(Account.t()) :: map()
   def build_person(%Account{} = account) do
-    actor_uri = actor_uri(account)
+    domain = SukhiDelivery.Config.domain!()
+    actor_uri = "https://#{domain}/users/#{account.username}"
 
     %{
       "@context" => [
@@ -33,6 +34,7 @@ defmodule SukhiDelivery.AP.ActorJson do
       "followers" => "#{actor_uri}/followers",
       "following" => "#{actor_uri}/following",
       "featured" => "#{actor_uri}/featured",
+      "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
       "publicKey" => %{
         "id" => "#{actor_uri}#main-key",
         "owner" => actor_uri,

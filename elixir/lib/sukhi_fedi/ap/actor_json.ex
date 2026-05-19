@@ -34,6 +34,7 @@ defmodule SukhiFedi.AP.ActorJson do
       "followers" => "#{actor_uri}/followers",
       "following" => "#{actor_uri}/following",
       "featured" => "#{actor_uri}/featured",
+      "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
       "publicKey" => %{
         "id" => "#{actor_uri}#main-key",
         "owner" => actor_uri,

@@ -31,6 +31,10 @@ defmodule SukhiFedi.Web.ActorController do
           "followers" => "#{actor_uri}/followers",
           "following" => "#{actor_uri}/following",
           "featured" => "#{actor_uri}/featured",
+          # Misskey + Mastodon read this to fan out one POST per
+          # peer-domain instead of one per follower; without it
+          # they fall back to per-user inbox and we get hammered.
+          "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
           "publicKey" => %{
             "id" => "#{actor_uri}#main-key",
             "owner" => actor_uri,

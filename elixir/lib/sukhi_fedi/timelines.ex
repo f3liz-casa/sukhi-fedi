@@ -43,23 +43,36 @@ defmodule SukhiFedi.Timelines do
   end
 
   @doc """
-  Public timeline: every locally-authored note with visibility=public.
-  Newest first.
+  Public timeline: every public-visibility note authored by a local
+  account. Remote posts (`accounts.domain IS NOT NULL`) are excluded
+  by default; pass `local: false` to include them once the federated
+  TL is exposed.
 
-  Opts: `:max_id`, `:since_id`, `:min_id`, `:limit`,
-  `:local` (default true; remote support deferred), `:only_media`.
+  Opts: `:max_id`, `:since_id`, `:min_id`, `:limit`, `:local`
+  (default `true`), `:only_media`.
   """
   @spec public(keyword() | map()) :: [Note.t()]
   def public(opts \\ []) do
     opts = normalize_opts(opts)
+    local? = Map.get(opts, :local, true)
 
-    Note
-    |> where([n], n.visibility == "public")
+    from(n in Note, where: n.visibility == "public")
+    |> maybe_local_only(local?)
     |> apply_paging(opts)
     |> maybe_only_media(opts[:only_media])
     |> Repo.all()
     |> Repo.preload([:account, :media])
   end
+
+  defp maybe_local_only(query, true) do
+    from(n in query,
+      join: a in Account,
+      on: a.id == n.account_id,
+      where: is_nil(a.domain)
+    )
+  end
+
+  defp maybe_local_only(query, _), do: query
 
   # ── paging ───────────────────────────────────────────────────────────────
 
