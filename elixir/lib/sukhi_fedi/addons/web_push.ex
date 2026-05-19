@@ -30,6 +30,30 @@ defmodule SukhiFedi.Addons.WebPush do
     Repo.all(from p in PushSubscription, where: p.account_id == ^account_id)
   end
 
+  @doc """
+  Mastodon's API expects one subscription per access token, but our
+  schema is per (account, endpoint). For now we surface the most
+  recent subscription for the account — clients re-POST whenever the
+  browser hands them a new endpoint, so "newest" is a reasonable
+  proxy.
+  """
+  def get_subscription_for(account_id) when is_integer(account_id) do
+    Repo.one(
+      from p in PushSubscription,
+        where: p.account_id == ^account_id,
+        order_by: [desc: p.id],
+        limit: 1
+    )
+  end
+
+  @doc """
+  Server VAPID key the client needs to encrypt push messages with.
+  Returned by `GET /api/v1/instance` (under `configuration.urls`) and
+  by `POST /api/v1/push/subscription` on success. Reads from
+  `:sukhi_fedi, :vapid_public_key` config; nil if unconfigured.
+  """
+  def server_key, do: Application.get_env(:sukhi_fedi, :vapid_public_key)
+
   def send_notification(account_id, _notification) do
     # Placeholder until a push-web library is wired up. Subscriptions are
     # persisted; delivery is a future task.

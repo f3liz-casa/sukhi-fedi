@@ -1,133 +1,97 @@
 # TODO
 
-Tracking surface for work the Mastodon-MVP push (PR1–PR5) deferred. Items are
-grouped by where they sit in the architecture, not by priority — pick whatever
-unblocks the next user-facing thing.
+Surface for work still missing. Done items have been pruned —
+`git log` is the diary, this file is the punch-list.
 
-When you finish an item, delete it; this file is for what's *missing*, not for
-what got done. Cross-link to the PR/issue that closes it if it helps.
+Design-deferred items (where to go *next* depends on which way we
+turn) live in [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md). The two
+files are complementary: TODO is "do this", OPEN_QUESTIONS is
+"decide this".
 
 ---
 
-## Federation completeness (delivery node + Bun)
+## Federation completeness
 
-- [ ] **JetStream durable consumer for `sns.outbox.>`.** Today `Outbox.Consumer`
-      uses plain `Gnat.sub`, so the OUTBOX stream grows forever (no ACK). Wire a
-      durable JetStream consumer with explicit ACK. Worker idempotency
-      (`delivery_receipts`) already covers the at-least-once redelivery case.
-- [ ] **Reply to a remote note.** `Notes.create_status/2` only resolves
-      `in_reply_to_id` against local Note ids. Replying to a remote thread
-      needs the remote post mirrored locally first; either auto-mirror on
-      lookup or surface a 404. (Inbound Create(Note) already mirrors remote
-      posts into `notes`; this is about local→remote reply resolution.)
-- [ ] **DM (`visibility: "direct"`) support.** `create_status/2` rejects direct
-      visibility today. Needs mention extraction from content + addressing
-      derivation; Bun's `dm` translator is already in place.
+- [ ] **DM (`visibility: "direct"`) send path.** Bun's `dm`
+      translator is in place and inbound DMs already mirror to a
+      `notes` row plus `conversation_participants`. The missing
+      half is `Notes.create_status/2` rejecting `"direct"` today;
+      it needs mention extraction + addressing derivation.
+      Strategy parked in [OPEN_QUESTIONS Q4](OPEN_QUESTIONS.md#q4-dm-visibility-direct--宛先解決).
+- [ ] **`mention` notification type.** Trips when local users land
+      in another note's address list. Falls out naturally from the
+      DM work because we'll already be extracting mentions there.
+- [ ] **Note-fetch HTTP signature.** `Federation.NoteFetcher` does
+      an unsigned GET. Mastodon Secure Mode + Misskey auth-fetch-
+      required servers reject those. The fetch path needs the same
+      `signAs` plumbing the inbox already uses.
 
-## Mastodon API surface (gaps after PR1–PR5/PR3.5)
+## Mastodon API surface — open
 
-- [ ] **Notifications.** `GET /api/v1/notifications`, `/:id`, `clear`, `dismiss`.
-      Needs a `notifications` table (or Reaction/Boost/Follow scan) and an
-      inbox-side path that creates rows on incoming Like/Announce/Follow.
-- [ ] **Search.** `GET /api/v2/search` (q, type, account_id, …). Hashtag and
-      account search are easy; status search needs a strategy (no full-text
-      index in core schema yet).
-- [ ] **Streaming WebSocket.** `/api/v1/streaming` (home, public, list, hashtag).
-      Gateway needs a Bandit upgrade handler; the `Streaming` addon already has
-      a NATS Registry / `stream.new_post` broadcast.
-- [ ] **Web Push.** `POST /api/v1/push/subscription`, `GET`, `PUT`, `DELETE`.
-      `WebPush` addon has the context; capability + VAPID key flow missing.
-- [ ] **Polls REST.** `GET /api/v1/polls/:id`, `POST /:id/votes`. Tables
-      (`Poll`, `PollOption`, `PollVote`) exist; capability missing. Also
-      requires `create_status/2` to accept `poll[…]` params.
-- [ ] **Lists.** `/api/v1/lists` CRUD + `/api/v1/timelines/list/:id`.
-      No table yet.
-- [ ] **Hashtag timelines.** `/api/v1/timelines/tag/:hashtag`. Needs tag
-      extraction from content on note insert and a `note_tags` table.
-- [ ] **Scheduled statuses.** `/api/v1/scheduled_statuses`. No table yet.
-- [ ] **Conversations / threads.** `/api/v1/conversations`. Builds on
-      `ConversationParticipant` (already a table).
-- [ ] **Trends, suggestions, directory.** Optional but expected by some
-      Mastodon clients; deprioritised.
+- [ ] **Streaming WebSocket** — see [OPEN_QUESTIONS Q2](OPEN_QUESTIONS.md#q2-streaming-websocket--どこに置くか).
+- [ ] **Search (`/api/v2/search`)** — see [OPEN_QUESTIONS Q1](OPEN_QUESTIONS.md#q1-search-戦略--full-text-どうやるか).
+- [ ] **Push delivery side.** `Addons.WebPush.send_notification/2`
+      is still a stub; subscribe/get/put/delete REST is live, but
+      no Notification → Push happens yet. Needs a push-web library
+      + VAPID encryption.
+- [ ] **`poll[…]` params in `create_status`.** Standalone polls
+      REST is live; status creation can't carry a poll definition
+      yet. Wire `poll[options][]`, `poll[expires_in]`,
+      `poll[multiple]`.
+- [ ] **Scheduled statuses.** `/api/v1/scheduled_statuses` — no
+      table yet. Same Multi+outbox pattern as `create_status`, with
+      an Oban-scheduled `publish_at` worker.
+- [ ] **Trends / suggestions / directory.** Optional surface;
+      deprioritised.
 
-## Mastodon API — moderation REST surface
+## Misskey native API
 
-The `Moderation` addon has the context; capabilities are missing.
+Single addon `:misskey_api` (per [OPEN_QUESTIONS Q3](OPEN_QUESTIONS.md#q3-misskey-native-api--addon-マニフェストの粒度)).
+Shares the existing contexts; only the view layer differs.
 
-- [ ] `POST /api/v1/accounts/:id/{block,unblock,mute,unmute}` + `GET /api/v1/{blocks,mutes}`
-- [ ] `POST /api/v1/reports`
-- [ ] `POST /api/v1/domain_blocks`, `GET`, `DELETE`
-- [ ] Admin endpoints (`/api/admin/accounts`, `/api/admin/reports`, …) — addon
-      capability with `addon: :admin_api` (new addon id).
+- [ ] **Auth.** `/api/auth/session/{generate,userkey}` — map
+      Misskey's session-key flow onto `oauth_access_tokens`.
+- [ ] **`/api/i`, `/api/i/update`** — mirror Mastodon's
+      verify/update_credentials in Misskey shape.
+- [ ] **`/api/users/*`** — `show`, `lookup`, `notes`,
+      `{followers,following,follow,unfollow}`.
+- [ ] **`/api/notes/*`** — `{create,delete,show,timeline,
+      local-timeline,global-timeline,hybrid-timeline,replies,
+      mentions}`.
+- [ ] **`/api/notes/reactions/*`** — custom emoji reactions (table
+      already supports arbitrary emoji strings).
+- [ ] **`/api/notes/favorites/*`, `/i/favorites`** — bookmarks
+      under Misskey naming.
+- [ ] **`bun/addons/misskey_api/manifest.ts`** — currently a
+      placeholder shell; extend if any translators are needed
+      (custom reactions, soft-renotes).
 
-## Misskey API native surface
+## Admin REST
 
-The plan was always Mastodon-first → Misskey on the same machinery. The
-infrastructure (OAuth, capability auth, view splitting) is ready.
-
-- [ ] **Auth.** `/api/auth/session/generate`, `/api/auth/session/userkey`. Map
-      Misskey's session-key flow onto the existing `oauth_access_tokens` table.
-- [ ] **`/api/i`, `/api/i/update`** — Mastodon `verify_credentials` /
-      `update_credentials` mirror, Misskey JSON shape.
-- [ ] **`/api/users/show`, `/users/lookup`, `/users/notes`, `/users/{followers,following}`,
-      `/users/{follow,unfollow}`** — the accounts surface in Misskey shape.
-- [ ] **`/api/notes/{create,delete,show,timeline,local-timeline,global-timeline,
-      hybrid-timeline,replies,mentions}`** — statuses + timelines in Misskey
-      shape. Reuse `SukhiFedi.{Notes,Timelines}`; only the view layer differs.
-- [ ] **`/api/notes/reactions/create`, `/notes/reactions/delete`** — Misskey
-      uses non-default emojis (custom reactions). The `Reaction` table already
-      supports arbitrary emoji strings.
-- [ ] **`/api/notes/favorites/create`, `/notes/favorites/delete`,
-      `/i/favorites`** — bookmarks-equivalent in Misskey naming.
-- [ ] New view modules under `api/lib/sukhi_api/views/misskey_*.ex` (mirror of
-      the `mastodon_*` set). Tag capabilities with `addon: :misskey_api`.
-- [ ] Addon manifest on Bun side (`bun/addons/misskey_api/manifest.ts`) is
-      currently a placeholder shell — extend with Misskey-flavoured
-      translators if any are needed (custom reactions, soft-renotes).
+- [ ] **`/api/v1/admin/*`** — accounts, reports, domain_blocks.
+      `SukhiFedi.Addons.Moderation` already has the writes (suspend,
+      resolve_report, block_instance). New addon
+      `:admin_api` (per [OPEN_QUESTIONS Q9](OPEN_QUESTIONS.md#q9-moderation-rest--addon-の境界)) so
+      admin can be toggled independently from user-facing
+      block/mute/report.
 
 ## Operational / hardening
 
-- [ ] **ETS bearer-token cache** in `SukhiApi` (60s TTL, keyed by token hash).
-      Today every protected request synchronously RPCs `OAuth.verify_bearer/1`.
-      Will matter once timelines are hot.
-- [ ] **Drop legacy `accounts.token` column.** Grep callers first; emit
-      a migration once nothing reads it.
-- [ ] **Snowflake id migration.** Currently `MastodonAccount`/`MastodonStatus`
-      serialize `Integer.to_string/1`. Wrap in `SukhiApi.Views.Id.encode/1`
-      already done; flipping to snowflakes is a one-line change there + a
-      bigserial→bigint migration on every PK column. Defer until peering at
-      scale.
-- [ ] **Presigned-URL media uploads (>8 MiB).** `MEDIA_DIR` server-side
-      uploads cap at 8 MiB inline (distributed Erlang transport size). For
-      large files, surface the existing
-      `SukhiFedi.Addons.Media.generate_upload_url/3` over a new capability
-      that returns `{upload_url, fields}`; client PUTs to S3 directly.
-- [ ] **Rate-limit per-token** (in addition to the per-IP `RateLimitPlug`).
-      Mastodon's published limits: 300 / 5 min for authenticated REST.
-
-## Documentation / dev experience
-
-- [ ] **Curl walkthrough** for the OAuth dance + post-status + media-upload
-      flow as a runnable shell script under `scripts/smoke.sh`.
-- [ ] **`MASTODON_API.md`** — table of supported endpoints + notes on
-      Mastodon-spec deviations (e.g. id format, `direct` not yet supported).
-
-## Tests
-
-- [ ] Run integration suite green against `docker-compose.test.yml`. The
-      tests under `elixir/test/integration/` have all been written but never
-      run end-to-end against the test stack. Verify migrations apply cleanly
-      and the DB-touching tests pass.
-- [ ] Bun side: add tests that exercise the new translator payload shapes the
-      delivery `Outbox.Consumer` constructs (`undo` with nested `Like` /
-      `Follow`, `add`/`remove` for featured collection, …).
+- [ ] **Presigned-URL media uploads (>8 MiB).** Inline POST caps at
+      the distributed Erlang transport limit. Surface
+      `SukhiFedi.Addons.Media.generate_upload_url/3` over a new
+      capability that returns `{upload_url, fields}`. Design in
+      [OPEN_QUESTIONS Q5](OPEN_QUESTIONS.md#q5-メディア-8-mib--presigned-url-の-capability-形).
+- [ ] **Snowflake id migration.** Deferred until peering at scale —
+      see [OPEN_QUESTIONS Q6](OPEN_QUESTIONS.md#q6-snowflake-id-移行--タイミング). Currently `bigserial` PKs are
+      rendered as decimal strings via `SukhiApi.Views.Id.encode/1`,
+      which is enough for Mastodon-client wire compatibility.
+- [ ] **HTTP push delivery worker.** Pair with the Push REST
+      surface above. Oban worker that consumes notification rows
+      and POSTs to the encrypted-payload endpoint of each
+      subscription.
 
 ## Cleanup
 
-- [ ] **Remove unused alias warning** in `Notes` for `Boost` reference once
-      the favourite/reblog code path is landed (likely no longer needed after
-      PR3.5; verify and drop).
-- [ ] **Pre-existing warnings** in `lib/sukhi_fedi/web/nodeinfo_controller.ex`
-      (`unused import Ecto.Query`) and `schema/poll_option.ex`
-      (`invalid association :votes`) — unrelated to the Mastodon work but
-      noisy; clean up.
+- [ ] **`SukhiFedi.Release` `@doc` redefinition warning** at
+      `lib/sukhi_fedi/release.ex:51`. Pre-existing.

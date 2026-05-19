@@ -51,6 +51,50 @@ defmodule SukhiFedi.Addons.Moderation do
     Repo.exists?(from b in Block, where: b.account_id == ^account_id and b.target_id == ^target_id)
   end
 
+  @doc "Hydrated list of accounts the viewer has blocked. Public-safe fields only."
+  def list_blocks(account_id) when is_integer(account_id) do
+    Repo.all(
+      from b in Block,
+        join: a in Account,
+        on: a.id == b.target_id,
+        where: b.account_id == ^account_id,
+        select: %{
+          id: a.id,
+          username: a.username,
+          display_name: a.display_name,
+          summary: a.summary,
+          domain: a.domain,
+          actor_uri: a.actor_uri,
+          avatar_url: a.avatar_url,
+          banner_url: a.banner_url
+        }
+    )
+  end
+
+  @doc "Hydrated list of accounts the viewer has muted (skips expired entries)."
+  def list_mutes(account_id) when is_integer(account_id) do
+    now = DateTime.utc_now()
+
+    Repo.all(
+      from m in Mute,
+        join: a in Account,
+        on: a.id == m.target_id,
+        where:
+          m.account_id == ^account_id and
+            (is_nil(m.expires_at) or m.expires_at > ^now),
+        select: %{
+          id: a.id,
+          username: a.username,
+          display_name: a.display_name,
+          summary: a.summary,
+          domain: a.domain,
+          actor_uri: a.actor_uri,
+          avatar_url: a.avatar_url,
+          banner_url: a.banner_url
+        }
+    )
+  end
+
   # ── reports ──────────────────────────────────────────────────────────────
 
   def create_report(attrs) do

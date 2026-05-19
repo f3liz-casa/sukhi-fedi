@@ -6,7 +6,8 @@ defmodule SukhiFedi.Schema.ConversationParticipant do
   schema "conversation_participants" do
     field :conversation_ap_id, :string
     belongs_to :account, SukhiFedi.Schema.Account
-    field :created_at, :utc_datetime, autogenerate: {DateTime, :utc_now, []}
+
+    timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end
 
   def changeset(cp, attrs) do
