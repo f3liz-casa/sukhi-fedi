@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiApi.Capabilities.MastodonInteractions do
   @moduledoc """
-  Status interactions on top of PR3:
+  Status interactions:
 
       POST /api/v1/statuses/:id/favourite     write:favourites
       POST /api/v1/statuses/:id/unfavourite   write:favourites

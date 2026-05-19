@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Structured logger for the Bun service. Phase 1: emit JSON lines
-// with a fixed field set so log aggregation can grep by field.
-// Phase 2 will wire correlation_id through NATS headers.
+// Structured logger for the Bun service. One JSON line per call with
+// a fixed field set so a log aggregator can grep by field. The
+// correlation id is generated here when no upstream id is provided;
+// callers that already have one (currently `handlers/inbox.ts`'s
+// `payload.correlationId`) pass it through.
 
 export type Trace = {
   correlationId: string;

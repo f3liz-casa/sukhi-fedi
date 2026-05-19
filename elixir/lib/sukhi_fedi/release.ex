@@ -43,16 +43,12 @@ defmodule SukhiFedi.Release do
   end
 
   @doc """
-  Seed a local actor (Person) that remote servers can Follow. Idempotent:
-  a second call with the same username is a no-op.
-
-      bin/sukhi_fedi eval 'SukhiFedi.Release.seed_actor("watcher")'
-  """
-  @doc """
   Seed a per-site watcher actor for `domain`. Username is
   `watcher-<domain with dots → underscores>` (so `mastodon.social` →
   `watcher-mastodon_social`), and `monitored_domain` is populated so
   the UI can recover the original.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.seed_watcher("mastodon.social")'
   """
   def seed_watcher(domain) when is_binary(domain) do
     username = "watcher-" <> String.replace(domain, ".", "_")
@@ -64,6 +60,12 @@ defmodule SukhiFedi.Release do
     )
   end
 
+  @doc """
+  Seed a local actor (Person) that remote servers can Follow. Idempotent:
+  a second call with the same username is a no-op.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.seed_actor("watcher")'
+  """
   def seed_actor(username, opts \\ []) when is_binary(username) do
     load_app()
 

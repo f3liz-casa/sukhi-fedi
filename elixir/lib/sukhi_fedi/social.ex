@@ -40,19 +40,13 @@ defmodule SukhiFedi.Social do
   @doc """
   Local user `follower` requests to follow account id `target_id`.
 
-  Inserts a `Follow` row in state `pending` (Mastodon shape: a follow
-  becomes `accepted` either immediately for unlocked accounts — TODO:
-  not yet differentiated — or after an `Accept(Follow)` from the
-  remote inbox handler).
+  Local target ⇒ inserted as `accepted` synchronously (no federation
+  round-trip, no outbox event). Remote target ⇒ inserted as `pending`
+  and `sns.outbox.follow.requested` is enqueued; the row flips to
+  `accepted` when the remote's `Accept(Follow)` arrives through the
+  inbox (`SukhiFedi.AP.Instructions.maybe_handle_follow_accept/1`).
 
   Idempotent: a duplicate follow returns the existing row.
-
-  Emits `sns.outbox.follow.requested` on a fresh insert so the
-  delivery node can later send an outbound `Follow` activity to the
-  followee's inbox.
-
-  > TODO(pr5): outbound delivery for `sns.outbox.follow.>` is not yet
-  > consumed by FanOut. Outbox row is durable; PR5 wires it up.
   """
   @spec request_follow(Account.t(), integer()) ::
           {:ok, Follow.t()} | {:error, :self_follow | :not_found | term()}

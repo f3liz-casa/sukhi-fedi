@@ -8,10 +8,9 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
       DELETE /api/v1/statuses/:id          scope: write:statuses
       GET    /api/v1/statuses/:id/context  (public)
 
-  Note attaching media via `media_ids[]` reuses PR4's
-  `SukhiFedi.Addons.Media.attach_to_note/2` indirectly via
-  `SukhiFedi.Notes.create_status/2`'s `Multi`. Until PR4 ships the
-  upload side, callers must already hold valid Media ids in the DB.
+  `media_ids[]` resolution + attachment happens inside
+  `SukhiFedi.Notes.create_status/2`'s `Ecto.Multi` alongside the note
+  insert + tag extraction + outbox enqueue.
   """
 
   use SukhiApi.Capability, addon: :mastodon_api

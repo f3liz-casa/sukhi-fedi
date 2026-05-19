@@ -8,7 +8,7 @@ defmodule SukhiFedi.AP.Instructions do
   import Ecto.Query
 
   alias SukhiFedi.{Notifications, Outbox, Repo}
-  alias SukhiFedi.Schema.{Follow, Object, ConversationParticipant, Account, Note}
+  alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
 
@@ -31,7 +31,6 @@ defmodule SukhiFedi.AP.Instructions do
   """
   @spec execute(map()) :: :ok
   def execute(%{"action" => "save", "object" => object_data}) do
-    insert_object(object_data)
     maybe_handle_dm(object_data)
     maybe_handle_relay_accept(object_data)
     maybe_handle_follow_accept(object_data)
@@ -77,16 +76,6 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   # ── Private helpers ──────────────────────────────────────────────────────
-
-  defp insert_object(data) do
-    %Object{
-      ap_id: data["id"],
-      type: data["type"],
-      actor_id: data["actor"],
-      raw_json: data
-    }
-    |> Repo.insert(on_conflict: :nothing)
-  end
 
   defp insert_follow(%{"follow" => follow_data} = data) do
     followee_uri = data["followeeUri"]
@@ -502,15 +491,15 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_pin_unpin(_), do: :ok
 
-  # Inbound `Delete` activity: drop the local copy of whatever object the
+  # Inbound `Delete` activity: drop the local mirror of whatever the
   # remote actor is tombstoning. Object id can be a string or a Tombstone
-  # map with `id`. Both `objects` and `notes` (if a local Note mirrored
-  # the remote AP id) are scrubbed.
+  # map with `id`.
   defp maybe_handle_delete(%{"type" => "Delete", "object" => object}) do
     case extract_object_id(object) do
-      nil -> :ok
+      nil ->
+        :ok
+
       ap_id ->
-        from(o in Object, where: o.ap_id == ^ap_id) |> Repo.delete_all()
         from(n in Note, where: n.ap_id == ^ap_id) |> Repo.delete_all()
         :ok
     end

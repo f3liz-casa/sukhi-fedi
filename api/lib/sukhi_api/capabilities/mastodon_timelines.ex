@@ -3,10 +3,12 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
   @moduledoc """
   Mastodon `/api/v1/timelines/*` capability.
 
-      GET /api/v1/timelines/home    scope: read:statuses (authenticated)
-      GET /api/v1/timelines/public  (public)
+      GET /api/v1/timelines/home          scope: read:statuses (authenticated)
+      GET /api/v1/timelines/public        (public; `local=true` default)
+      GET /api/v1/timelines/tag/:hashtag  (public)
 
-  PR3 ships home + public; tag/list/direct timelines deferred.
+  The list timeline (`/api/v1/timelines/list/:id`) lives with the
+  list-management routes in `SukhiApi.Capabilities.MastodonLists`.
   """
 
   use SukhiApi.Capability, addon: :mastodon_api

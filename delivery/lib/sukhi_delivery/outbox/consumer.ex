@@ -4,7 +4,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   Subscribes to `sns.outbox.>` and turns each event into one or more
   Oban delivery jobs.
 
-  ## Subject coverage (PR5)
+  ## Subject coverage
 
       sns.outbox.note.created       → Bun `note` translator   → fan out
       sns.outbox.note.deleted       → Bun `delete` translator → fan out

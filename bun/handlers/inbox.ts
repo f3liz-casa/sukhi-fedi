@@ -22,8 +22,8 @@ export interface InboxPayload {
   // to mint the Accept activity's own `id` — remote servers expect
   // it to be a resolvable URL under our domain.
   selfDomain?: string;
-  // Upstream correlation id (Phase 2 will wire this through NATS
-  // headers; accepting it now keeps the payload shape stable).
+  // Upstream correlation id, propagated to every log line emitted
+  // while handling this inbox. Generated locally when absent.
   correlationId?: string;
 }
 
@@ -41,14 +41,12 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
   // Two loaders:
   //   contextLoader — unauthenticated. Fedify's default handles JSON-LD
   //     context resolution (activitystreams, security/v1, identity/v1,
-  //     …) including the legacy redirect chains like w3id.org → web-
-  //     payments.org. Signing these GETs confuses hosts that don't
-  //     expect HTTP-Signature on context URLs.
+  //     …) including legacy redirect chains like w3id.org →
+  //     web-payments.org. Signing these GETs confuses hosts that
+  //     don't expect HTTP-Signature on context URLs.
   //   actorLoader   — signed when the receiving actor has a keypair, so
   //     Mastodon Secure Mode / Misskey auth-fetch-required servers
   //     return 200 for actor dereference instead of 401.
-  // Phase 2 will move this split into fedify/loaders.ts with a typed
-  // LoaderMode enum.
   const contextLoader = cachedDocumentLoader;
   let actorLoader: typeof cachedDocumentLoader = contextLoader;
   if (payload.signAs) {
@@ -81,8 +79,6 @@ export async function handleInbox(payload: InboxPayload): Promise<InboxInstructi
   };
 
   if (kind === "unknown") {
-    // Phase 3 will persist these to an unknown_activities table so we
-    // can learn about new activity shapes. For now, log and skip.
     logJson(trace, "warn", "inbox.unknown_type", {
       raw_type: raw["type"],
       activity_id: rawActivityId,

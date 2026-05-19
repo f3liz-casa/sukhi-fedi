@@ -13,16 +13,13 @@ defmodule SukhiApi.Addon.Presets do
     mastodon_compatible: [
       :mastodon_api,
       :media,
-      :feeds,
       :moderation,
-      :bookmarks,
       :pinned_notes,
       :streaming,
       :web_push
     ],
     server_version_watcher: [
       :nodeinfo_monitor,
-      :feeds,
       :pinned_notes
     ]
   }

@@ -65,8 +65,8 @@ Rules enforced by this split:
    delivery node speaks HTTP only outbound to remote inboxes.
 2. **Only the gateway writes to the core schema** (notes, follows,
    outbox row inserts, …). The delivery node reads `outbox`, `accounts`,
-   `follows`, `objects`, `relays` and writes `delivery_receipts` — a
-   narrow, stable projection.
+   `follows`, `relays` and writes `delivery_receipts` — a narrow,
+   stable projection.
 3. **All outbound ActivityPub deliveries live on the delivery node**,
    never Bun and never the gateway. Gateway inserts Oban jobs by
    fully-qualified worker string (`SukhiDelivery.Delivery.Worker`) into
@@ -102,10 +102,16 @@ sukhi-fedi/
 │   │   ├── notes.ex                       # create_status / get / delete /
 │   │   │                                    context + favourite/reblog/
 │   │   │                                    bookmark/pin + counts/viewer
-│   │   ├── timelines.ex                   # home / public timeline queries
+│   │   ├── timelines.ex                   # home / public / tag timelines
+│   │   ├── tags.ex                        # hashtag extraction + upsert
+│   │   ├── lists.ex                       # user lists CRUD + list timeline
+│   │   ├── polls.ex                       # poll reads + vote writes
+│   │   ├── notifications.ex               # Mastodon notifications context
+│   │   ├── conversations.ex               # DM thread index
 │   │   ├── social.ex                      # follow / unfollow / relationships
 │   │   ├── federation/
 │   │   │   ├── actor_fetcher.ex           # remote actor GET + ETS cache
+│   │   │   ├── note_fetcher.ex            # remote note GET + mirror into notes
 │   │   │   ├── webfinger.ex               # acct:user@host → self URL
 │   │   │   ├── remote_accounts.ex         # upsert shadow Account from JSON
 │   │   │   └── fedify_client.ex           # NATS Micro client → Bun (admin)
@@ -119,7 +125,7 @@ sukhi-fedi/
 │   │   ├── addons/                        # first-party addons
 │   │   │   ├── nodeinfo_monitor.ex + nodeinfo_monitor/
 │   │   │   ├── streaming.ex + streaming/
-│   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex
+│   │   │   ├── media.ex
 │   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # controllers + plugs
 │   │       ├── router.ex                  # + /oauth/*_ → PluginPlug,
@@ -223,7 +229,12 @@ sukhi-fedi/
 │   │   │   ├── mastodon_account.ex        # Account + CredentialAccount
 │   │   │   ├── mastodon_relationship.ex
 │   │   │   ├── mastodon_status.ex         # counts + viewer flags via ctx
-│   │   │   └── mastodon_media.ex
+│   │   │   ├── mastodon_media.ex
+│   │   │   ├── mastodon_notification.ex
+│   │   │   ├── mastodon_list.ex
+│   │   │   └── mastodon_poll.ex
+│   │   ├── token_cache.ex                 # 60s positive cache for verify_bearer
+│   │   ├── token_rate_limit.ex            # 300 req / 5min per token
 │   │   └── capabilities/                  # ← DROP FILES HERE TO ADD ENDPOINTS
 │   │       ├── mastodon_instance.ex
 │   │       ├── nodeinfo_monitor.ex
@@ -233,7 +244,13 @@ sukhi-fedi/
 │   │       ├── mastodon_follows.ex        # accounts/:id/{follow,unfollow}
 │   │       ├── mastodon_statuses.ex       # statuses CRUD + context
 │   │       ├── mastodon_interactions.ex   # favourite/reblog/bookmark/pin
-│   │       ├── mastodon_timelines.ex      # home / public
+│   │       ├── mastodon_timelines.ex      # home / public / tag
+│   │       ├── mastodon_notifications.ex  # index/show/clear/dismiss
+│   │       ├── mastodon_lists.ex          # lists CRUD + list timeline
+│   │       ├── mastodon_polls.ex          # poll read + vote
+│   │       ├── mastodon_moderation.ex     # block/mute/report/domain_blocks
+│   │       ├── mastodon_conversations.ex  # /api/v1/conversations
+│   │       ├── mastodon_push.ex           # /api/v1/push/subscription
 │   │       └── mastodon_media.ex          # POST /media + GET/PUT
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   └── Dockerfile                         # distributed Erlang release

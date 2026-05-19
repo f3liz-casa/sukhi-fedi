@@ -7,7 +7,8 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
   One monitored domain = one local bot `Account` (`is_bot=true`) plus
   one `MonitoredInstance` row. Polling runs under Oban cron (see
   `elixir/config/config.exs`); version changes flow through the
-  standard Outbox → FanOut → Delivery pipeline.
+  standard Outbox → Delivery pipeline (gateway writes a notes row +
+  outbox event; the delivery node's `Outbox.PullConsumer` fans out).
   """
 
   use SukhiFedi.Addon, id: :nodeinfo_monitor

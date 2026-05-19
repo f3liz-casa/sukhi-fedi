@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiApi.Views.MastodonMedia do
   @moduledoc """
-  Render a `Media` row into Mastodon MediaAttachment JSON.
-
-  PR3 ships the read-side renderer (used by `MastodonStatus`); PR4
-  ships the upload capability that produces these rows.
+  Render a `Media` row into Mastodon MediaAttachment JSON shape.
+  Used by `MastodonStatus` for embedded attachments and by
+  `MastodonMedia` (the upload capability) for direct responses.
   """
 
   alias SukhiApi.Views.Id

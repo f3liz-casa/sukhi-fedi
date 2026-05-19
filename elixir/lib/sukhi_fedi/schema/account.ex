@@ -17,7 +17,6 @@ defmodule SukhiFedi.Schema.Account do
     field :monitored_domain, :string
     field :avatar_url, :string
     field :banner_url, :string
-    field :bio, :string
     field :is_admin, :boolean, default: false
     field :suspended_at, :utc_datetime
     field :suspended_by_id, :id
@@ -72,7 +71,7 @@ defmodule SukhiFedi.Schema.Account do
     attrs = normalize_credentials_attrs(attrs)
 
     account
-    |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :bio, :is_bot])
+    |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot])
     |> validate_length(:display_name, max: 100)
     |> validate_length(:summary, max: 1024)
   end

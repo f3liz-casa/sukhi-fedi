@@ -15,7 +15,7 @@ defmodule SukhiApi.Capabilities.OAuth do
   flow (or by curl in tests via `Cookie: session_token=…`). When the
   session lookup fails, the form re-renders with a sign-in link instead
   of the consent UI; production deployments should front this with a
-  proper login page (out of PR1 scope).
+  proper login page.
   """
 
   use SukhiApi.Capability, addon: :mastodon_api

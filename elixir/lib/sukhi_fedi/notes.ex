@@ -52,14 +52,18 @@ defmodule SukhiFedi.Notes do
 
   Translates:
     * `spoiler_text` → `cw`
-    * `media_ids[]` → resolves Media rows owned by the same account,
-      attaches via `note_media` join inside the same Multi
-    * `in_reply_to_id` → looks up local Note's `ap_id` for `in_reply_to_ap_id`
+    * `media_ids[]`  → resolves Media rows owned by the same account,
+      attaches via `note_media` and stamps `attached_at` in the same
+      `Ecto.Multi`
+    * `in_reply_to_id` → either a local Note id or an http(s) URI; in
+      the URI case `Federation.NoteFetcher` mirrors the remote note
+      first so we can store its `ap_id`
+    * `poll[options][]` (or JSON `poll: %{…}`) → inserts a Poll +
+      PollOptions in the same transaction
 
-  Same outbox + transactional guarantees as `create_note/1`.
-
-  > TODO(pr5): direct visibility (DMs) is rejected here pending mention
-  > extraction; only public/unlisted/followers ship in PR3.
+  Returns `{:error, :direct_visibility_not_supported}` for
+  `visibility: "direct"` — the addressing pipeline for DMs is parked
+  in OPEN_QUESTIONS Q4.
   """
   @spec create_status(Account.t() | integer(), map()) ::
           {:ok, Note.t()} | {:error, atom() | {:validation, map()}}
