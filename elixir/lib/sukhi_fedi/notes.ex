@@ -88,6 +88,7 @@ defmodule SukhiFedi.Notes do
       |> Multi.run(:tags, fn _repo, %{note: n} ->
         {:ok, SukhiFedi.Tags.upsert_for_note(n.id, n.content)}
       end)
+      |> attach_poll(params)
       |> Outbox.enqueue_multi(
         :outbox_event,
         "sns.outbox.note.created",
@@ -119,6 +120,96 @@ defmodule SukhiFedi.Notes do
       end
     end
   end
+
+  # Optional poll block. Mastodon shape:
+  #   poll[options][]=A&poll[options][]=B&poll[expires_in]=3600&poll[multiple]=false
+  # JSON clients send `"poll": {"options": [...], ...}`. We accept
+  # both; missing means "no poll", invalid means a Multi error so
+  # the whole transaction rolls back.
+  defp attach_poll(multi, params) do
+    case extract_poll(params) do
+      nil ->
+        multi
+
+      %{options: [_, _ | _] = options, expires_in: ein, multiple: multiple} ->
+        expires_at =
+          if is_integer(ein) and ein > 0 do
+            DateTime.utc_now()
+            |> DateTime.add(ein, :second)
+            |> DateTime.truncate(:second)
+          end
+
+        multi
+        |> Multi.run(:poll, fn repo, %{note: %SukhiFedi.Schema.Note{id: nid}} ->
+          poll_cs =
+            SukhiFedi.Schema.Poll.changeset(%SukhiFedi.Schema.Poll{}, %{
+              note_id: nid,
+              multiple: !!multiple,
+              expires_at: expires_at
+            })
+
+          repo.insert(poll_cs)
+        end)
+        |> Multi.run(:poll_options, fn repo, %{poll: %{id: pid}} ->
+          rows =
+            options
+            |> Enum.with_index()
+            |> Enum.map(fn {title, idx} ->
+              %{title: title, position: idx, poll_id: pid}
+            end)
+
+          {n, _} = repo.insert_all("poll_options", rows)
+          {:ok, n}
+        end)
+
+      _ ->
+        Multi.error(multi, :poll_invalid, :poll_needs_two_options)
+    end
+  end
+
+  defp extract_poll(params) do
+    opts =
+      params[:poll] || params["poll"] ||
+        params["poll[options][]"] || params[:poll_options] ||
+        nil
+
+    case opts do
+      nil ->
+        nil
+
+      list when is_list(list) ->
+        %{
+          options: clean_options(list),
+          expires_in: parse_int(params["poll[expires_in]"]),
+          multiple: parse_bool(params["poll[multiple]"])
+        }
+
+      %{} = map ->
+        %{
+          options: clean_options(map["options"] || map[:options] || []),
+          expires_in: parse_int(map["expires_in"] || map[:expires_in]),
+          multiple: parse_bool(map["multiple"] || map[:multiple])
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp clean_options(list) when is_list(list) do
+    list
+    |> Enum.map(&to_string/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp clean_options(_), do: []
+
+  defp parse_bool(true), do: true
+  defp parse_bool(false), do: false
+  defp parse_bool("true"), do: true
+  defp parse_bool("1"), do: true
+  defp parse_bool(_), do: false
 
   defp resolve_in_reply_to(attrs, params) do
     case params[:in_reply_to_id] || params["in_reply_to_id"] do
