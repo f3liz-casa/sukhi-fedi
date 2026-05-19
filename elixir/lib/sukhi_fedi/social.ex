@@ -75,33 +75,47 @@ defmodule SukhiFedi.Social do
   end
 
   defp insert_follow_with_outbox(_follower, actor_uri, %Account{} = target) do
-    Multi.new()
-    |> Multi.insert(
-      :follow,
-      %Follow{}
-      |> Ecto.Changeset.change(%{
-        follower_uri: actor_uri,
-        followee_id: target.id,
-        # Local-target follows could auto-accept; keeping pending to keep
-        # the inbox-side Accept path the single source of truth. PR5
-        # wires the local-target shortcut once FanOut is live.
-        state: "pending"
-      })
-    )
-    |> Outbox.enqueue_multi(
-      :outbox_event,
-      "sns.outbox.follow.requested",
-      "follow",
-      & &1.follow.id,
-      fn %{follow: f} ->
-        %{
-          follow_id: f.id,
-          follower_uri: f.follower_uri,
-          followee_id: f.followee_id,
-          followee_username: target.username
-        }
+    # Local target ⇒ no federation round-trip needed. Skip the outbox
+    # event entirely and stamp the follow as `accepted` so home-timeline
+    # visibility kicks in immediately. Remote target ⇒ start in `pending`
+    # and wait for the remote's Accept(Follow) (handled by
+    # `AP.Instructions.maybe_handle_follow_accept/1`).
+    local_target? = is_nil(target.domain)
+
+    multi =
+      Multi.new()
+      |> Multi.insert(
+        :follow,
+        %Follow{}
+        |> Ecto.Changeset.change(%{
+          follower_uri: actor_uri,
+          followee_id: target.id,
+          state: if(local_target?, do: "accepted", else: "pending")
+        })
+      )
+
+    multi =
+      if local_target? do
+        multi
+      else
+        Outbox.enqueue_multi(
+          multi,
+          :outbox_event,
+          "sns.outbox.follow.requested",
+          "follow",
+          & &1.follow.id,
+          fn %{follow: f} ->
+            %{
+              follow_id: f.id,
+              follower_uri: f.follower_uri,
+              followee_id: f.followee_id,
+              followee_username: target.username
+            }
+          end
+        )
       end
-    )
+
+    multi
     |> Repo.transaction()
     |> case do
       {:ok, %{follow: f}} -> {:ok, f}
@@ -127,21 +141,32 @@ defmodule SukhiFedi.Social do
         {:error, :not_found}
 
       %Follow{} = f ->
-        Multi.new()
-        |> Multi.delete(:follow, f)
-        |> Outbox.enqueue_multi(
-          :outbox_event,
-          "sns.outbox.follow.undone",
-          "follow",
-          & &1.follow.id,
-          fn %{follow: f} ->
-            %{
-              follow_id: f.id,
-              follower_uri: f.follower_uri,
-              followee_id: f.followee_id
-            }
+        target = Repo.get(Account, target_id)
+        local_target? = match?(%Account{domain: nil}, target)
+
+        multi = Multi.new() |> Multi.delete(:follow, f)
+
+        multi =
+          if local_target? do
+            multi
+          else
+            Outbox.enqueue_multi(
+              multi,
+              :outbox_event,
+              "sns.outbox.follow.undone",
+              "follow",
+              & &1.follow.id,
+              fn %{follow: f} ->
+                %{
+                  follow_id: f.id,
+                  follower_uri: f.follower_uri,
+                  followee_id: f.followee_id
+                }
+              end
+            )
           end
-        )
+
+        multi
         |> Repo.transaction()
         |> case do
           {:ok, %{follow: f}} -> {:ok, f}
