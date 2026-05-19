@@ -66,7 +66,7 @@ Bun ワーカー群（ステートレス） + 分散Erlang のプラグインノ
 1. **ユーザー向け HTTP はゲートウェイだけが喋る**。Bun は HTTP サーバーなし、
    delivery は外向きの inbox POST だけ。
 2. **コアスキーマに書き込むのはゲートウェイだけ**（notes, follows, outbox 挿入…）。
-   delivery は `outbox / accounts / follows / objects / relays` を読み、
+   delivery は `outbox / accounts / follows / relays` を読み、
    `delivery_receipts` に書く — 狭くて安定した射影。
 3. **外向き配信は全部 delivery ノード** — Bun でもゲートウェイでもない。
    ゲートウェイは `oban_jobs` テーブルに文字列ワーカー名
@@ -117,7 +117,7 @@ sukhi-fedi/
 │   │   ├── addons/                        # ファーストパーティのアドオン
 │   │   │   ├── nodeinfo_monitor.ex + nodeinfo_monitor/
 │   │   │   ├── streaming.ex + streaming/
-│   │   │   ├── articles.ex / bookmarks.ex / feeds.ex / media.ex
+│   │   │   ├── media.ex
 │   │   │   ├── moderation.ex / pinned_notes.ex / web_push.ex
 │   │   └── web/                           # コントローラ + plug
 │   │       ├── router.ex                  # /oauth/*_ → PluginPlug、
