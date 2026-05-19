@@ -106,6 +106,8 @@ sukhi-fedi/
 │   │   ├── social.ex                      # follow / unfollow / relationships
 │   │   ├── federation/
 │   │   │   ├── actor_fetcher.ex           # remote actor GET + ETS cache
+│   │   │   ├── webfinger.ex               # acct:user@host → self URL
+│   │   │   ├── remote_accounts.ex         # upsert shadow Account from JSON
 │   │   │   └── fedify_client.ex           # NATS Micro client → Bun (admin)
 │   │   ├── schema/                        # Ecto schemas (note, account,
 │   │   │   │                                follow, boost, reaction,
@@ -149,8 +151,14 @@ sukhi-fedi/
 │   │   ├── outbox/
 │   │   │   ├── relay.ex                   # LISTEN/NOTIFY → JetStream
 │   │   │   └── consumer.ex                # Gnat.sub on sns.outbox.>
-│   │   │                                    routes 10 subjects to Bun
-│   │   │                                    translators + Worker fan-out
+│   │   │                                    routes 11 subjects to Bun
+│   │   │                                    translators + Worker fan-out;
+│   │   │                                    actor.updated built inline via
+│   │   │                                    AP.ActorJson (no Bun hop)
+│   │   ├── ap/actor_json.ex               # Update(Person) builder (local actor)
+│   │   ├── federation/actor_fetcher.ex    # remote actor JSON + ETS cache
+│   │   │                                    (resolves sharedInbox/inbox URL)
+│   │   ├── cache/ets.ex                   # ETS TTL sweep (actor_remote)
 │   │   ├── delivery/
 │   │   │   ├── worker.ex                  # Oban :delivery queue
 │   │   │   ├── fan_out.ex                 # legacy precompute helper
@@ -271,7 +279,7 @@ sns.<context>.<aggregate>.<op>[.<variant>]
 | `sns.outbox.note.deleted`          | pub       | `Notes.delete_note/2`                       | `Outbox.Consumer` → fan-out  |
 | `sns.outbox.follow.requested`      | pub       | `Social.request_follow/2`                   | `Outbox.Consumer` → fan-out  |
 | `sns.outbox.follow.undone`         | pub       | `Social.unfollow/2`                         | `Outbox.Consumer` → fan-out  |
-| `sns.outbox.actor.updated`         | pub       | `Accounts.update_credentials/2`             | _(skipped — no Bun wrapper)_ |
+| `sns.outbox.actor.updated`         | pub       | `Accounts.update_credentials/2`             | `Outbox.Consumer` → Update(Person) (inline; no Bun) |
 | `sns.outbox.like.created`          | pub       | `Notes.favourite/2`                         | `Outbox.Consumer` → fan-out  |
 | `sns.outbox.like.undone`           | pub       | `Notes.unfavourite/2`                       | `Outbox.Consumer` → fan-out  |
 | `sns.outbox.announce.created`      | pub       | `Notes.reblog/2`                            | `Outbox.Consumer` → fan-out  |
@@ -538,6 +546,56 @@ NodeinfoController (Elixir, pure)
 served by `SukhiFedi.Web.CollectionController` with a single JOIN query
 (`Social.list_followers/2` / `Social.list_following/2`) — no per-item
 round-trip to hydrate account data.
+
+### 6.6 Remote-actor model and the local↔remote follow flow
+
+The `accounts` table is a unified directory of **local users** and
+**remote shadow actors**. A row is local iff `domain IS NULL`; remote
+rows carry `actor_uri` + `inbox_url` + (optionally) `shared_inbox_url`
+upserted from a fetched Actor JSON by
+`SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json/1`.
+
+```
+Local user follows alice@misskey.example
+   │
+   ▼
+GET /api/v1/accounts/lookup?acct=alice@misskey.example&resolve=true
+   │  SukhiFedi.Accounts.lookup_by_acct(acct, resolve: true)
+   │  → WebFinger.resolve_self → ActorFetcher.fetch
+   │  → RemoteAccounts.upsert_from_actor_json → shadow Account
+   ▼
+POST /api/v1/accounts/:id/follow      (id = shadow account id)
+   │  SukhiFedi.Social.request_follow
+   │  → state="pending" (remote target) + sns.outbox.follow.requested
+   ▼
+SukhiDelivery.Outbox.Consumer.handle_follow
+   │  followee_endpoints(account) → actor_uri + shared_inbox_url||inbox_url
+   │  Bun follow translator + HTTP-Signature → POST remote inbox
+   ▼
+Misskey replies Accept(Follow) to our /inbox
+   │  Bun inbox.v1 → {action: "save", object: AcceptJSON}
+   │  AP.Instructions.maybe_handle_follow_accept
+   │  → match inner Follow's actor (local URI) + object (remote shadow URI)
+   │  → flip Follow.state → "accepted"
+   ▼
+Misskey starts pushing alice's posts via Create(Note) to our /inbox
+   │  AP.Instructions.maybe_mirror_create_note
+   │  → RemoteAccounts.upsert (refresh) + Note row insert (ap_id unique)
+   ▼
+home timeline join lights up
+```
+
+**Local-target follow shortcut:** `Social.request_follow` detects
+`target.domain == nil` and lands the row as `accepted` with no outbox
+event. Same for unfollow.
+
+**Public timeline scope:** `Timelines.public/1` LEFT JOINs accounts
+and filters `domain IS NULL` (default `local: true`) so remote-author
+notes never leak into the local public TL.
+
+**Disambiguation:** `(username)` is no longer globally unique. Every
+`Repo.get_by(Account, username:)` that intends "the local user" must
+also pass `domain: nil`; the repo-wide audit already enforces this.
 
 ## 7. Addon system
 
