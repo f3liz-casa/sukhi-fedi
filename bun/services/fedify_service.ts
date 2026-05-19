@@ -21,9 +21,7 @@ import { Svcm, type Service } from "@nats-io/services";
 
 import { handleBuildNote } from "../handlers/build/note.ts";
 import { handleBuildFollow } from "../handlers/build/follow.ts";
-import { handleBuildAccept } from "../handlers/build/accept.ts";
 import { handleBuildAnnounce } from "../handlers/build/announce.ts";
-import { handleBuildActor } from "../handlers/build/actor.ts";
 import { handleBuildDm } from "../handlers/build/dm.ts";
 import { handleBuildAdd, handleBuildRemove } from "../handlers/build/collection_op.ts";
 import { handleBuildLike } from "../handlers/build/like.ts";
@@ -43,12 +41,13 @@ const enc = new TextEncoder();
 // Core `translate.v1` dispatch table — ActivityPub-ish domain object
 // types built into every deployment. Addons contribute additional
 // namespaced keys (`<addon_id>.<type>`) via their manifest.
+//
+// `dm` is staged for the upcoming direct-message send path (see
+// OPEN_QUESTIONS Q4); nothing requests it from Elixir yet.
 const CORE_TRANSLATORS: Record<string, TranslateHandler> = {
   note: handleBuildNote as TranslateHandler,
   follow: handleBuildFollow as TranslateHandler,
-  accept: handleBuildAccept as TranslateHandler,
   announce: handleBuildAnnounce as TranslateHandler,
-  actor: handleBuildActor as TranslateHandler,
   dm: handleBuildDm as TranslateHandler,
   add: handleBuildAdd as TranslateHandler,
   remove: handleBuildRemove as TranslateHandler,

@@ -389,7 +389,6 @@ defmodule SukhiDelivery.Outbox.Consumer do
   defp extract_body(result, "note", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "delete", _opts), do: Map.get(result, "delete", result)
   defp extract_body(result, "follow", _opts), do: Map.get(result, "follow", result)
-  defp extract_body(result, "accept", _opts), do: Map.get(result, "accept", result)
   defp extract_body(result, "announce", _opts), do: Map.get(result, "announce", result)
   defp extract_body(result, "like", _opts), do: Map.get(result, "like", result)
   defp extract_body(result, "undo", _opts), do: Map.get(result, "undo", result)
