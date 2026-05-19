@@ -5,7 +5,6 @@ defmodule SukhiFedi.Schema.Reaction do
 
   schema "reactions" do
     field :emoji, :string
-    field :ap_id, :string
     belongs_to :account, SukhiFedi.Schema.Account
     belongs_to :note, SukhiFedi.Schema.Note
 
@@ -14,7 +13,7 @@ defmodule SukhiFedi.Schema.Reaction do
 
   def changeset(reaction, attrs) do
     reaction
-    |> cast(attrs, [:emoji, :ap_id, :account_id, :note_id])
+    |> cast(attrs, [:emoji, :account_id, :note_id])
     |> validate_required([:emoji, :account_id, :note_id])
     |> unique_constraint([:account_id, :note_id, :emoji])
   end
