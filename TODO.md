@@ -10,18 +10,6 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 
 ---
 
-## Federation completeness
-
-- [ ] **DM (`visibility: "direct"`) send path.** Bun's `dm`
-      translator is in place and inbound DMs already mirror to a
-      `notes` row plus `conversation_participants`. The missing
-      half is `Notes.create_status/2` rejecting `"direct"` today;
-      it needs mention extraction + addressing derivation.
-      Strategy parked in [OPEN_QUESTIONS Q4](OPEN_QUESTIONS.md#q4-dm-visibility-direct--宛先解決).
-- [ ] **`mention` notification type.** Trips when local users land
-      in another note's address list. Falls out naturally from the
-      DM work because we'll already be extracting mentions there.
-
 ## Mastodon API surface — open
 
 - [ ] **Streaming WebSocket** — see [OPEN_QUESTIONS Q2](OPEN_QUESTIONS.md#q2-streaming-websocket--どこに置くか).
