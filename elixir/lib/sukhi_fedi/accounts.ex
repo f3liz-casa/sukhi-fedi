@@ -32,6 +32,38 @@ defmodule SukhiFedi.Accounts do
   end
 
   @doc """
+  An HTTP-signature identity for signing outbound fetches against
+  Mastodon Secure Mode / Misskey auth-fetch-required peers. Returns the
+  oldest local account that holds a keypair, or `nil` when none do — in
+  which case fetches go out unauthenticated, the same reach as before.
+
+  Any local actor's signature satisfies an auth-fetch check; a
+  dedicated instance actor (which wouldn't leak a username) is left
+  for later.
+  """
+  @spec signing_identity() ::
+          %{keyId: String.t(), privateJwk: map(), publicJwk: map() | nil} | nil
+  def signing_identity do
+    query =
+      from a in Account,
+        where: is_nil(a.domain) and not is_nil(a.private_key_jwk),
+        order_by: [asc: a.id],
+        limit: 1
+
+    case Repo.one(query) do
+      %Account{username: u, private_key_jwk: priv, public_key_jwk: pub} ->
+        %{
+          keyId: "https://#{SukhiFedi.Config.domain!()}/users/#{u}#main-key",
+          privateJwk: priv,
+          publicJwk: pub
+        }
+
+      nil ->
+        nil
+    end
+  end
+
+  @doc """
   Fetch by id. Returns `{:ok, account}` or `{:error, :not_found}`.
   """
   @spec get_account(integer() | binary()) :: {:ok, Account.t()} | {:error, :not_found}

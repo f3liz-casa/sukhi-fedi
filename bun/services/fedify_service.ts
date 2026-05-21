@@ -2,12 +2,13 @@
 //
 // Fedify NATS Micro service.
 //
-// Exposes five endpoints to Elixir via NATS request/reply:
+// Exposes six endpoints to Elixir via NATS request/reply:
 //   - fedify.ping.v1      : health check / liveness probe
 //   - fedify.translate.v1 : build ActivityPub JSON-LD from a domain object
 //   - fedify.sign.v1      : HTTP-Signature an outbound request envelope
 //   - fedify.verify.v1    : verify an incoming signed HTTP request
 //   - fedify.inbox.v1     : parse an incoming activity into an instruction
+//   - fedify.fetch.v1     : fetch a remote AP document (HTTP-signed)
 //
 // Multiple replicas can run in parallel. NATS Micro queue-groups them
 // automatically via `queue: "fedify-workers"` so load is balanced across
@@ -31,6 +32,7 @@ import { handleBuildDelete } from "../handlers/build/delete.ts";
 import { handleSignDelivery } from "../handlers/sign_delivery.ts";
 import { handleVerify } from "../handlers/verify.ts";
 import { handleInbox } from "../handlers/inbox.ts";
+import { handleFetch } from "../handlers/fetch.ts";
 import { mergedTranslators } from "../addons/loader.ts";
 import type { TranslateHandler } from "../addons/types.ts";
 
@@ -119,6 +121,16 @@ async function handleInboxMicro(msg: AnyMsg) {
   }
 }
 
+async function handleFetchMicro(msg: AnyMsg) {
+  try {
+    const body = JSON.parse(dec.decode(msg.data));
+    const result = await handleFetch(body);
+    respondOk(msg, result);
+  } catch (e) {
+    respondError(msg, e instanceof Error ? e.message : String(e));
+  }
+}
+
 export interface StartedService {
   service: Service;
   nc: NatsConnection;
@@ -186,6 +198,14 @@ export async function startFedifyService(
     },
   });
 
+  grp.addEndpoint("fetch_v1", {
+    subject: "fetch.v1",
+    handler: (err, msg) => {
+      if (err) return service.stop(err as Error);
+      void handleFetchMicro(msg);
+    },
+  });
+
   const stop = async () => {
     await service.stop();
     await nc.drain();
@@ -212,7 +232,7 @@ if (import.meta.main) {
   console.log(`  version:   ${info.version}`);
   console.log(`  id:        ${info.id}`);
   console.log(`  queue:     fedify-workers`);
-  console.log(`  endpoints: fedify.{ping,translate,sign,verify,inbox}.v1`);
+  console.log(`  endpoints: fedify.{ping,translate,sign,verify,inbox,fetch}.v1`);
   console.log(`  NATS URL:  ${url}`);
 
   // Block forever; signal handler takes care of shutdown.

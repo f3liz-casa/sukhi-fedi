@@ -239,8 +239,36 @@ defmodule SukhiFedi.Integration.SocialTest do
     end
   end
 
+  describe "Accounts.signing_identity/0" do
+    test "returns a local account that holds a keypair, skipping keyless ones" do
+      _keyless = create_account!("sig_keyless")
+      keyed_account!("sig_keyed")
+
+      identity = Accounts.signing_identity()
+
+      assert identity.privateJwk == %{"kty" => "RSA", "d" => "test"}
+      assert identity.keyId =~ "/users/sig_keyed#main-key"
+    end
+
+    test "returns nil when no local account has a keypair" do
+      _keyless = create_account!("sig_none")
+      assert Accounts.signing_identity() == nil
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
+    |> Repo.insert!()
+  end
+
+  defp keyed_account!(username) do
+    %Account{
+      username: username,
+      display_name: username,
+      summary: "",
+      private_key_jwk: %{"kty" => "RSA", "d" => "test"},
+      public_key_jwk: %{"kty" => "RSA"}
+    }
     |> Repo.insert!()
   end
 

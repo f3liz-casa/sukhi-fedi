@@ -9,6 +9,7 @@ defmodule SukhiFedi.Federation.FedifyClient do
     * `fedify.sign.v1`      — sign an outbound HTTP request envelope
     * `fedify.verify.v1`    — verify an incoming signed HTTP request
     * `fedify.inbox.v1`     — parse an incoming activity into an instruction
+    * `fedify.fetch.v1`     — fetch a remote AP document (HTTP-signed)
 
   The service is queue-grouped (`fedify-workers`) on the Bun side so
   multiple replicas share load automatically.
@@ -34,6 +35,18 @@ defmodule SukhiFedi.Federation.FedifyClient do
   @spec inbox(map()) :: {:ok, term()} | {:error, term()}
   def inbox(payload) when is_map(payload) do
     request("fedify.inbox.v1", payload)
+  end
+
+  @doc """
+  Fetch a remote ActivityPub document. When `sign_as` is a
+  `%{keyId, privateJwk, ...}` map the GET is HTTP-signed (needed by
+  Mastodon Secure Mode / Misskey auth-fetch-required peers); when it is
+  `nil` the fetch is unauthenticated. Returns `{:ok, %{"document" => …}}`.
+  """
+  @spec fetch(String.t(), map() | nil) :: {:ok, term()} | {:error, term()}
+  def fetch(uri, sign_as \\ nil) when is_binary(uri) do
+    payload = if is_map(sign_as), do: %{uri: uri, signAs: sign_as}, else: %{uri: uri}
+    request("fedify.fetch.v1", payload)
   end
 
   @spec ping() :: :ok | {:ok, binary()} | {:error, term()}

@@ -19,10 +19,9 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
-  alias SukhiFedi.Federation.{ActorFetcher, RemoteAccounts}
+  alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
 
   @public_ns "https://www.w3.org/ns/activitystreams#Public"
-  @timeout_ms 10_000
 
   @spec fetch_and_mirror(String.t()) :: {:ok, Note.t()} | {:error, term()}
   def fetch_and_mirror(uri) when is_binary(uri) do
@@ -38,27 +37,15 @@ defmodule SukhiFedi.Federation.NoteFetcher do
     end
   end
 
+  # Fetch via the Bun `fedify.fetch.v1` endpoint so the GET is
+  # HTTP-signed for Mastodon Secure Mode / Misskey auth-fetch-required
+  # peers. The `notes` table is the cache — `fetch_and_mirror/1` checks
+  # it first — so the Bun hop only happens on a genuine miss.
   defp fetch_object(uri) do
-    headers = [
-      {"accept", "application/activity+json, application/ld+json"},
-      {"user-agent", "sukhi-fedi/0.1.0"}
-    ]
-
-    case Req.get(uri, headers: headers, receive_timeout: @timeout_ms) do
-      {:ok, %{status: 200, body: body}} when is_map(body) ->
-        {:ok, body}
-
-      {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        case Jason.decode(body) do
-          {:ok, m} -> {:ok, m}
-          {:error, reason} -> {:error, {:invalid_json, reason}}
-        end
-
-      {:ok, %{status: s}} ->
-        {:error, {:http_status, s}}
-
-      {:error, reason} ->
-        {:error, reason}
+    case FedifyClient.fetch(uri, SukhiFedi.Accounts.signing_identity()) do
+      {:ok, %{"document" => doc}} when is_map(doc) -> {:ok, doc}
+      {:ok, other} -> {:error, {:unexpected_fetch_result, other}}
+      {:error, _} = err -> err
     end
   end
 
