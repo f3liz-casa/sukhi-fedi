@@ -173,7 +173,7 @@ defmodule SukhiFedi.AP.Instructions do
           where: n.account_id == ^account_id and n.visibility == "public",
           order_by: [desc: n.created_at],
           limit: ^@backfill_limit,
-          select: %{id: n.id, content: n.content}
+          select: %{id: n.id, content: n.content, quote_of_ap_id: n.quote_of_ap_id}
         )
         |> Repo.all()
         |> Enum.each(fn n ->
@@ -185,6 +185,7 @@ defmodule SukhiFedi.AP.Instructions do
               account_id: account_id,
               note_id: n.id,
               content: n.content,
+              quote_of_ap_id: n.quote_of_ap_id,
               follower_inbox: follower_inbox
             }
           )

@@ -1,6 +1,6 @@
 import { Create, Note } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
-import { injectMisskey, signAndSerialize } from "../../fedify/utils.ts";
+import { injectMisskey, injectQuote, signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildNotePayload {
@@ -9,6 +9,8 @@ export interface BuildNotePayload {
   recipientInboxes: string[];
   noteId: string;
   activityId: string;
+  // AP id of a quoted note, when this note is a 引用ノート. Optional.
+  quoteUrl?: string;
 }
 
 export interface BuildNoteResult {
@@ -40,6 +42,7 @@ export async function handleBuildNote(
 
   const noteJson = await signAndSerialize(payload.actor, create);
   injectMisskey(noteJson, payload.content);
+  injectQuote(noteJson, payload.quoteUrl);
 
   return {
     note: noteJson,

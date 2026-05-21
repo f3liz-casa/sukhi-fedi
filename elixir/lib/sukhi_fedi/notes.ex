@@ -104,7 +104,8 @@ defmodule SukhiFedi.Notes do
             account_id: n.account_id,
             visibility: n.visibility,
             content: n.content,
-            media_ids: media_ids
+            media_ids: media_ids,
+            quote_of_ap_id: n.quote_of_ap_id
           }
         end
       )

@@ -42,3 +42,26 @@ export function injectMisskey(activityJson: unknown, content: string): void {
     }
   }
 }
+
+// Tag a Create(Note)'s inner object as a quote-note. Misskey reads
+// `_misskey_quote`; `quoteUrl` is the field honoured across Misskey
+// forks. (FEP-e232 `tag` Link form is not emitted.) No-op when there
+// is no quote.
+export function injectQuote(
+  activityJson: unknown,
+  quoteUri: string | null | undefined,
+): void {
+  if (!quoteUri) return;
+  if (
+    activityJson && typeof activityJson === "object" &&
+    "object" in activityJson
+  ) {
+    const obj = (activityJson as Record<string, unknown>).object;
+    if (obj && typeof obj === "object") {
+      injectDefined(obj as Record<string, unknown>, {
+        quoteUrl: quoteUri,
+        _misskey_quote: quoteUri,
+      });
+    }
+  }
+}

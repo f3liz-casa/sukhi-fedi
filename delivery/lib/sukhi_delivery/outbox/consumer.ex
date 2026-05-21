@@ -114,13 +114,15 @@ defmodule SukhiDelivery.Outbox.Consumer do
         ap_id = note_ap_id(actor_uri, note_id)
         activity_id = "#{ap_id}/activity"
 
-        translator_payload = %{
-          actor: actor_uri,
-          content: p["content"] || "",
-          recipientInboxes: recipients,
-          noteId: ap_id,
-          activityId: activity_id
-        }
+        translator_payload =
+          %{
+            actor: actor_uri,
+            content: p["content"] || "",
+            recipientInboxes: recipients,
+            noteId: ap_id,
+            activityId: activity_id
+          }
+          |> maybe_put_quote(p["quote_of_ap_id"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -323,13 +325,15 @@ defmodule SukhiDelivery.Outbox.Consumer do
         ap_id = note_ap_id(actor_uri, note_id)
         activity_id = "#{ap_id}/activity"
 
-        translator_payload = %{
-          actor: actor_uri,
-          content: p["content"] || "",
-          recipientInboxes: recipients,
-          noteId: ap_id,
-          activityId: activity_id
-        }
+        translator_payload =
+          %{
+            actor: actor_uri,
+            content: p["content"] || "",
+            recipientInboxes: recipients,
+            noteId: ap_id,
+            activityId: activity_id
+          }
+          |> maybe_put_quote(p["quote_of_ap_id"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -537,4 +541,12 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp note_ap_id(_, _), do: nil
+
+  # A note may quote another (Misskey 引用ノート). Thread the quoted
+  # AP id through to the `note` translator only when one is present.
+  defp maybe_put_quote(payload, quote_uri) when is_binary(quote_uri) and quote_uri != "" do
+    Map.put(payload, :quoteUrl, quote_uri)
+  end
+
+  defp maybe_put_quote(payload, _), do: payload
 end

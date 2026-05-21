@@ -51,3 +51,30 @@ test("Create(Note) includes _misskey_content on the inner Note", async () => {
   const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
   expect(inner["_misskey_content"]).toBe("hello <b>world</b>");
 });
+
+test("Create(Note) carries quoteUrl + _misskey_quote when a quote is set", async () => {
+  const QUOTED = "https://remote.example/notes/orig";
+  const result = await handleBuildNote({
+    actor: ACTOR,
+    content: "quoting",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/4`,
+    activityId: `${ACTOR}/activities/create/4`,
+    quoteUrl: QUOTED,
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  expect(inner["quoteUrl"]).toBe(QUOTED);
+  expect(inner["_misskey_quote"]).toBe(QUOTED);
+});
+
+test("Create(Note) omits quote fields when there is no quote", async () => {
+  const result = await handleBuildNote({
+    actor: ACTOR,
+    content: "no quote",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/5`,
+    activityId: `${ACTOR}/activities/create/5`,
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  expect(inner["quoteUrl"]).toBeUndefined();
+});
