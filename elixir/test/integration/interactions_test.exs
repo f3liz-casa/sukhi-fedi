@@ -67,6 +67,54 @@ defmodule SukhiFedi.Integration.InteractionsTest do
     end
   end
 
+  describe "react/3" do
+    test "inserts a custom-emoji Reaction + emits sns.outbox.reaction.created" do
+      a = create_account!("alice_react")
+      b = create_account!("bob_react")
+      {:ok, n} = Notes.create_status(b, %{"status" => "hi"})
+
+      assert {:ok, _} = Notes.react(a, n.id, "🦊")
+
+      assert Repo.get_by!(Reaction, account_id: a.id, note_id: n.id, emoji: "🦊")
+
+      assert Repo.exists?(
+               from e in OutboxEvent, where: e.subject == "sns.outbox.reaction.created"
+             )
+    end
+
+    test "is idempotent per (account, note, emoji)" do
+      a = create_account!("alice_react_id")
+      b = create_account!("bob_react_id")
+      {:ok, n} = Notes.create_status(b, %{"status" => "hi"})
+
+      {:ok, _} = Notes.react(a, n.id, "🦊")
+      {:ok, _} = Notes.react(a, n.id, "🦊")
+
+      assert Repo.aggregate(
+               from(e in OutboxEvent, where: e.subject == "sns.outbox.reaction.created"),
+               :count,
+               :id
+             ) == 1
+    end
+  end
+
+  describe "unreact/3" do
+    test "deletes the Reaction + emits sns.outbox.reaction.undone" do
+      a = create_account!("alice_unreact")
+      b = create_account!("bob_unreact")
+      {:ok, n} = Notes.create_status(b, %{"status" => "hi"})
+      {:ok, _} = Notes.react(a, n.id, "🦊")
+
+      assert {:ok, _} = Notes.unreact(a, n.id, "🦊")
+
+      refute Repo.get_by(Reaction, account_id: a.id, note_id: n.id, emoji: "🦊")
+
+      assert Repo.exists?(
+               from e in OutboxEvent, where: e.subject == "sns.outbox.reaction.undone"
+             )
+    end
+  end
+
   describe "reblog/2" do
     test "inserts Boost + emits sns.outbox.announce.created" do
       a = create_account!("alice_rb")

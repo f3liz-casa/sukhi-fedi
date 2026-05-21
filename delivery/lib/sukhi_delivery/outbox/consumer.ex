@@ -12,6 +12,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
       sns.outbox.follow.undone      → Bun `undo` (Follow)     → followee inbox
       sns.outbox.like.created       → Bun `like` translator   → note author + relays
       sns.outbox.like.undone        → Bun `undo` (Like)       → note author
+      sns.outbox.reaction.created   → Bun `emoji_react`       → note author + relays
+      sns.outbox.reaction.undone    → Bun `undo` (EmojiReact) → note author
       sns.outbox.announce.created   → Bun `announce`          → note author + followers
       sns.outbox.announce.undone    → Bun `undo` (Announce)   → note author + followers
       sns.outbox.add.created        → Bun `add` (featured)    → followers
@@ -83,6 +85,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
   def dispatch("sns.outbox.follow.undone", p), do: handle_follow(p, :undo)
   def dispatch("sns.outbox.like.created", p), do: handle_like(p, :create)
   def dispatch("sns.outbox.like.undone", p), do: handle_like(p, :undo)
+  def dispatch("sns.outbox.reaction.created", p), do: handle_reaction(p, :create)
+  def dispatch("sns.outbox.reaction.undone", p), do: handle_reaction(p, :undo)
   def dispatch("sns.outbox.announce.created", p), do: handle_announce(p, :create)
   def dispatch("sns.outbox.announce.undone", p), do: handle_announce(p, :undo)
   def dispatch("sns.outbox.add.created", p), do: handle_collection_op(p, :add)
@@ -240,6 +244,49 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   defp handle_like(_, _), do: :missing_fields
 
+  defp handle_reaction(%{"account_id" => account_id, "note_ap_id" => note_ap_id} = p, mode) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipients = note_author_inbox(note_ap_id) ++ relay_inboxes()
+        domain = SukhiDelivery.Config.domain!()
+
+        activity_id =
+          "https://#{domain}/reactions/#{p["reaction_id"]}#{if mode == :undo, do: "/undo", else: ""}"
+
+        case mode do
+          :create ->
+            payload = %{
+              actor: actor_uri,
+              object: note_ap_id,
+              content: p["emoji"],
+              activityId: activity_id,
+              recipientInboxes: recipients
+            }
+
+            translate_and_fanout("emoji_react", payload, actor_uri, activity_id, recipients)
+
+          :undo ->
+            payload = %{
+              actor: actor_uri,
+              activityId: activity_id,
+              recipientInboxes: recipients,
+              inner: %{
+                type: "EmojiReact",
+                id: "https://#{domain}/reactions/#{p["reaction_id"]}",
+                object: note_ap_id
+              }
+            }
+
+            translate_and_fanout("undo", payload, actor_uri, activity_id, recipients)
+        end
+    end
+  end
+
+  defp handle_reaction(_, _), do: :missing_fields
+
   defp handle_announce(%{"account_id" => account_id, "note_ap_id" => note_ap_id} = p, mode) do
     case actor_for(account_id) do
       nil ->
@@ -395,6 +442,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   defp extract_body(result, "follow", _opts), do: Map.get(result, "follow", result)
   defp extract_body(result, "announce", _opts), do: Map.get(result, "announce", result)
   defp extract_body(result, "like", _opts), do: Map.get(result, "like", result)
+  defp extract_body(result, "emoji_react", _opts), do: Map.get(result, "emojiReact", result)
   defp extract_body(result, "undo", _opts), do: Map.get(result, "undo", result)
   defp extract_body(result, "add", _opts), do: Map.get(result, "activity", result)
   defp extract_body(result, "remove", _opts), do: Map.get(result, "activity", result)

@@ -1,4 +1,4 @@
-import { Like, Follow, Undo } from "@fedify/fedify";
+import { EmojiReact, Like, Follow, Undo } from "@fedify/fedify";
 import { Temporal } from "@js-temporal/polyfill";
 import { signAndSerialize } from "../../fedify/utils.ts";
 import { mirrorAudience } from "../../fedify/addressing.ts";
@@ -10,7 +10,7 @@ export interface BuildUndoPayload {
   // The activity being undone. Must be one we own (we re-construct a
   // minimal stub so the receiver can match it by `id`).
   inner: {
-    type: "Like" | "Follow";
+    type: "Like" | "EmojiReact" | "Follow";
     id: string;
     object: string;
   };
@@ -24,17 +24,17 @@ export interface BuildUndoResult {
 export async function handleBuildUndo(
   payload: BuildUndoPayload,
 ): Promise<BuildUndoResult> {
+  const innerArgs = {
+    id: new URL(payload.inner.id),
+    actor: new URL(payload.actor),
+    object: new URL(payload.inner.object),
+  };
+
   const inner = payload.inner.type === "Like"
-    ? new Like({
-        id: new URL(payload.inner.id),
-        actor: new URL(payload.actor),
-        object: new URL(payload.inner.object),
-      })
-    : new Follow({
-        id: new URL(payload.inner.id),
-        actor: new URL(payload.actor),
-        object: new URL(payload.inner.object),
-      });
+    ? new Like(innerArgs)
+    : payload.inner.type === "EmojiReact"
+    ? new EmojiReact(innerArgs)
+    : new Follow(innerArgs);
 
   const audience = mirrorAudience(payload.inner.object);
 

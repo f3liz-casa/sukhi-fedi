@@ -547,6 +547,111 @@ defmodule SukhiFedi.Notes do
     end)
   end
 
+  @doc """
+  React to a note with an arbitrary emoji (Misskey-style custom
+  reaction). Idempotent per `(account, note, emoji)`. Emits
+  `sns.outbox.reaction.created` so the delivery node federates an
+  `EmojiReact`.
+
+  Unlike `favourite/2` — the ⭐ special case that federates as a
+  `Like` — this carries the emoji on the wire. No HTTP route reaches
+  it yet; the Misskey client API that would is parked (OPEN_QUESTIONS
+  Q3).
+  """
+  @spec react(Account.t() | integer(), integer() | binary(), String.t()) ::
+          {:ok, Note.t()} | {:error, :not_found | term()}
+  def react(%Account{id: aid}, note_id, emoji), do: react(aid, note_id, emoji)
+
+  def react(account_id, note_id, emoji)
+      when is_integer(account_id) and is_binary(emoji) do
+    with_loaded_note(note_id, fn note ->
+      case Repo.get_by(Reaction, account_id: account_id, note_id: note.id, emoji: emoji) do
+        %Reaction{} ->
+          {:ok, note}
+
+        nil ->
+          Multi.new()
+          |> Multi.insert(
+            :reaction,
+            Reaction.changeset(%Reaction{}, %{
+              account_id: account_id,
+              note_id: note.id,
+              emoji: emoji
+            })
+          )
+          |> Outbox.enqueue_multi(
+            :outbox_event,
+            "sns.outbox.reaction.created",
+            "reaction",
+            & &1.reaction.id,
+            fn %{reaction: r} ->
+              %{
+                reaction_id: r.id,
+                account_id: r.account_id,
+                note_id: r.note_id,
+                note_ap_id: note.ap_id,
+                emoji: r.emoji
+              }
+            end
+          )
+          |> Repo.transaction()
+          |> case do
+            {:ok, _} ->
+              SukhiFedi.Notifications.create(%{
+                account_id: note.account_id,
+                from_account_id: account_id,
+                note_id: note.id,
+                type: "favourite"
+              })
+
+              {:ok, note}
+
+            {:error, _step, reason, _} ->
+              {:error, reason}
+          end
+      end
+    end)
+  end
+
+  @doc "Remove a custom emoji reaction. Idempotent. Emits `sns.outbox.reaction.undone` on actual delete."
+  @spec unreact(Account.t() | integer(), integer() | binary(), String.t()) ::
+          {:ok, Note.t()} | {:error, :not_found | term()}
+  def unreact(%Account{id: aid}, note_id, emoji), do: unreact(aid, note_id, emoji)
+
+  def unreact(account_id, note_id, emoji)
+      when is_integer(account_id) and is_binary(emoji) do
+    with_loaded_note(note_id, fn note ->
+      case Repo.get_by(Reaction, account_id: account_id, note_id: note.id, emoji: emoji) do
+        nil ->
+          {:ok, note}
+
+        %Reaction{} = r ->
+          Multi.new()
+          |> Multi.delete(:reaction, r)
+          |> Outbox.enqueue_multi(
+            :outbox_event,
+            "sns.outbox.reaction.undone",
+            "reaction",
+            fn _ -> r.id end,
+            fn _ ->
+              %{
+                reaction_id: r.id,
+                account_id: r.account_id,
+                note_id: r.note_id,
+                note_ap_id: note.ap_id,
+                emoji: r.emoji
+              }
+            end
+          )
+          |> Repo.transaction()
+          |> case do
+            {:ok, _} -> {:ok, note}
+            {:error, _step, reason, _} -> {:error, reason}
+          end
+      end
+    end)
+  end
+
   @doc "Reblog (Mastodon) / Boost (internal). Idempotent. Emits `sns.outbox.announce.created`."
   @spec reblog(Account.t() | integer(), integer() | binary()) ::
           {:ok, Note.t()} | {:error, :not_found}

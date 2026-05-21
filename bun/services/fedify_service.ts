@@ -25,6 +25,7 @@ import { handleBuildAnnounce } from "../handlers/build/announce.ts";
 import { handleBuildDm } from "../handlers/build/dm.ts";
 import { handleBuildAdd, handleBuildRemove } from "../handlers/build/collection_op.ts";
 import { handleBuildLike } from "../handlers/build/like.ts";
+import { handleBuildEmojiReact } from "../handlers/build/emoji_react.ts";
 import { handleBuildUndo } from "../handlers/build/undo.ts";
 import { handleBuildDelete } from "../handlers/build/delete.ts";
 import { handleSignDelivery } from "../handlers/sign_delivery.ts";
@@ -43,7 +44,10 @@ const enc = new TextEncoder();
 // namespaced keys (`<addon_id>.<type>`) via their manifest.
 //
 // `dm` is staged for the upcoming direct-message send path (see
-// OPEN_QUESTIONS Q4); nothing requests it from Elixir yet.
+// OPEN_QUESTIONS Q4); nothing requests it from Elixir yet. `emoji_react`
+// is likewise staged — the gateway can emit `sns.outbox.reaction.created`
+// but no local trigger creates a custom reaction until the Misskey
+// client API ships.
 const CORE_TRANSLATORS: Record<string, TranslateHandler> = {
   note: handleBuildNote as TranslateHandler,
   follow: handleBuildFollow as TranslateHandler,
@@ -52,6 +56,7 @@ const CORE_TRANSLATORS: Record<string, TranslateHandler> = {
   add: handleBuildAdd as TranslateHandler,
   remove: handleBuildRemove as TranslateHandler,
   like: handleBuildLike as TranslateHandler,
+  emoji_react: handleBuildEmojiReact as TranslateHandler,
   undo: handleBuildUndo as TranslateHandler,
   delete: handleBuildDelete as TranslateHandler,
 };
