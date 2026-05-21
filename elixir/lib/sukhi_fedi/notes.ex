@@ -448,6 +448,14 @@ defmodule SukhiFedi.Notes do
   # ── interactions: favourite / reblog / bookmark / pin ────────────────────
 
   @doc """
+  The emoji a Mastodon-style favourite is stored as. A `Reaction` row
+  carrying this emoji is a favourite; any other emoji is a Misskey-style
+  custom reaction.
+  """
+  @spec favourite_emoji() :: String.t()
+  def favourite_emoji, do: @favourite_emoji
+
+  @doc """
   Mark a note as favourited by `account`. Idempotent — second call is
   a no-op. Emits `sns.outbox.like.created` on first insert (delivery
   node will translate to `Like` AP activity).

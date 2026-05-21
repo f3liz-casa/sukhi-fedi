@@ -7,8 +7,8 @@ defmodule SukhiFedi.AP.Instructions do
 
   import Ecto.Query
 
-  alias SukhiFedi.{Notifications, Outbox, Repo}
-  alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note}
+  alias SukhiFedi.{Notes, Notifications, Outbox, Repo}
+  alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note, Reaction}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
 
@@ -35,7 +35,7 @@ defmodule SukhiFedi.AP.Instructions do
     maybe_handle_relay_accept(object_data)
     maybe_handle_follow_accept(object_data)
     maybe_mirror_create_note(object_data)
-    maybe_notify_like(object_data)
+    maybe_handle_reaction(object_data)
     maybe_notify_announce(object_data)
     maybe_handle_pin_unpin(object_data)
     maybe_handle_delete(object_data)
@@ -334,17 +334,29 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_mirror_create_note(_), do: :ok
 
-  # Inbound `Like` on a local note → favourite notification for the
-  # local author. We don't materialise the like itself yet, so look
-  # up the target note by its AP id and notify if we own it.
-  defp maybe_notify_like(%{"type" => "Like", "actor" => actor_uri, "object" => object_uri}) do
-    with object_id when is_binary(object_id) <- extract_object_id(object_uri),
-         %Note{id: note_id, account_id: recipient_id} <-
-           Repo.get_by(Note, ap_id: object_id),
-         {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(actor_uri) do
+  # Inbound `Like` (Mastodon favourite) or `EmojiReact` (Misskey custom
+  # emoji reaction) on a note we can resolve → materialise a `reactions`
+  # row and notify the note's author. The reaction already happened on
+  # the remote side, so the row is inserted directly: no outbox event,
+  # because re-broadcasting someone else's reaction would be wrong.
+  defp maybe_handle_reaction(%{"type" => type, "actor" => actor_uri, "object" => object} = activity)
+       when type in ["Like", "EmojiReact"] and is_binary(actor_uri) do
+    with %Note{id: note_id, account_id: author_id} <- resolve_target_note(object),
+         {:ok, %Account{id: reactor_id}} <- resolve_or_ingest_actor(actor_uri) do
+      %Reaction{}
+      |> Reaction.changeset(%{
+        account_id: reactor_id,
+        note_id: note_id,
+        emoji: reaction_emoji(type, activity)
+      })
+      |> Repo.insert(on_conflict: :nothing)
+
+      # Mastodon clients have no `reaction` notification type, so a
+      # custom-emoji reaction surfaces as `favourite` — the emoji itself
+      # lives on the `reactions` row for richer (Misskey) clients.
       Notifications.create(%{
-        account_id: recipient_id,
-        from_account_id: from_id,
+        account_id: author_id,
+        from_account_id: reactor_id,
         note_id: note_id,
         type: "favourite"
       })
@@ -353,13 +365,17 @@ defmodule SukhiFedi.AP.Instructions do
     :ok
   end
 
-  defp maybe_notify_like(_), do: :ok
+  defp maybe_handle_reaction(_), do: :ok
+
+  # `Like` carries no emoji → our favourite star. `EmojiReact` carries
+  # the reaction in `content` (a unicode emoji or a `:shortcode:`);
+  # fall back to the star when a peer omits it.
+  defp reaction_emoji("EmojiReact", %{"content" => c}) when is_binary(c) and c != "", do: c
+  defp reaction_emoji(_type, _activity), do: Notes.favourite_emoji()
 
   # Inbound `Announce` of a local note → reblog notification.
   defp maybe_notify_announce(%{"type" => "Announce", "actor" => actor_uri, "object" => object_uri}) do
-    with object_id when is_binary(object_id) <- extract_object_id(object_uri),
-         %Note{id: note_id, account_id: recipient_id} <-
-           Repo.get_by(Note, ap_id: object_id),
+    with %Note{id: note_id, account_id: recipient_id} <- resolve_target_note(object_uri),
          {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(actor_uri) do
       Notifications.create(%{
         account_id: recipient_id,
@@ -507,9 +523,10 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_delete(_), do: :ok
 
-  # Inbound `Undo(Follow)`: remove the matching follow row. Other Undo
-  # variants (Like, Announce, …) are no-ops because we don't currently
-  # materialise remote-actor-originated likes/boosts as local rows.
+  # Inbound `Undo`: reverse what the original activity materialised.
+  # `Undo(Follow)` drops the follow row; `Undo(Like)` / `Undo(EmojiReact)`
+  # drop the matching `reactions` row. `Undo(Announce)` stays a no-op —
+  # we notify on inbound Announce but don't materialise a Boost row.
   defp maybe_handle_undo(%{"type" => "Undo", "actor" => actor_uri, "object" => inner})
        when is_binary(actor_uri) and is_map(inner) do
     case inner["type"] do
@@ -532,6 +549,19 @@ defmodule SukhiFedi.AP.Instructions do
 
         :ok
 
+      type when type in ["Like", "EmojiReact"] ->
+        with %Note{id: note_id} <- resolve_target_note(inner["object"]),
+             {:ok, %Account{id: reactor_id}} <- resolve_or_ingest_actor(actor_uri) do
+          emoji = reaction_emoji(type, inner)
+
+          from(r in Reaction,
+            where: r.account_id == ^reactor_id and r.note_id == ^note_id and r.emoji == ^emoji
+          )
+          |> Repo.delete_all()
+        end
+
+        :ok
+
       _ ->
         :ok
     end
@@ -542,6 +572,30 @@ defmodule SukhiFedi.AP.Instructions do
   defp extract_object_id(id) when is_binary(id), do: id
   defp extract_object_id(%{"id" => id}) when is_binary(id), do: id
   defp extract_object_id(_), do: nil
+
+  # Resolve the Note an inbound activity targets. Local notes are
+  # addressed by their synthesized AP id (`…/users/<name>/notes/<id>`,
+  # see `NoteController`) and carry no `ap_id` column, so the trailing
+  # path segment is the row id. Remote (mirrored) notes are matched by
+  # their stored `ap_id`.
+  defp resolve_target_note(object) do
+    case extract_object_id(object) do
+      uri when is_binary(uri) ->
+        if String.contains?(uri, SukhiFedi.Config.domain!()) do
+          last = (URI.parse(uri).path || "") |> String.split("/") |> List.last()
+
+          case Integer.parse(last || "") do
+            {id, ""} -> Repo.get(Note, id)
+            _ -> nil
+          end
+        else
+          Repo.get_by(Note, ap_id: uri)
+        end
+
+      _ ->
+        nil
+    end
+  end
 
   defp local_account_id_from_uri(uri) when is_binary(uri) do
     domain = SukhiFedi.Config.domain!()
