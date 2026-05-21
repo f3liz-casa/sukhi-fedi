@@ -21,10 +21,6 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 - [ ] **`mention` notification type.** Trips when local users land
       in another note's address list. Falls out naturally from the
       DM work because we'll already be extracting mentions there.
-- [ ] **Note-fetch HTTP signature.** `Federation.NoteFetcher` does
-      an unsigned GET. Mastodon Secure Mode + Misskey auth-fetch-
-      required servers reject those. The fetch path needs the same
-      `signAs` plumbing the inbox already uses.
 
 ## Mastodon API surface — open
 
