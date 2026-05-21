@@ -145,6 +145,43 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
     end
   end
 
+  describe "inbound mentions" do
+    test "a Mention tag for a local user creates a mention notification" do
+      mentioned = create_account!("mentioned_local")
+      author = create_remote_account!("mention_author", "remote.example")
+      note_uri = "https://remote.example/notes/m1"
+      local_uri = "https://#{Config.domain!()}/users/#{mentioned.username}"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "hey @mentioned_local",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "tag" => [
+                       %{"type" => "Mention", "href" => local_uri, "name" => "@mentioned_local"}
+                     ]
+                   }
+                 }
+               })
+
+      note = Repo.get_by(Note, ap_id: note_uri)
+
+      assert Repo.get_by(Notification,
+               account_id: mentioned.id,
+               from_account_id: author.id,
+               note_id: note.id,
+               type: "mention"
+             )
+    end
+  end
+
   # A local note carries no `ap_id`; its AP id is synthesized the same
   # way `NoteController` publishes it.
   defp local_note_uri(%Account{username: u}, %{id: id}) do

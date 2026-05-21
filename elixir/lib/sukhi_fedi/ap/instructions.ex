@@ -350,6 +350,7 @@ defmodule SukhiFedi.AP.Instructions do
              |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id) do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])
+            notify_mentions(note, nid, account_id)
             :ok
 
           _ ->
@@ -362,6 +363,35 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   defp maybe_mirror_create_note(_), do: :ok
+
+  # A mirrored note can name local users in its AP `tag` array. Notify
+  # each — this is the `mention` notification type. DM-addressed notes
+  # never reach here (routed by `maybe_handle_dm`).
+  defp notify_mentions(note, note_id, author_id) do
+    note
+    |> Map.get("tag")
+    |> List.wrap()
+    |> Enum.each(fn
+      %{"type" => "Mention", "href" => href} when is_binary(href) ->
+        case local_account_id_from_uri(href) do
+          nil ->
+            :ok
+
+          local_id ->
+            Notifications.create(%{
+              account_id: local_id,
+              from_account_id: author_id,
+              note_id: note_id,
+              type: "mention"
+            })
+        end
+
+      _ ->
+        :ok
+    end)
+
+    :ok
+  end
 
   # Inbound `Like` (Mastodon favourite) or `EmojiReact` (Misskey custom
   # emoji reaction) on a note we can resolve → materialise a `reactions`
