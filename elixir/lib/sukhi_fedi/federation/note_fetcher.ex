@@ -82,6 +82,12 @@ defmodule SukhiFedi.Federation.NoteFetcher do
     extract(note["quoteUrl"]) || extract(note["quoteUri"]) || extract(note["_misskey_quote"])
   end
 
+  # MFM source travels as `_misskey_content` or a `source` object;
+  # mirror it so the Misskey markup survives the fetch.
+  defp mfm_source(%{"_misskey_content" => s}) when is_binary(s) and s != "", do: s
+  defp mfm_source(%{"source" => %{"content" => s}}) when is_binary(s) and s != "", do: s
+  defp mfm_source(_), do: nil
+
   defp insert_note(note_json, account_id, uri) do
     attrs = %{
       "account_id" => account_id,
@@ -89,7 +95,8 @@ defmodule SukhiFedi.Federation.NoteFetcher do
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
       "in_reply_to_ap_id" => extract(note_json["inReplyTo"]),
-      "quote_of_ap_id" => quote_uri(note_json)
+      "quote_of_ap_id" => quote_uri(note_json),
+      "mfm" => mfm_source(note_json)
     }
 
     %Note{}

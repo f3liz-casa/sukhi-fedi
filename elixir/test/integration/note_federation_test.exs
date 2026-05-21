@@ -119,6 +119,30 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
 
       assert %Note{quote_of_ap_id: ^original} = Repo.get_by(Note, ap_id: quote_note)
     end
+
+    test "Create(Note) with _misskey_content mirrors the MFM source" do
+      author = create_remote_account!("mfm_author", "remote.example")
+      note_uri = "https://remote.example/notes/mfm1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "<p>rendered</p>",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "_misskey_content" => "$[jelly MFM] source"
+                   }
+                 }
+               })
+
+      assert %Note{mfm: "$[jelly MFM] source"} = Repo.get_by(Note, ap_id: note_uri)
+    end
   end
 
   # A local note carries no `ap_id`; its AP id is synthesized the same

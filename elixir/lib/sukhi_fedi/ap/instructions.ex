@@ -129,6 +129,21 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp extract_quote_uri(_), do: nil
 
+  # MFM (Misskey Flavored Markdown) source travels out of band of the
+  # rendered `content` — as `_misskey_content` or a `source` object.
+  # Keep it so the source round-trips instead of collapsing to HTML.
+  defp extract_mfm(note) when is_map(note) do
+    case note["_misskey_content"] do
+      s when is_binary(s) and s != "" -> s
+      _ -> mfm_from_source(note["source"])
+    end
+  end
+
+  defp extract_mfm(_), do: nil
+
+  defp mfm_from_source(%{"content" => s}) when is_binary(s) and s != "", do: s
+  defp mfm_from_source(_), do: nil
+
   defp maybe_enqueue_actor_update(followee_uri, inbox_url)
        when is_binary(followee_uri) and is_binary(inbox_url) do
     username =
@@ -326,7 +341,8 @@ defmodule SukhiFedi.AP.Instructions do
           "ap_id" => ap_id,
           "visibility" => visibility_from(note),
           "in_reply_to_ap_id" => extract_uri(note["inReplyTo"]),
-          "quote_of_ap_id" => extract_quote_uri(note)
+          "quote_of_ap_id" => extract_quote_uri(note),
+          "mfm" => extract_mfm(note)
         }
 
         case %Note{}
