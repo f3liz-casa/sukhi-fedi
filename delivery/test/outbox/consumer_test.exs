@@ -66,5 +66,9 @@ defmodule SukhiDelivery.Outbox.ConsumerTest do
     test "follow.backfill missing fields → :missing_fields" do
       assert :missing_fields = Consumer.dispatch("sns.outbox.follow.backfill", %{})
     end
+
+    test "dm.created missing fields → :missing_fields" do
+      assert :missing_fields = Consumer.dispatch("sns.outbox.dm.created", %{})
+    end
   end
 end

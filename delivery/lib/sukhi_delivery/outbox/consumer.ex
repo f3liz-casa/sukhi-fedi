@@ -8,6 +8,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
       sns.outbox.note.created       → Bun `note` translator   → fan out
       sns.outbox.note.deleted       → Bun `delete` translator → fan out
+      sns.outbox.dm.created         → Bun `dm` translator     → direct recipient inboxes
       sns.outbox.follow.requested   → Bun `follow` translator → followee inbox
       sns.outbox.follow.undone      → Bun `undo` (Follow)     → followee inbox
       sns.outbox.like.created       → Bun `like` translator   → note author + relays
@@ -81,6 +82,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   @doc false
   def dispatch("sns.outbox.note.created", p), do: handle_note_created(p)
   def dispatch("sns.outbox.note.deleted", p), do: handle_note_deleted(p)
+  def dispatch("sns.outbox.dm.created", p), do: handle_dm(p)
   def dispatch("sns.outbox.follow.requested", p), do: handle_follow(p, :create)
   def dispatch("sns.outbox.follow.undone", p), do: handle_follow(p, :undo)
   def dispatch("sns.outbox.like.created", p), do: handle_like(p, :create)
@@ -159,6 +161,40 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp handle_note_deleted(_), do: :missing_fields
+
+  defp handle_dm(%{"account_id" => account_id, "note_id" => note_id} = p) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipient_uris = p["recipient_actor_uris"] || []
+
+        inboxes =
+          recipient_uris
+          |> Enum.map(&inbox_for_actor_uri/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq()
+
+        ap_id = note_ap_id(actor_uri, note_id)
+        activity_id = "#{ap_id}/activity"
+
+        payload = %{
+          actor: actor_uri,
+          content: p["content"] || "",
+          recipientActors: recipient_uris,
+          noteId: ap_id,
+          activityId: activity_id,
+          recipientInboxes: inboxes,
+          inReplyToId: p["in_reply_to_ap_id"],
+          conversationId: p["conversation_ap_id"]
+        }
+
+        translate_and_fanout("dm", payload, actor_uri, activity_id, inboxes)
+    end
+  end
+
+  defp handle_dm(_), do: :missing_fields
 
   defp handle_follow(%{"follower_uri" => follower_uri, "followee_id" => followee_id} = p, mode) do
     case follower_uri_to_account(follower_uri) do
@@ -438,6 +474,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   # Bun translator results carry the payload under different keys per
   # type. Pick the right one — fall back to the whole result.
   defp extract_body(result, "note", _opts), do: Map.get(result, "note", result)
+  defp extract_body(result, "dm", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "delete", _opts), do: Map.get(result, "delete", result)
   defp extract_body(result, "follow", _opts), do: Map.get(result, "follow", result)
   defp extract_body(result, "announce", _opts), do: Map.get(result, "announce", result)

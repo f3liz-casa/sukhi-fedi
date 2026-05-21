@@ -61,9 +61,11 @@ defmodule SukhiFedi.Notes do
     * `poll[options][]` (or JSON `poll: %{…}`) → inserts a Poll +
       PollOptions in the same transaction
 
-  Returns `{:error, :direct_visibility_not_supported}` for
-  `visibility: "direct"` — the addressing pipeline for DMs is parked
-  in OPEN_QUESTIONS Q4.
+  `visibility: "direct"` routes to a DM: `@user` / `@user@host`
+  mentions are pulled from the text, resolved to recipient actors
+  (WebFinger + shadow upsert on a remote miss), and the note federates
+  via `sns.outbox.dm.created`. Returns `{:error, :dm_no_recipients}`
+  when no mention resolves.
   """
   @spec create_status(Account.t() | integer(), map()) ::
           {:ok, Note.t()} | {:error, atom() | {:validation, map()}}
@@ -73,7 +75,7 @@ defmodule SukhiFedi.Notes do
     visibility = normalize_visibility(params[:visibility] || params["visibility"] || "public")
 
     if visibility == "direct" do
-      {:error, :direct_visibility_not_supported}
+      create_direct_status(account_id, params)
     else
       attrs =
         %{
@@ -125,6 +127,93 @@ defmodule SukhiFedi.Notes do
       end
     end
   end
+
+  # `visibility: "direct"` path of `create_status/2`. Mentions are
+  # extracted and resolved to recipient actors, then the note federates
+  # via `sns.outbox.dm.created`. Hashtags are not indexed and polls are
+  # not attached — a DM is private and point-to-point.
+  defp create_direct_status(account_id, params) do
+    content = params[:status] || params["status"] || ""
+    recipients = extract_mention_recipients(content)
+
+    if recipients == [] do
+      {:error, :dm_no_recipients}
+    else
+      attrs =
+        %{
+          account_id: account_id,
+          content: content,
+          cw: params[:spoiler_text] || params["spoiler_text"] || params[:cw] || params["cw"],
+          visibility: "direct"
+        }
+        |> resolve_in_reply_to(params)
+
+      media_ids = list_media_ids(params)
+
+      Multi.new()
+      |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
+      |> attach_media(media_ids, account_id)
+      |> Outbox.enqueue_multi(
+        :outbox_event,
+        "sns.outbox.dm.created",
+        "note",
+        & &1.note.id,
+        fn %{note: n} ->
+          %{
+            note_id: n.id,
+            account_id: n.account_id,
+            content: n.content,
+            recipient_actor_uris: recipients,
+            in_reply_to_ap_id: n.in_reply_to_ap_id,
+            conversation_ap_id: n.conversation_ap_id
+          }
+        end
+      )
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{note: note}} ->
+          {:ok, Repo.preload(note, [:account, :media])}
+
+        {:error, :note, %Ecto.Changeset{} = cs, _} ->
+          {:error, {:validation, changeset_errors(cs)}}
+
+        {:error, :media_check, :not_owned, _} ->
+          {:error, :media_not_owned}
+
+        {:error, _step, reason, _} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  # Pull `@user` / `@user@host` handles from the note text and resolve
+  # each to a recipient actor URI. The negative lookbehind keeps email
+  # addresses from matching. Unresolvable handles are dropped.
+  @mention_re ~r/(?<![\w])@([\w]+)(?:@([\w.\-]+))?/
+
+  defp extract_mention_recipients(content) when is_binary(content) do
+    domain = SukhiFedi.Config.domain!()
+
+    @mention_re
+    |> Regex.scan(content)
+    |> Enum.map(fn
+      [_, user, host] when host != "" -> "#{user}@#{host}"
+      [_, user | _] -> user
+    end)
+    |> Enum.uniq()
+    |> Enum.flat_map(fn handle ->
+      case SukhiFedi.Accounts.lookup_by_acct(handle, resolve: true) do
+        {:ok, account} -> [recipient_actor_uri(account, domain)]
+        _ -> []
+      end
+    end)
+    |> Enum.uniq()
+  end
+
+  defp extract_mention_recipients(_), do: []
+
+  defp recipient_actor_uri(%Account{actor_uri: uri}, _domain) when is_binary(uri), do: uri
+  defp recipient_actor_uri(%Account{username: u}, domain), do: "https://#{domain}/users/#{u}"
 
   # Optional poll block. Mastodon shape:
   #   poll[options][]=A&poll[options][]=B&poll[expires_in]=3600&poll[multiple]=false

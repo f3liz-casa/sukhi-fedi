@@ -57,11 +57,37 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert child.in_reply_to_ap_id == "https://x.example/notes/parent_42"
     end
 
-    test "direct visibility is rejected" do
+    test "direct status with no resolvable mention → :dm_no_recipients" do
       a = create_account!("alice_dm")
 
-      assert {:error, :direct_visibility_not_supported} =
-               Notes.create_status(a, %{"status" => "secret", "visibility" => "direct"})
+      assert {:error, :dm_no_recipients} =
+               Notes.create_status(a, %{"status" => "secret, nobody home", "visibility" => "direct"})
+    end
+
+    test "direct status to a mentioned user → Note(direct) + sns.outbox.dm.created" do
+      alice = create_account!("alice_dm_send")
+      _bob = create_account!("bob_dm_recv")
+
+      assert {:ok, note} =
+               Notes.create_status(alice, %{
+                 "status" => "@bob_dm_recv psst",
+                 "visibility" => "direct"
+               })
+
+      assert note.visibility == "direct"
+
+      ev =
+        Repo.one!(
+          from e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.dm.created" and
+                e.aggregate_id == ^to_string(note.id)
+        )
+
+      assert ev.payload["content"] == "@bob_dm_recv psst"
+
+      assert "https://#{SukhiFedi.Config.domain!()}/users/bob_dm_recv" in
+               ev.payload["recipient_actor_uris"]
     end
 
     test "media_ids[] not owned by user → :media_not_owned" do
