@@ -45,7 +45,8 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 ## Misskey native API
 
 Single addon `:misskey_api` (per [OPEN_QUESTIONS Q3](OPEN_QUESTIONS.md#q3-misskey-native-api--addon-マニフェストの粒度)).
-Shares the existing contexts; only the view layer differs.
+Shares the existing contexts; only the view layer differs. The planned
+endpoint surface is mapped out in [`docs/MISSKEY_API.md`](docs/MISSKEY_API.md).
 
 - [ ] **Auth.** `/api/auth/session/{generate,userkey}` — map
       Misskey's session-key flow onto `oauth_access_tokens`.
