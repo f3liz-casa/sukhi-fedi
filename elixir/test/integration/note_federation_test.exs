@@ -15,7 +15,7 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
 
   alias SukhiFedi.{Config, Notes}
   alias SukhiFedi.AP.Instructions
-  alias SukhiFedi.Schema.{Account, Notification, Reaction}
+  alias SukhiFedi.Schema.{Account, Note, Notification, Reaction}
 
   describe "stage-0 smoke" do
     test "mock remote bypass is openable", %{mock_remote: bypass} do
@@ -91,6 +91,33 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
                })
 
       refute Repo.get_by(Reaction, account_id: reactor.id, note_id: note.id, emoji: "🦊")
+    end
+  end
+
+  describe "inbound quote notes" do
+    test "Create(Note) with quoteUrl mirrors quote_of_ap_id" do
+      quoter = create_remote_account!("quoter", "remote.example")
+      original = "https://remote.example/notes/original"
+      quote_note = "https://remote.example/notes/q1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => quoter.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => quote_note,
+                     "attributedTo" => quoter.actor_uri,
+                     "content" => "quoting you",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "quoteUrl" => original
+                   }
+                 }
+               })
+
+      assert %Note{quote_of_ap_id: ^original} = Repo.get_by(Note, ap_id: quote_note)
     end
   end
 

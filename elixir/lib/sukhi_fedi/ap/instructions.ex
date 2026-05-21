@@ -118,6 +118,17 @@ defmodule SukhiFedi.AP.Instructions do
   defp extract_uri(%{"@id" => id}) when is_binary(id), do: id
   defp extract_uri(_), do: nil
 
+  # Misskey and its forks signal a quote-note with one of several
+  # top-level fields on the Object. Accept the common ones; the
+  # FEP-e232 `tag` Link form is not parsed yet.
+  defp extract_quote_uri(note) when is_map(note) do
+    extract_uri(note["quoteUrl"]) ||
+      extract_uri(note["quoteUri"]) ||
+      extract_uri(note["_misskey_quote"])
+  end
+
+  defp extract_quote_uri(_), do: nil
+
   defp maybe_enqueue_actor_update(followee_uri, inbox_url)
        when is_binary(followee_uri) and is_binary(inbox_url) do
     username =
@@ -313,7 +324,8 @@ defmodule SukhiFedi.AP.Instructions do
           "content" => note["content"] || "",
           "ap_id" => ap_id,
           "visibility" => visibility_from(note),
-          "in_reply_to_ap_id" => extract_uri(note["inReplyTo"])
+          "in_reply_to_ap_id" => extract_uri(note["inReplyTo"]),
+          "quote_of_ap_id" => extract_quote_uri(note)
         }
 
         case %Note{}

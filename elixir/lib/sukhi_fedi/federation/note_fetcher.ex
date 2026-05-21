@@ -89,13 +89,20 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp extract(%{"id" => id}) when is_binary(id), do: id
   defp extract(_), do: nil
 
+  # Misskey/forks signal a quote-note with one of these top-level
+  # fields; mirror it so the link survives the fetch.
+  defp quote_uri(note) do
+    extract(note["quoteUrl"]) || extract(note["quoteUri"]) || extract(note["_misskey_quote"])
+  end
+
   defp insert_note(note_json, account_id, uri) do
     attrs = %{
       "account_id" => account_id,
       "content" => note_json["content"] || "",
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
-      "in_reply_to_ap_id" => extract(note_json["inReplyTo"])
+      "in_reply_to_ap_id" => extract(note_json["inReplyTo"]),
+      "quote_of_ap_id" => quote_uri(note_json)
     }
 
     %Note{}
