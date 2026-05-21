@@ -116,6 +116,33 @@ defmodule SukhiFedi.Integration.NotesTest do
       reloaded = Repo.preload(Repo.get!(Note, note.id), :media)
       assert Enum.map(reloaded.media, & &1.id) == [m.id]
     end
+
+    test "quote_id sets quote_of_ap_id + carries it in sns.outbox.note.created" do
+      a = create_account!("alice_quote")
+      {:ok, quoted} = Notes.create_status(a, %{"status" => "original", "visibility" => "public"})
+
+      assert {:ok, note} =
+               Notes.create_status(a, %{
+                 "status" => "quoting that",
+                 "visibility" => "public",
+                 "quote_id" => to_string(quoted.id)
+               })
+
+      expected =
+        "https://#{SukhiFedi.Config.domain!()}/users/alice_quote/notes/#{quoted.id}"
+
+      assert note.quote_of_ap_id == expected
+
+      ev =
+        Repo.one!(
+          from e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.note.created" and
+                e.aggregate_id == ^to_string(note.id)
+        )
+
+      assert ev.payload["quote_of_ap_id"] == expected
+    end
   end
 
   describe "get_note/1" do

@@ -58,6 +58,8 @@ defmodule SukhiFedi.Notes do
     * `in_reply_to_id` → either a local Note id or an http(s) URI; in
       the URI case `Federation.NoteFetcher` mirrors the remote note
       first so we can store its `ap_id`
+    * `quote_id` / `quoted_status_id` → `quote_of_ap_id` (same id/URI
+      resolution as `in_reply_to_id`) — federates as a 引用ノート
     * `poll[options][]` (or JSON `poll: %{…}`) → inserts a Poll +
       PollOptions in the same transaction
 
@@ -85,6 +87,7 @@ defmodule SukhiFedi.Notes do
           visibility: visibility
         }
         |> resolve_in_reply_to(params)
+        |> resolve_quote(params)
 
       media_ids = list_media_ids(params)
 
@@ -349,6 +352,63 @@ defmodule SukhiFedi.Notes do
   end
 
   defp resolve_in_reply_to_ap_id(_), do: nil
+
+  # `quote_id` / `quoted_status_id` → `quote_of_ap_id`. A Mastodon
+  # client quoting a note is the caller for the outbound 引用ノote
+  # plumbing. On any resolution miss we drop the quote rather than
+  # failing the post.
+  defp resolve_quote(attrs, params) do
+    case params[:quote_id] || params["quote_id"] ||
+           params[:quoted_status_id] || params["quoted_status_id"] do
+      nil ->
+        attrs
+
+      id ->
+        case quote_ap_id(id) do
+          nil -> attrs
+          ap_id -> Map.put(attrs, :quote_of_ap_id, ap_id)
+        end
+    end
+  end
+
+  # A quote target is an http(s) URI (fetched + mirrored on a miss) or
+  # a local Note id. Local notes carry no `ap_id`, so synthesize the AP
+  # URL the way `NoteController` publishes it.
+  defp quote_ap_id(id) when is_binary(id) do
+    if String.starts_with?(id, "http://") or String.starts_with?(id, "https://") do
+      case SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(id) do
+        {:ok, %Note{ap_id: ap_id}} when is_binary(ap_id) -> ap_id
+        _ -> nil
+      end
+    else
+      case parse_int(id) do
+        nil -> nil
+        int_id -> note_ap_id(int_id)
+      end
+    end
+  end
+
+  defp quote_ap_id(id) when is_integer(id), do: note_ap_id(id)
+  defp quote_ap_id(_), do: nil
+
+  defp note_ap_id(note_id) do
+    query =
+      from n in Note,
+        join: a in assoc(n, :account),
+        where: n.id == ^note_id,
+        select: {n.ap_id, a.domain, a.username}
+
+    case Repo.one(query) do
+      {ap_id, _domain, _username} when is_binary(ap_id) ->
+        ap_id
+
+      {nil, nil, username} ->
+        "https://#{SukhiFedi.Config.domain!()}/users/#{username}/notes/#{note_id}"
+
+      _ ->
+        nil
+    end
+  end
 
   defp list_media_ids(params) do
     raw =

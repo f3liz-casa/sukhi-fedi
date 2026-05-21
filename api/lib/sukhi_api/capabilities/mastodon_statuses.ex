@@ -50,9 +50,6 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
           {:ok, {:error, :media_not_owned}} ->
             ok(422, %{error: "media_not_owned"})
 
-          {:ok, {:error, :direct_visibility_not_supported}} ->
-            ok(422, %{error: "direct_visibility_not_supported"})
-
           {:ok, {:error, reason}} ->
             ok(422, %{error: inspect(reason)})
 
