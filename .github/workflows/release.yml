@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds and pushes sukhi-fedi container images to GHCR on tag pushes
-# matching `v*.*.*`. Each image is tagged with:
+# matching `v*.*.*`. Multi-arch (amd64 + arm64) using GitHub's free
+# native runners — QEMU emulation breaks Elixir's mix dets cache, so
+# each platform builds on its own native runner and the final tags
+# are stitched into one manifest by the merge job.
 #
+# Tags per image:
 #   :vX.Y.Z   — immutable
-#   :vX.Y     — rolling patch (Watchtower pin for careful operators)
-#   :vX       — rolling minor (Watchtower pin for auto-update within major)
-#   :latest   — always the newest tag pushed
+#   :vX.Y     — rolling patch
+#   :vX       — rolling minor
+#   :latest   — newest tag pushed
 #
-# Operators typically pin to `:v1` in their compose and let Watchtower
-# pick up 1.x.y releases automatically; major bumps are opt-in.
+# Operators pin :v0 in their compose; Watchtower (or Coolify) picks
+# up patch releases automatically. Major bumps are opt-in.
 
 name: release
 
@@ -23,31 +27,71 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - name: gateway
-            context: ./elixir
-          - name: delivery
-            context: ./delivery
-          - name: api
-            context: ./api
-          - name: bun
-            context: ./bun
-          - name: nats-bootstrap
-            context: ./infra/nats
+        image:
+          - { name: gateway, context: ./elixir }
+          - { name: delivery, context: ./delivery }
+          - { name: api, context: ./api }
+          - { name: bun, context: ./bun }
+          - { name: nats-bootstrap, context: ./infra/nats }
+        platform:
+          - { name: amd64, runner: ubuntu-24.04, docker: linux/amd64 }
+          - { name: arm64, runner: ubuntu-24.04-arm, docker: linux/arm64 }
     steps:
       - uses: actions/checkout@v4
 
-      # QEMU lets the amd64 runner cross-build arm64 images. Slower
-      # (Elixir release builds run ~3–5× longer under emulation) but
-      # produces a single multi-arch manifest GHCR clients pull from
-      # — required for ARM hosts (OCI Ampere, Hetzner CAX, Apple M-x).
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
-          platforms: arm64
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build native, push by digest only (no human-readable tag yet).
+      # The merge job stitches per-platform digests into the final
+      # multi-arch manifest under the real semver tags.
+      - id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.image.context }}
+          platforms: ${{ matrix.platform.docker }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: |
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.name }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image.name }}:buildcache-${{ matrix.platform.name }}
+          cache-to: |
+            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.name }},mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image.name }}:buildcache-${{ matrix.platform.name }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.platform.name }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image.name }}-${{ matrix.platform.name }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [gateway, delivery, api, bun, nats-bootstrap]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
 
       - uses: docker/setup-buildx-action@v3
 
@@ -60,27 +104,16 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.name }}
+          images: ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern=v{{major}}
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.context }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Dual-layer cache: GHA (fast on warm runners) + registry
-          # (persistent, no 10 GB eviction, survives GHA cache purges).
-          # `mode=max` exports intermediate layers too — critical for
-          # the deps.compile cache to actually hit on later tags.
-          cache-from: |
-            type=gha,scope=${{ matrix.name }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.name }}:buildcache
-          cache-to: |
-            type=gha,scope=${{ matrix.name }},mode=max
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.name }}:buildcache,mode=max
+      - name: Create multi-arch manifest
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(for f in *; do echo "ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image }}@$(cat $f)"; done)
