@@ -51,6 +51,11 @@ services:
     environment:
       DB_POOL_SIZE: "5"
       PLUGIN_NODES: ""
+      OBAN_MONITOR_CONCURRENCY: "2"
+      # +MBas/+MHas aobf: address-order best-fit on binary and heap
+      # allocators reduces long-tail fragmentation in a federation
+      # workload that does lots of small/medium binary churn (JSON,
+      # HTTP-Sig payloads). +MMmcs 30 caps cached mseg carriers.
       ERL_FLAGS: >-
         +S 1:1
         +SDcpu 1:1
@@ -60,8 +65,11 @@ services:
         +sbwtdio none
         +P 65536
         +Q 4096
+        +MBas aobf
+        +MHas aobf
         +MBsbct 128
         +MBlmbcs 256
+        +MMmcs 30
         +hms 46
         +hmbs 12288
       ERL_FULLSWEEP_AFTER: "10"
@@ -78,6 +86,12 @@ services:
       # the delivery worker mints activity ids under `localhost:4000`.
       DOMAIN: ${DOMAIN:-localhost:4000}
       DB_POOL_SIZE: "3"
+      OBAN_DELIVERY_CONCURRENCY: "3"
+      OBAN_FEDERATION_CONCURRENCY: "2"
+      # 2 pools × 16 sockets ≈ enough headroom for 5 concurrent Oban
+      # workers; saves ~8 MB of idle TLS state vs the 50×4 default.
+      FINCH_POOL_SIZE: "16"
+      FINCH_POOL_COUNT: "2"
       ERL_FLAGS: >-
         +S 1:1
         +SDcpu 1:1
@@ -87,8 +101,11 @@ services:
         +sbwtdio none
         +P 65536
         +Q 4096
+        +MBas aobf
+        +MHas aobf
         +MBsbct 128
         +MBlmbcs 256
+        +MMmcs 30
         +hms 46
         +hmbs 12288
       ERL_FULLSWEEP_AFTER: "10"
