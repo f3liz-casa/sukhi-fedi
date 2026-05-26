@@ -21,6 +21,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or ref to build (e.g. v0.1.39)"
+        required: true
+        type: string
 
 permissions:
   contents: read
