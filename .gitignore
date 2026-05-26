@@ -15,5 +15,10 @@ infra/terraform-x64-freetier/.terraform.lock.hcl
 # Local env files
 .env
 .env.x64-freetier
+.env.kamal.local
+
+# Kamal secrets — values are environment-specific and must never be
+# committed. The repo ships only `.kamal/secrets.example` as a template.
+.kamal/secrets
 
 .claude/
