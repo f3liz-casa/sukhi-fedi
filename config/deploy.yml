@@ -47,8 +47,11 @@
 
 service: sukhi-fedi
 
-# Main image = gateway. The other Elixir/Bun services are accessories.
-image: f3liz-casa/sukhi-fedi-gateway
+# Main image = Kamal's wrapper around sukhi-fedi-gateway.
+# Deliberately separate from the CI-built `sukhi-fedi-gateway`
+# package so Kamal's per-deploy <sha> tags don't pollute the
+# release tag namespace.
+image: f3liz-casa/sukhi-fedi-app
 
 # Kamal 2 always runs `docker buildx build` during setup/deploy and
 # has no skip-build flag. The root `Dockerfile` is a thin wrapper
