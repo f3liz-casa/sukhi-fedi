@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Coolify-targeted override for a 2 CPU / 12 GiB VPS.
+# Usage (Coolify "Docker Compose" resource — set the compose file to:
+#   docker-compose.yml
+#   docker-compose.coolify.yml
+# and let Coolify merge them).
+#
+# Differences vs the base compose:
+#   - cloudflared dropped: Coolify's Traefik proxy terminates TLS and
+#     routes to gateway:4000 directly. Add the public hostname to the
+#     gateway via Coolify's UI ("Domain" field) — it injects the right
+#     Traefik labels.
+#   - watchtower dropped: Coolify redeploys on git-push webhook.
+#   - postgres tuned for 12 GiB: shared_buffers=2 GB, work_mem=8 MB,
+#     max_connections=100, effective_cache_size=6 GB.
+#   - gateway / delivery sized for 2 schedulers: +S 2:2, larger DB
+#     pools, Oban concurrency back toward defaults. ERL_FULLSWEEP_AFTER
+#     stays moderate (20) — enough to keep binary heap honest without
+#     the free-tier's aggressive GC overhead.
+#   - Memory limits raised; CPU shares left to Coolify.
+
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=100
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - max_wal_size=1GB
+      - -c
+      - min_wal_size=256MB
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+  nats:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  gateway:
+    environment:
+      DB_POOL_SIZE: "15"
+      # OBAN_MONITOR_CONCURRENCY left at compile default (5).
+      # +S 2:2 — saturate both schedulers under load.
+      # +MBas/+MHas aobf — same binary-heap fragmentation guard as
+      # free-tier; cheap insurance for a long-running federation node.
+      ERL_FLAGS: >-
+        +S 2:2
+        +SDcpu 2:2
+        +SDio 4
+        +MBas aobf
+        +MHas aobf
+      ERL_FULLSWEEP_AFTER: "20"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  delivery:
+    environment:
+      DOMAIN: ${DOMAIN:-localhost:4000}
+      DB_POOL_SIZE: "8"
+      OBAN_DELIVERY_CONCURRENCY: "10"
+      OBAN_FEDERATION_CONCURRENCY: "4"
+      FINCH_POOL_SIZE: "50"
+      FINCH_POOL_COUNT: "4"
+      ERL_FLAGS: >-
+        +S 2:2
+        +SDcpu 2:2
+        +SDio 4
+        +MBas aobf
+        +MHas aobf
+      ERL_FULLSWEEP_AFTER: "20"
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+
+  bun:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  api:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Coolify drives redeploys via its own webhook; Watchtower would
+  # race with it. Disable.
+  watchtower:
+    profiles: ["disabled"]
+
+  # Coolify's Traefik proxy is the ingress. cloudflared is only
+  # defined in the freetier override, but if someone composes this
+  # file on top of it, keep cloudflared off too.
+  cloudflared:
+    profiles: ["disabled"]
