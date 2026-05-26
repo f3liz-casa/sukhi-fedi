@@ -33,11 +33,20 @@
 #       ssh rocky@217.142.242.103 'docker --version'
 #    succeeds → ready.
 # 2. Set the env vars referenced in `.kamal/secrets` in your shell or
-#    in a tool like direnv / 1Password CLI before running `kamal deploy`.
-# 3. Create a GitHub PAT with `read:packages` and export it as
-#    KAMAL_REGISTRY_PASSWORD.
+#    in a tool like direnv / 1Password CLI before running deploy.
+# 3. Create a GitHub PAT with **read:packages only** (no write needed —
+#    CI does all builds + pushes) and export as KAMAL_REGISTRY_PASSWORD.
 # 4. DNS: A record `sukhi.f3liz.casa` → 217.142.242.103.
-# 5. `kamal setup` (first time) then `kamal deploy`.
+# 5. First-time bring-up sequence (Kamal `setup` would force a local
+#    build + write to ghcr, so we use the per-step commands instead):
+#       kamal server bootstrap         # Docker on box (no-op if already there)
+#       kamal proxy boot               # kamal-proxy + Let's Encrypt
+#       kamal accessory boot all       # postgres, nats, bun, delivery, api
+#       kamal accessory boot nats-bootstrap   # one-shot: creates OUTBOX stream
+#       kamal deploy --skip-push --version=v0 # gateway, pulls CI image
+# 6. Subsequent deploys after a new CI tag (e.g. v0.1.38):
+#       kamal deploy --skip-push --version=v0          # rolling
+#       # or: kamal deploy --skip-push --version=v0.1.38  # pinned
 #
 # ── Multi-host scaling ──────────────────────────────────────────────────────
 # When you add a second box, run Tailscale on both, then change the
@@ -47,16 +56,16 @@
 
 service: sukhi-fedi
 
-# Main image = Kamal's wrapper around sukhi-fedi-gateway.
-# Deliberately separate from the CI-built `sukhi-fedi-gateway`
-# package so Kamal's per-deploy <sha> tags don't pollute the
-# release tag namespace.
-image: f3liz-casa/sukhi-fedi-app
+# Main image = the CI-built gateway, pulled directly from GHCR.
+# We never build via Kamal: deploys use `kamal deploy --skip-push
+# --version=<tag>` so the PAT only needs `read:packages`. See
+# README / docs/ENV.md for the deploy commands.
+image: f3liz-casa/sukhi-fedi-gateway
 
-# Kamal 2 always runs `docker buildx build` during setup/deploy and
-# has no skip-build flag. The root `Dockerfile` is a thin wrapper
-# that re-FROMs the GHCR-built gateway image (see CI release.yml),
-# so the "build" is effectively a no-op manifest push.
+# Builder is declared because Kamal's schema requires it, but we
+# never invoke a build — all deploys use `--skip-push --version=<tag>`
+# to pull pre-built images from CI. If you ever want to build locally
+# (debug), `kamal deploy` (without --skip-push) will use this section.
 builder:
   arch:
     - amd64
