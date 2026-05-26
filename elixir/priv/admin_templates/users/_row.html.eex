@@ -1,0 +1,26 @@
+<tr id="user-<%= user.id %>">
+  <td><strong>@<%= h(user.username) %></strong></td>
+  <td><%= h(user.display_name) %></td>
+  <td>
+<%= if user.suspended_at do %>
+    <span class="pill suspended">Suspended</span>
+<% else %>
+    <span class="pill ok">Active</span>
+<%= if user.is_admin do %> <span class="pill">Admin</span><% end %>
+<%= if user.is_bot do %> <span class="pill">Bot</span><% end %>
+<% end %>
+  </td>
+  <td>
+<%= if user.suspended_at do %>
+    <button hx-post="/admin/users/<%= user.id %>/unsuspend"
+            hx-target="#user-<%= user.id %>"
+            hx-swap="outerHTML">Unsuspend</button>
+<% else %>
+    <button class="danger"
+            hx-post="/admin/users/<%= user.id %>/suspend"
+            hx-target="#user-<%= user.id %>"
+            hx-swap="outerHTML"
+            hx-confirm="Suspend @<%= h(user.username) %>?">Suspend</button>
+<% end %>
+  </td>
+</tr>

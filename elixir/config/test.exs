@@ -12,3 +12,7 @@ config :sukhi_fedi, Oban, testing: :inline
 config :sukhi_fedi, :nats,
   host: System.get_env("NATS_HOST", "127.0.0.1"),
   port: String.to_integer(System.get_env("NATS_PORT", "14222"))
+
+# Deterministic admin-session signing key for tests.
+config :sukhi_fedi, :secret_key_base,
+  "test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

@@ -1,0 +1,66 @@
+<h1>Federation blocks</h1>
+
+<div class="panel" style="margin-bottom: 16px;">
+  <h2 style="margin-top: 0;">Block a domain</h2>
+  <form method="post" action="/admin/instance_blocks">
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 8px;">
+      <input type="text" name="domain" required placeholder="e.g. spam.example">
+      <select name="severity">
+        <option value="suspend">Suspend — drop all federation</option>
+        <option value="silence">Silence — accept but hide from public timelines</option>
+      </select>
+    </div>
+    <input type="text" name="reason" placeholder="Reason (optional, visible to admins)" style="width: 100%; margin-bottom: 8px;">
+    <button type="submit" class="danger">Block</button>
+  </form>
+</div>
+
+<div class="panel" style="padding: 0;">
+<table>
+  <thead>
+    <tr>
+      <th>Domain</th>
+      <th>Severity</th>
+      <th>Reason</th>
+      <th>Blocked at</th>
+      <th style="width: 1%;"></th>
+    </tr>
+  </thead>
+  <tbody>
+<%= if blocks == [] do %>
+    <tr><td colspan="5" class="muted" style="text-align: center; padding: 24px;">No instance blocks.</td></tr>
+<% else %>
+<%= for block <- blocks do %>
+    <tr>
+      <td><strong><%= h(block.domain) %></strong></td>
+      <td>
+<%= case block.severity do %>
+<% "suspend" -> %><span class="pill suspended">Suspended</span>
+<% "silence" -> %><span class="pill silenced">Silenced</span>
+<% other -> %><span class="pill"><%= h(other) %></span>
+<% end %>
+      </td>
+      <td class="muted"><%= h(block.reason) %></td>
+      <td class="muted"><%= h(NaiveDateTime.to_iso8601(block.inserted_at)) %></td>
+      <td>
+        <form method="post" action="/admin/instance_blocks/<%= URI.encode(block.domain) %>/remove" style="display: inline;">
+          <button type="submit">Unblock</button>
+        </form>
+      </td>
+    </tr>
+<% end %>
+<% end %>
+  </tbody>
+</table>
+</div>
+
+<%= if page > 1 or has_next do %>
+<div class="pager">
+  <%= if page > 1 do %>
+    <a class="btn" href="/admin/instance_blocks?page=<%= page - 1 %>">← Prev</a>
+  <% end %>
+  <%= if has_next do %>
+    <a class="btn" href="/admin/instance_blocks?page=<%= page + 1 %>">Next →</a>
+  <% end %>
+</div>
+<% end %>

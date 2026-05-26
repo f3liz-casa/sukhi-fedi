@@ -1,0 +1,15 @@
+<tr id="report-<%= report.id %>">
+  <td>@<%= h(report.account && report.account.username) %></td>
+  <td>@<%= h(report.target && report.target.username) %><%= if report.target && report.target.domain, do: "@" <> h(report.target.domain) %></td>
+  <td style="max-width: 360px;"><%= h(String.slice(report.comment || "", 0, 140)) %></td>
+  <td class="muted"><%= h(NaiveDateTime.to_iso8601(report.inserted_at || NaiveDateTime.utc_now())) %></td>
+  <td>
+<%= if report.status == "open" do %>
+    <button hx-post="/admin/reports/<%= report.id %>/resolve"
+            hx-target="#report-<%= report.id %>"
+            hx-swap="outerHTML">Resolve</button>
+<% else %>
+    <span class="pill ok">Resolved</span>
+<% end %>
+  </td>
+</tr>

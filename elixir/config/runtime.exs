@@ -67,6 +67,11 @@ if config_env() == :prod do
     host: System.get_env("NATS_HOST", "127.0.0.1"),
     port: String.to_integer(System.get_env("NATS_PORT", "4222"))
 
+  # Cookie-signing key for the admin web UI session. Must be stable
+  # across deploys — rotating invalidates every logged-in admin
+  # session. Generate with `openssl rand -hex 64`.
+  config :sukhi_fedi, :secret_key_base, System.fetch_env!("SECRET_KEY_BASE")
+
   # Distributed-Erlang plugin nodes reachable via `:rpc`.
   # Comma-separated list of `<name>@<host>` atoms. Nodes not reachable at
   # request time are skipped; if none are reachable, `/api/v1/*` returns

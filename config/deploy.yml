@@ -138,6 +138,7 @@ env:
   secret:
     - DB_PASS
     - ERLANG_COOKIE
+    - SECRET_KEY_BASE
 
 # ── Accessories ────────────────────────────────────────────────────────────
 # Each `host:` can be a different IP once you grow. For now they share

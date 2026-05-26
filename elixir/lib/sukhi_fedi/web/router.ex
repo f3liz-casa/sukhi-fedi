@@ -28,6 +28,12 @@ defmodule SukhiFedi.Web.Router do
 
   plug(:dispatch)
 
+  # ── Admin web UI ────────────────────────────────────────────────────────
+  # Forward strips the `/admin` prefix; the sub-router owns its own
+  # session middleware (cookie-signed via SECRET_KEY_BASE) and runs the
+  # Mastodon-OAuth-bearer auth check on every request.
+  forward("/admin", to: SukhiFedi.Web.Admin.Router)
+
   # ── ActivityPub / well-known (handled natively by Elixir) ────────────────
 
   get "/.well-known/webfinger" do

@@ -1,0 +1,16 @@
+<div class="panel" style="max-width: 480px; margin: 48px auto;">
+  <h1>Sign in</h1>
+  <p class="muted">
+    Paste a Mastodon OAuth bearer token issued to an account whose
+    <code>is_admin</code> flag is true. Generate one through any
+    Mastodon client logged into this instance, or via the
+    <code>/oauth/token</code> API.
+  </p>
+  <form method="post" action="/admin/login">
+    <label style="display: block; margin-bottom: 12px;">
+      <span class="muted" style="display: block; margin-bottom: 4px;">Bearer token</span>
+      <input type="password" name="token" autocomplete="off" required style="width: 100%;">
+    </label>
+    <button type="submit">Sign in</button>
+  </form>
+</div>

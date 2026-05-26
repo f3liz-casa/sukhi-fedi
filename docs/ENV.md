@@ -26,6 +26,7 @@ top — those win.
 | Var | Required | Default | Notes |
 |---|---|---|---|
 | **`ERLANG_COOKIE`** / `RELEASE_COOKIE` | **yes** (prod) | `sukhi_fedi_dev_cookie` | Shared secret between `gateway` and `api`. **The default is a published string.** Anyone reachable on the EPMD port (4369) with the default cookie can execute arbitrary BEAM code (= RCE). Generate with `openssl rand -hex 32`. |
+| **`SECRET_KEY_BASE`** | **yes** (prod) | — | Cookie-signing key for the `/admin` web UI session. Must be stable across deploys — rotating invalidates every logged-in admin session and forces re-login. Generate with `openssl rand -hex 64`. Treat as secret. |
 | `RELEASE_DISTRIBUTION` | yes | — | Set to `name`. Wired into compose / Kamal already. |
 | `RELEASE_NODE` | yes | — | `gateway@elixir` on gateway, `api@api` on api. Wired into compose / Kamal already. |
 | `PLUGIN_NODES` | no | empty | Gateway only. Comma list of `<name>@<host>` Erlang nodes hosting plugin capabilities. Default `api@api`. |
@@ -129,6 +130,7 @@ INSTANCE_TITLE="sukhi.f3liz.casa"
 
 # Secrets
 ERLANG_COOKIE="$(openssl rand -hex 32)"
+SECRET_KEY_BASE="$(openssl rand -hex 64)"
 DB_PASS="$(openssl rand -hex 24)"
 POSTGRES_PASSWORD="$DB_PASS"
 DB_USER=sukhi

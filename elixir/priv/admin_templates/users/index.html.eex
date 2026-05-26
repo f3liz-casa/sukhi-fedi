@@ -1,0 +1,42 @@
+<h1>Local users</h1>
+
+<div class="toolbar">
+  <form method="get" action="/admin/users">
+    <input type="text" name="q" value="<%= h(q) %>" placeholder="Search username / display name" style="flex: 1;">
+    <button type="submit">Search</button>
+    <%= if q != "" do %><a href="/admin/users" class="btn">Clear</a><% end %>
+  </form>
+</div>
+
+<div class="panel" style="padding: 0;">
+<table>
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Display name</th>
+      <th>Status</th>
+      <th style="width: 1%;"></th>
+    </tr>
+  </thead>
+  <tbody>
+<%= if users == [] do %>
+    <tr><td colspan="4" class="muted" style="text-align: center; padding: 24px;">No users match.</td></tr>
+<% else %>
+<%= for user <- users do %>
+<%= SukhiFedi.Web.Admin.Render.render_template("users/_row.html.eex", [user: user]) %>
+<% end %>
+<% end %>
+  </tbody>
+</table>
+</div>
+
+<%= if page > 1 or has_next do %>
+<div class="pager">
+  <%= if page > 1 do %>
+    <a class="btn" href="/admin/users?q=<%= URI.encode_www_form(q) %>&page=<%= page - 1 %>">← Prev</a>
+  <% end %>
+  <%= if has_next do %>
+    <a class="btn" href="/admin/users?q=<%= URI.encode_www_form(q) %>&page=<%= page + 1 %>">Next →</a>
+  <% end %>
+</div>
+<% end %>

@@ -1,0 +1,40 @@
+<h1>Reports</h1>
+
+<div class="toolbar">
+  <a class="btn <%= if status == "open", do: "active" %>" href="/admin/reports?status=open">Open</a>
+  <a class="btn <%= if status == "resolved", do: "active" %>" href="/admin/reports?status=resolved">Resolved</a>
+</div>
+
+<div class="panel" style="padding: 0;">
+<table>
+  <thead>
+    <tr>
+      <th>Reporter</th>
+      <th>Target</th>
+      <th>Comment</th>
+      <th>Created</th>
+      <th style="width: 1%;"></th>
+    </tr>
+  </thead>
+  <tbody>
+<%= if reports == [] do %>
+    <tr><td colspan="5" class="muted" style="text-align: center; padding: 24px;">No <%= status %> reports.</td></tr>
+<% else %>
+<%= for report <- reports do %>
+<%= SukhiFedi.Web.Admin.Render.render_template("reports/_row.html.eex", [report: report]) %>
+<% end %>
+<% end %>
+  </tbody>
+</table>
+</div>
+
+<%= if page > 1 or has_next do %>
+<div class="pager">
+  <%= if page > 1 do %>
+    <a class="btn" href="/admin/reports?status=<%= status %>&page=<%= page - 1 %>">← Prev</a>
+  <% end %>
+  <%= if has_next do %>
+    <a class="btn" href="/admin/reports?status=<%= status %>&page=<%= page + 1 %>">Next →</a>
+  <% end %>
+</div>
+<% end %>

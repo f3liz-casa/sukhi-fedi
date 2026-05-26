@@ -1,0 +1,23 @@
+<h1>Dashboard</h1>
+
+<div class="grid-cards">
+  <div class="card">
+    <div class="label">Local users</div>
+    <div class="n"><%= counts.local_users %></div>
+    <a href="/admin/users" class="muted">Manage →</a>
+  </div>
+  <div class="card">
+    <div class="label">Suspended</div>
+    <div class="n"><%= counts.suspended_users %></div>
+  </div>
+  <div class="card">
+    <div class="label">Open reports</div>
+    <div class="n"><%= counts.open_reports %></div>
+    <a href="/admin/reports" class="muted">Review →</a>
+  </div>
+  <div class="card">
+    <div class="label">Blocked instances</div>
+    <div class="n"><%= counts.instance_blocks %></div>
+    <a href="/admin/instance_blocks" class="muted">Manage →</a>
+  </div>
+</div>
