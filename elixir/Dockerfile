@@ -18,6 +18,11 @@ RUN MIX_ENV=prod mix release
 
 FROM elixir:1.16-alpine
 
+# Kamal asserts a `service` label matches `service:` in config/deploy.yml
+# before accepting the image. Baking it in here keeps Kamal happy when
+# we deploy via `--skip-push` from CI-built images.
+LABEL service="sukhi-fedi"
+
 WORKDIR /app
 
 RUN apk add --no-cache libstdc++ openssl ncurses-libs
