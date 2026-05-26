@@ -50,14 +50,14 @@ service: sukhi-fedi
 # Main image = gateway. The other Elixir/Bun services are accessories.
 image: f3liz-casa/sukhi-fedi-gateway
 
-# Pull pre-built images from GHCR — no local builds.
-# Kamal still requires a `builder` block even when not building;
-# this stanza disables it explicitly.
+# Kamal 2 always runs `docker buildx build` during setup/deploy and
+# has no skip-build flag. The root `Dockerfile` is a thin wrapper
+# that re-FROMs the GHCR-built gateway image (see CI release.yml),
+# so the "build" is effectively a no-op manifest push.
 builder:
   arch:
     - amd64
     - arm64
-  dockerfile: false
 
 registry:
   server: ghcr.io
