@@ -1,0 +1,214 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Kamal deployment config for sukhi-fedi.
+#
+# ── Mental model ────────────────────────────────────────────────────────────
+# Kamal is "one main image, scale by listing servers". sukhi-fedi has six
+# images (gateway / delivery / bun / api / postgres / nats), so:
+#
+#   - `gateway` is the main `service` — it's the public HTTP entry point
+#     and the one you'd naturally scale horizontally first. Kamal-proxy
+#     terminates TLS in front of it and load-balances across `servers.web.hosts`.
+#
+#   - Everything else lives under `accessories`. Each accessory can move to
+#     a different host by changing its `host:` field — that's the "scale by
+#     adding servers" axis. Examples once you grow:
+#       accessories:
+#         postgres:
+#           host: db1.internal      # move DB to dedicated box
+#         delivery:
+#           host: worker1.internal  # delivery on its own host
+#
+# ── Container networking ────────────────────────────────────────────────────
+# Kamal puts everything in a Docker network named `kamal`. Containers
+# reach each other by their Kamal-prefixed name: `sukhi-fedi-postgres`,
+# `sukhi-fedi-nats`, etc. The env vars below reflect that.
+#
+# Distributed-Erlang between gateway and api requires stable hostnames
+# (`elixir` and `api`) — set via `options: hostname:` so the BEAM node
+# name (`gateway@elixir`, `api@api`) resolves correctly.
+#
+# ── Before first deploy ─────────────────────────────────────────────────────
+# 1. Fill in the placeholders below: `KAMAL_HOST_*` IPs.
+# 2. Set the env vars referenced in `.kamal/secrets` in your shell or
+#    in a tool like direnv / 1Password CLI before running `kamal deploy`.
+# 3. Create a GitHub PAT with `read:packages` and export it as
+#    KAMAL_REGISTRY_PASSWORD.
+# 4. DNS: A record `sukhi.f3liz.casa` → primary host IP.
+# 5. `kamal setup` (first time) then `kamal deploy`.
+
+service: sukhi-fedi
+
+# Main image = gateway. The other Elixir/Bun services are accessories.
+image: f3liz-casa/sukhi-fedi-gateway
+
+# Pull pre-built images from GHCR — no local builds.
+# Kamal still requires a `builder` block even when not building;
+# this stanza disables it explicitly.
+builder:
+  arch:
+    - amd64
+    - arm64
+  dockerfile: false
+
+registry:
+  server: ghcr.io
+  username: f3liz-casa
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+# ── Servers ────────────────────────────────────────────────────────────────
+# To horizontally scale the gateway later, just add hosts to `web.hosts`.
+# Kamal-proxy will round-robin across them.
+servers:
+  web:
+    hosts:
+      - <PRIMARY_HOST_IP>  # fill in: VPS public IPv4
+    options:
+      # Container hostname must be `elixir` so the Erlang node name
+      # `gateway@elixir` is stable across deploys (distributed Erlang
+      # with the `api` accessory depends on it).
+      hostname: elixir
+      network-alias: gateway
+
+# ── Proxy / TLS ────────────────────────────────────────────────────────────
+# kamal-proxy handles Let's Encrypt and forwards :443 → gateway:4000.
+proxy:
+  ssl: true
+  host: sukhi.f3liz.casa
+  app_port: 4000
+  healthcheck:
+    path: /.well-known/nodeinfo
+    interval: 10
+    timeout: 5
+
+# ── App env (gateway) ──────────────────────────────────────────────────────
+env:
+  clear:
+    DB_HOST: sukhi-fedi-postgres
+    DB_USER: sukhi
+    DB_NAME: sukhi_fedi
+    DB_POOL_SIZE: "15"
+    NATS_HOST: sukhi-fedi-nats
+    NATS_PORT: "4222"
+    RELEASE_DISTRIBUTION: name
+    RELEASE_NODE: gateway@elixir
+    PLUGIN_NODES: api@api
+    DOMAIN: sukhi.f3liz.casa
+    INSTANCE_TITLE: sukhi.f3liz.casa
+    ENABLED_ADDONS: all
+    ERL_FULLSWEEP_AFTER: "20"
+    # +S 2:2 saturates both schedulers on a 2-core box; +MBas/+MHas
+    # aobf guards against binary-heap fragmentation in long-running
+    # federation nodes.
+    ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 4 +MBas aobf +MHas aobf"
+  secret:
+    - DB_PASS
+    - ERLANG_COOKIE
+
+# ── Accessories ────────────────────────────────────────────────────────────
+# Each `host:` can be a different IP once you grow. For now they share
+# the primary VPS with the gateway.
+accessories:
+  postgres:
+    image: postgres:16-alpine
+    host: <PRIMARY_HOST_IP>
+    port: 5432
+    env:
+      clear:
+        POSTGRES_USER: sukhi
+        POSTGRES_DB: sukhi_fedi
+      secret:
+        - POSTGRES_PASSWORD
+    cmd: >-
+      postgres
+      -c shared_buffers=2GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c max_connections=100
+      -c effective_cache_size=6GB
+      -c wal_buffers=16MB
+      -c max_wal_size=1GB
+      -c min_wal_size=256MB
+    directories:
+      - data:/var/lib/postgresql/data
+    options:
+      network-alias: postgres
+      health-cmd: pg_isready -U sukhi
+      health-interval: 5s
+      health-timeout: 5s
+      health-retries: "5"
+
+  nats:
+    image: nats:2-alpine
+    host: <PRIMARY_HOST_IP>
+    port: 4222
+    cmd: --jetstream --store_dir /data --http_port 8222
+    directories:
+      - data:/data
+    options:
+      network-alias: nats
+      health-cmd: wget -qO- http://localhost:8222/healthz || exit 1
+      health-interval: 5s
+
+  # One-shot: creates the OUTBOX JetStream. Re-run after fresh `nats`
+  # accessory boot. Re-running on existing stream is a no-op.
+  #   kamal accessory boot nats-bootstrap
+  #   kamal accessory remove nats-bootstrap   # optional cleanup
+  nats-bootstrap:
+    image: ghcr.io/f3liz-casa/sukhi-fedi-nats-bootstrap:v0
+    host: <PRIMARY_HOST_IP>
+    env:
+      clear:
+        NATS_URL: nats://sukhi-fedi-nats:4222
+
+  bun:
+    image: ghcr.io/f3liz-casa/sukhi-fedi-bun:v0
+    host: <PRIMARY_HOST_IP>
+    env:
+      clear:
+        NATS_URL: nats://sukhi-fedi-nats:4222
+        ENABLED_ADDONS: all
+
+  # Outbound federation worker. Talks to gateway only via postgres + nats.
+  # First service to scale horizontally when delivery queue lag is
+  # consistently >0 — change `host:` to a list of multiple hosts.
+  delivery:
+    image: ghcr.io/f3liz-casa/sukhi-fedi-delivery:v0
+    host: <PRIMARY_HOST_IP>
+    env:
+      clear:
+        DOMAIN: sukhi.f3liz.casa
+        DB_HOST: sukhi-fedi-postgres
+        DB_USER: sukhi
+        DB_NAME: sukhi_fedi
+        DB_POOL_SIZE: "8"
+        NATS_HOST: sukhi-fedi-nats
+        NATS_PORT: "4222"
+        METRICS_PORT: "4001"
+        OBAN_DELIVERY_CONCURRENCY: "10"
+        OBAN_FEDERATION_CONCURRENCY: "4"
+        FINCH_POOL_SIZE: "50"
+        FINCH_POOL_COUNT: "4"
+        ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 4 +MBas aobf +MHas aobf"
+        ERL_FULLSWEEP_AFTER: "20"
+      secret:
+        - DB_PASS
+
+  # Distributed-Erlang plugin node. Hostname MUST be `api` so the
+  # node name `api@api` resolves from the gateway via `PLUGIN_NODES`.
+  api:
+    image: ghcr.io/f3liz-casa/sukhi-fedi-api:v0
+    host: <PRIMARY_HOST_IP>
+    env:
+      clear:
+        RELEASE_DISTRIBUTION: name
+        RELEASE_NODE: api@api
+        DOMAIN: sukhi.f3liz.casa
+        INSTANCE_TITLE: sukhi.f3liz.casa
+        ENABLED_ADDONS: all
+      secret:
+        - ERLANG_COOKIE
+    options:
+      hostname: api
+      network-alias: api
