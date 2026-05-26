@@ -86,26 +86,40 @@ defmodule SukhiFedi.Web.Router do
   end
 
   # ── Human-facing HTML + JSON proxy for nodeinfo lookup ──────────────────
+  # Gated on the :nodeinfo_monitor addon: this is the watcher UI surface
+  # (dashboard at /, register/list watchers, host stats SSE). A deployment
+  # running sukhi-fedi as a real SNS — not as a watcher app — sets
+  # DISABLE_ADDONS=nodeinfo_monitor and these routes go 404.
 
   get "/" do
-    ViewerController.home(conn, [])
+    if nodeinfo_monitor_enabled?(),
+      do: ViewerController.home(conn, []),
+      else: send_resp(conn, 404, "")
   end
 
   get "/api/nodeinfo" do
-    ViewerController.nodeinfo_lookup(conn, [])
+    if nodeinfo_monitor_enabled?(),
+      do: ViewerController.nodeinfo_lookup(conn, []),
+      else: send_resp(conn, 404, "")
   end
 
   get "/api/watchers" do
-    ViewerController.list_watchers(conn, [])
+    if nodeinfo_monitor_enabled?(),
+      do: ViewerController.list_watchers(conn, []),
+      else: send_resp(conn, 404, "")
   end
 
   post "/api/watchers" do
-    ViewerController.register_watcher(conn, [])
+    if nodeinfo_monitor_enabled?(),
+      do: ViewerController.register_watcher(conn, []),
+      else: send_resp(conn, 404, "")
   end
 
   # SSE stream feeding the host-stats card on `/`. One JSON tick per second.
   get "/api/stats/stream" do
-    StatsController.stream(conn, [])
+    if nodeinfo_monitor_enabled?(),
+      do: StatsController.stream(conn, []),
+      else: send_resp(conn, 404, "")
   end
 
   # ── Health + metrics ─────────────────────────────────────────────────────
@@ -190,6 +204,19 @@ defmodule SukhiFedi.Web.Router do
       ".mp3" -> "audio/mpeg"
       ".ogg" -> "audio/ogg"
       _ -> "application/octet-stream"
+    end
+  end
+
+  # Reads the addon config at request time — set via env vars in
+  # config/runtime.exs (ENABLED_ADDONS, DISABLE_ADDONS, ADDON_PRESETS).
+  defp nodeinfo_monitor_enabled? do
+    enabled = Application.get_env(:sukhi_fedi, :enabled_addons, :all)
+    disabled = Application.get_env(:sukhi_fedi, :disabled_addons, [])
+
+    cond do
+      :nodeinfo_monitor in disabled -> false
+      enabled == :all -> true
+      true -> :nodeinfo_monitor in enabled
     end
   end
 end

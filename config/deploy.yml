@@ -95,6 +95,9 @@ servers:
       # with the `api` accessory depends on it).
       hostname: elixir
       network-alias: gateway
+      # 2 CPU / 12 GiB host budget. Gateway gets the largest BEAM share.
+      memory: 2g
+      cpus: "1.5"
 
 # ── Proxy / TLS ────────────────────────────────────────────────────────────
 # kamal-proxy handles Let's Encrypt and forwards :443 → gateway:4000.
@@ -124,6 +127,9 @@ env:
     DOMAIN: sukhi.f3liz.casa
     INSTANCE_TITLE: sukhi.f3liz.casa
     ENABLED_ADDONS: all
+    # Real SNS deployment — no watcher dashboard at /, no anonymous
+    # host-stats SSE. nodeinfo_monitor's Oban cron is off too.
+    DISABLE_ADDONS: nodeinfo_monitor
     ERL_FULLSWEEP_AFTER: "20"
     # +S 2:2 saturates both schedulers on a 2-core box; +MBas/+MHas
     # aobf guards against binary-heap fragmentation in long-running
@@ -161,6 +167,8 @@ accessories:
       - data:/var/lib/postgresql/data
     options:
       network-alias: postgres
+      memory: 3g
+      cpus: "1"
       health-cmd: pg_isready -U sukhi
       health-interval: 5s
       health-timeout: 5s
@@ -175,6 +183,8 @@ accessories:
       - data:/data
     options:
       network-alias: nats
+      memory: 256m
+      cpus: "0.5"
       health-cmd: wget -qO- http://localhost:8222/healthz || exit 1
       health-interval: 5s
 
@@ -196,6 +206,10 @@ accessories:
       clear:
         NATS_URL: nats://sukhi-fedi-nats:4222
         ENABLED_ADDONS: all
+        DISABLE_ADDONS: nodeinfo_monitor
+    options:
+      memory: 512m
+      cpus: "0.5"
 
   # Outbound federation worker. Talks to gateway only via postgres + nats.
   # First service to scale horizontally when delivery queue lag is
@@ -221,6 +235,9 @@ accessories:
         ERL_FULLSWEEP_AFTER: "20"
       secret:
         - DB_PASS
+    options:
+      memory: 1500m
+      cpus: "1"
 
   # Distributed-Erlang plugin node. Hostname MUST be `api` so the
   # node name `api@api` resolves from the gateway via `PLUGIN_NODES`.
@@ -234,8 +251,11 @@ accessories:
         DOMAIN: sukhi.f3liz.casa
         INSTANCE_TITLE: sukhi.f3liz.casa
         ENABLED_ADDONS: all
+        DISABLE_ADDONS: nodeinfo_monitor
       secret:
         - ERLANG_COOKIE
     options:
       hostname: api
       network-alias: api
+      memory: 768m
+      cpus: "0.5"
