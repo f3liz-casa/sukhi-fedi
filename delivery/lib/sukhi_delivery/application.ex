@@ -13,10 +13,11 @@ defmodule SukhiDelivery.Application do
       {Gnat.ConnectionSupervisor, nats_connection_settings()},
       # Outbound HTTP pool for remote inbox POSTs. Tune via
       # `sukhi_delivery_pool_utilization` (stays near 1.0 → scale up).
+      # Sizing comes from `:finch_pool` (see runtime.exs).
       {Finch,
        name: SukhiDelivery.Finch,
        pools: %{
-         default: [size: 50, count: 4]
+         default: Application.get_env(:sukhi_delivery, :finch_pool, size: 50, count: 4)
        }},
       {Oban, [name: SukhiDelivery.Oban] ++ Application.fetch_env!(:sukhi_delivery, Oban)},
       # Transactional Outbox relay: publishes `outbox` rows (written by

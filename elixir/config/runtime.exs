@@ -75,4 +75,12 @@ if config_env() == :prod do
     System.get_env("PLUGIN_NODES", "")
     |> String.split(",", trim: true)
     |> Enum.map(&String.to_atom/1)
+
+  # Oban monitor queue concurrency override. NodeInfo polling fans out
+  # one job per monitored instance; on a 1 GB box 5 parallel Finch
+  # requests + JSON decode buffers is more than we want resident.
+  # Shallow-merges with the compile-time Oban config — `:repo` and
+  # `:plugins` (Cron) are inherited unchanged.
+  config :sukhi_fedi, Oban,
+    queues: [monitor: String.to_integer(System.get_env("OBAN_MONITOR_CONCURRENCY", "5"))]
 end

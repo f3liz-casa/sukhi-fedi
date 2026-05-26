@@ -26,4 +26,20 @@ if config_env() == :prod do
 
   config :sukhi_delivery, :metrics_port,
     String.to_integer(System.get_env("METRICS_PORT", "4001"))
+
+  # Per-queue Oban concurrency overrides. On a 1 GB free-tier box the
+  # compile-time defaults (delivery: 10, federation: 3) keep too many
+  # Finch sockets and inflight HTTP bodies in BEAM heap at once.
+  # Config.config/3 shallow-merges keyword lists, so overriding just
+  # `:queues` leaves `:repo` and `:plugins` from compile-time intact.
+  config :sukhi_delivery, Oban,
+    queues: [
+      delivery: String.to_integer(System.get_env("OBAN_DELIVERY_CONCURRENCY", "10")),
+      federation: String.to_integer(System.get_env("OBAN_FEDERATION_CONCURRENCY", "3"))
+    ]
+
+  # Outbound HTTP pool sizing. Consumed by SukhiDelivery.Application.
+  config :sukhi_delivery, :finch_pool,
+    size: String.to_integer(System.get_env("FINCH_POOL_SIZE", "50")),
+    count: String.to_integer(System.get_env("FINCH_POOL_COUNT", "4"))
 end
