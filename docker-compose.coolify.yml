@@ -1,27 +1,37 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Coolify-targeted override for a 2 CPU / 12 GiB VPS.
-# Usage (Coolify "Docker Compose" resource — set the compose file to:
-#   docker-compose.yml
-#   docker-compose.coolify.yml
-# and let Coolify merge them).
+# Self-contained Coolify compose for a 2 CPU / 12 GiB VPS.
 #
-# Differences vs the base compose:
-#   - cloudflared dropped: Coolify's Traefik proxy terminates TLS and
-#     routes to gateway:4000 directly. Add the public hostname to the
-#     gateway via Coolify's UI ("Domain" field) — it injects the right
-#     Traefik labels.
-#   - watchtower dropped: Coolify redeploys on git-push webhook.
-#   - postgres tuned for 12 GiB: shared_buffers=2 GB, work_mem=8 MB,
-#     max_connections=100, effective_cache_size=6 GB.
-#   - gateway / delivery sized for 2 schedulers: +S 2:2, larger DB
-#     pools, Oban concurrency back toward defaults. ERL_FULLSWEEP_AFTER
-#     stays moderate (20) — enough to keep binary heap honest without
-#     the free-tier's aggressive GC overhead.
-#   - Memory limits raised; CPU shares left to Coolify.
+# Coolify takes a single compose file path — set this file as the
+# "Docker Compose" location for the resource. Do NOT combine with
+# docker-compose.yml; this file inlines everything from it and adds
+# the Coolify-specific tuning so there's no merge ambiguity.
+#
+# Coolify owns:
+#   - TLS / ingress (Traefik). Set the gateway's public domain in
+#     Coolify's UI; it injects the right labels and provisions
+#     Let's Encrypt. cloudflared / watchtower are not included here.
+#   - Redeploys (git-push webhook). Watchtower is omitted.
+#   - Volume management. `postgres_data` and `nats_data` are managed
+#     by Coolify; point them at your data disk in the volume panel.
+#
+# Required env vars (Coolify env panel):
+#   DOMAIN                public hostname, e.g. fedi.example.com
+#   ERLANG_COOKIE         openssl rand -hex 32
+#   SUKHI_REPO_OWNER      e.g. f3liz-casa (defaults to nyanrus)
+#   SUKHI_VERSION         e.g. v0  (rolling) or v0.1.35 (pinned)
+# Optional:
+#   INSTANCE_TITLE        display name
+#   ENABLED_ADDONS        comma list or "all"
+#   DISABLE_ADDONS        deny list
 
 services:
   postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sukhi_fedi
     command:
       - postgres
       - -c
@@ -40,24 +50,64 @@ services:
       - max_wal_size=1GB
       - -c
       - min_wal_size=256MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
           memory: 3G
 
   nats:
+    image: nats:2-alpine
+    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
           memory: 256M
 
-  gateway:
+  nats-bootstrap:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-nats-bootstrap:${SUKHI_VERSION:-v0}
+    depends_on:
+      nats:
+        condition: service_healthy
     environment:
+      NATS_URL: nats://nats:4222
+    restart: "no"
+
+  # ── Application ──────────────────────────────────────────────────────────────
+  gateway:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-gateway:${SUKHI_VERSION:-v0}
+    hostname: elixir
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: sukhi_fedi
       DB_POOL_SIZE: "15"
-      # OBAN_MONITOR_CONCURRENCY left at compile default (5).
-      # +S 2:2 — saturate both schedulers under load.
-      # +MBas/+MHas aobf — same binary-heap fragmentation guard as
-      # free-tier; cheap insurance for a long-running federation node.
+      NATS_HOST: nats
+      NATS_PORT: "4222"
+      RELEASE_DISTRIBUTION: name
+      RELEASE_NODE: gateway@elixir
+      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      PLUGIN_NODES: api@api
+      DOMAIN: ${DOMAIN:-localhost:4000}
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+      # +S 2:2 saturates both schedulers; +MBas/+MHas aobf is a
+      # cheap binary-heap fragmentation guard for long-running
+      # federation nodes.
       ERL_FLAGS: >-
         +S 2:2
         +SDcpu 2:2
@@ -65,15 +115,53 @@ services:
         +MBas aobf
         +MHas aobf
       ERL_FULLSWEEP_AFTER: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 2G
 
+  bun:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-bun:${SUKHI_VERSION:-v0}
+    environment:
+      NATS_URL: nats://nats:4222
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ── Delivery node ────────────────────────────────────────────────────────
+  # Outbound federation: Outbox.Relay (pg-notify → NATS) and Oban
+  # `:delivery` / `:federation` queues. Talks to gateway only via
+  # Postgres + NATS — no distributed Erlang on this edge.
   delivery:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-delivery:${SUKHI_VERSION:-v0}
+    hostname: delivery
     environment:
       DOMAIN: ${DOMAIN:-localhost:4000}
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: sukhi_fedi
       DB_POOL_SIZE: "8"
+      NATS_HOST: nats
+      NATS_PORT: "4222"
+      METRICS_PORT: "4001"
       OBAN_DELIVERY_CONCURRENCY: "10"
       OBAN_FEDERATION_CONCURRENCY: "4"
       FINCH_POOL_SIZE: "50"
@@ -85,30 +173,39 @@ services:
         +MBas aobf
         +MHas aobf
       ERL_FULLSWEEP_AFTER: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+      gateway:
+        condition: service_started
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 1500M
 
-  bun:
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-
+  # ── Plugin API node (distributed Erlang) ─────────────────────────────────
   api:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-api:${SUKHI_VERSION:-v0}
+    hostname: api
+    environment:
+      RELEASE_DISTRIBUTION: name
+      RELEASE_NODE: api@api
+      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      DOMAIN: ${DOMAIN:-localhost:4000}
+      INSTANCE_TITLE: ${INSTANCE_TITLE:-sukhi-fedi}
+      ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
+      DISABLE_ADDONS: ${DISABLE_ADDONS:-}
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 512M
 
-  # Coolify drives redeploys via its own webhook; Watchtower would
-  # race with it. Disable.
-  watchtower:
-    profiles: ["disabled"]
-
-  # Coolify's Traefik proxy is the ingress. cloudflared is only
-  # defined in the freetier override, but if someone composes this
-  # file on top of it, keep cloudflared off too.
-  cloudflared:
-    profiles: ["disabled"]
+volumes:
+  postgres_data:
+  nats_data:
