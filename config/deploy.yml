@@ -103,7 +103,9 @@ proxy:
   host: sukhi.f3liz.casa
   app_port: 4000
   healthcheck:
-    path: /.well-known/nodeinfo
+    # sukhi-fedi serves nodeinfo at /nodeinfo/2.1 directly (no
+    # /.well-known prefix). Light, always-200, hits no DB.
+    path: /nodeinfo/2.1
     interval: 10
     timeout: 5
 
