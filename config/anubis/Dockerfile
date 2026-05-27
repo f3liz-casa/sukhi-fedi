@@ -10,6 +10,11 @@
 
 FROM ghcr.io/techarohq/anubis:latest
 
+# Kamal verifies the web role image carries `service=sukhi-fedi` before
+# deploying it (anti-misconfig guard). The base anubis image has no
+# such label, so we add it here.
+LABEL service="sukhi-fedi"
+
 # `POLICY_FNAME` and `IMPRINT_FILE` env vars (set in config/deploy.yml)
 # point at these paths.
 COPY botPolicies.yaml /data/cfg/botPolicies.yaml
