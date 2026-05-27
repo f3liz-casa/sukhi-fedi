@@ -227,12 +227,30 @@ defmodule SukhiFedi.Web.Router do
   end
 
   defp serve_spa(conn) do
-    root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
-    index = Path.join(root, "index.html")
+    # index.html refers to content-hashed chunks (`_app/immutable/...`).
+    # If a CDN (Cloudflare here) caches the HTML, the browser keeps
+    # asking for old chunk names and never sees a new SPA push. Force
+    # revalidation on the shell; the chunks themselves are
+    # cache-forever-safe because their URL changes per build.
+    override_root = System.get_env("STATIC_OVERRIDE_DIR", "/app/priv/static-override")
+    baked_root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
 
-    if File.regular?(index) do
+    index =
+      cond do
+        File.regular?(Path.join(override_root, "index.html")) ->
+          Path.join(override_root, "index.html")
+
+        File.regular?(Path.join(baked_root, "index.html")) ->
+          Path.join(baked_root, "index.html")
+
+        true ->
+          nil
+      end
+
+    if index do
       conn
       |> put_resp_content_type("text/html; charset=utf-8")
+      |> put_resp_header("cache-control", "no-cache, must-revalidate")
       |> send_file(200, index)
     else
       send_resp(conn, 404, "frontend not built — run `cd web && npm run build`")

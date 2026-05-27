@@ -34,9 +34,14 @@ const STATE_KEY = 'sf.state';
 const DRAFT_KEY = 'sf.signup_draft';
 const SCOPES = 'read';
 
+// password は API call の直前まで sessionStorage に乗るが、call の
+// 直後(成功も失敗も)`clearSignupPassword` で消して、username +
+// invite_code だけが残る形にしている。retry のとき再入力で済むのは
+// 招待コードと ID、合言葉は毎回打ち直し ─ XSS で password が
+// snapshot される窓を最小にするための取り決め。
 export type SignupDraft = {
   username: string;
-  password: string;
+  password?: string;
   invite_code: string;
   email?: string;
 };
@@ -55,6 +60,18 @@ export function loadSignupDraft(): SignupDraft | null {
   } catch {
     return null;
   }
+}
+
+// password だけ落とした draft で上書きする。/check が API を呼んだ
+// 直後に必ず呼ぶ ─ 成功した場合はそのあと clearSignupDraft で全消し、
+// 失敗時は username + invite_code が残るので、retry は合言葉だけ
+// 打ち直してもらえばいい。
+export function clearSignupPassword(): void {
+  if (!browser) return;
+  const d = loadSignupDraft();
+  if (!d) return;
+  const { password: _password, ...rest } = d;
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(rest));
 }
 
 export function clearSignupDraft(): void {
@@ -178,7 +195,7 @@ export async function completeLogin(code: string, state: string): Promise<TokenS
 // Sign up via POST /api/v1/accounts. Called from `/check` AFTER Anubis
 // has set its cookie ─ never directly from the form, so the PoW is
 // always done before an account row is created.
-export async function signup(input: SignupDraft): Promise<TokenSet> {
+export async function signup(input: Required<Pick<SignupDraft, 'username' | 'password' | 'invite_code'>> & Pick<SignupDraft, 'email'>): Promise<TokenSet> {
   const client = await loadOrRegisterClient();
 
   const ccRes = await fetch('/oauth/token', {

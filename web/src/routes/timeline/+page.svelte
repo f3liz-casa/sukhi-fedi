@@ -57,6 +57,15 @@
   function selectKind(next: TimelineKind) {
     if (next === kind) return;
     kind = next;
+    // タグタブはタグ文字列が無いと意味が無いので、まだ何も入って
+    // いないときは取りに行かない(入力 → submit でロードされる)。
+    if (next === 'tag' && !tag) {
+      items = [];
+      nextMaxId = null;
+      error = null;
+      initial = false;
+      return;
+    }
     void load(true);
   }
 
@@ -113,16 +122,16 @@
 <section class="timeline">
   {#if error}
     <p class="error">{error}</p>
-  {/if}
-
-  {#if initial && loading}
+  {:else if initial && loading}
     <p class="loading">読んでいます…</p>
   {:else if items.length === 0 && !loading}
     <p class="prose-small">
       {#if kind === 'home'}
         まだ、ホームに、なにも届いていません。だれかをフォローすると、ここに集まります。
+      {:else if kind === 'tag' && !tag}
+        上の入力に、見たいタグを入れてください。
       {:else if kind === 'tag'}
-        そのタグを持つ投稿は、まだ見つかりません。
+        「#{tag}」を持つ投稿は、まだ見つかりません。
       {:else}
         まだ、なにも届いていません。
       {/if}

@@ -11,14 +11,17 @@
   let invite_code = '';
   let error: string | null = null;
 
-  // /check で失敗して戻ってきた人のために、下書きを復元する。成功
-  // していたら clearSignupDraft 済みなので何も入らない。
+  // /check で失敗して戻ってきた人のために下書きを復元するが、
+  // password だけは(/check が clearSignupPassword で落としてあるので)
+  // 復活しない。retry のときは合言葉だけもう一度打ってもらう。
   onMount(() => {
     const d = loadSignupDraft();
     if (d) {
-      username = d.username;
-      password = d.password;
-      invite_code = d.invite_code;
+      username = d.username ?? '';
+      invite_code = d.invite_code ?? '';
+      if (!d.password) {
+        error = '合言葉だけ、もう一度入れてください。';
+      }
     }
   });
 

@@ -22,10 +22,10 @@ const config = {
     // いって、ビルドの version 文字列が変わったら `$updated.current`
     // が true になる。+layout.svelte の UpdateBanner がそれを見て
     // 「新しい版が来ました、リロードしますか?」を出す。
-    // 60s は「読んでいる人にうるさすぎず、置き去りにもしない」
-    // 中間。
+    // 15s は気付きやすさ寄り(60s だと反映が遅く感じる)。GET 1本
+    // /15s なのでサーバ負荷も小さい。
     version: {
-      pollInterval: 60_000
+      pollInterval: 15_000
     }
   }
 };

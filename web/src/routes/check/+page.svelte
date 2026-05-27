@@ -15,7 +15,8 @@
     startLogin,
     signup,
     loadSignupDraft,
-    clearSignupDraft
+    clearSignupDraft,
+    clearSignupPassword
   } from '$lib/auth';
 
   let phase: 'working' | 'error' = 'working';
@@ -37,7 +38,8 @@
     gateway_not_connected: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
     gateway_rpc_failed: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
     internal_error: 'サーバの中で、なにかが転びました。',
-    no_draft: '下書きが見つかりませんでした。もう一度はじめからお願いします。'
+    no_draft: '下書きが見つかりませんでした。もう一度はじめからお願いします。',
+    password_missing: '合言葉を、もう一度入れてください。'
   };
 
   // changeset の details: {username: ["...", ...]} を日本語に。
@@ -79,8 +81,21 @@
       } else {
         const draft = loadSignupDraft();
         if (!draft) throw new Error('no_draft');
+        if (!draft.password) throw new Error('password_missing');
 
-        await signup(draft);
+        const payload = {
+          username: draft.username,
+          password: draft.password,
+          invite_code: draft.invite_code,
+          email: draft.email
+        };
+
+        // API call の直前に sessionStorage から password だけ消す。
+        // 成功でも失敗でも、もう password はそこに無い。retry の
+        // ときは合言葉だけ打ち直してもらう ─ docs: clearSignupPassword
+        clearSignupPassword();
+
+        await signup(payload);
         clearSignupDraft();
         await goto('/timeline');
       }
@@ -98,20 +113,23 @@
   }
 </script>
 
-<section class="hero">
-  <h1>ちょっとだけ、確かめさせてください。</h1>
-  <p class="tagline">
-    {#if phase === 'working'}
-      すぐ済みます。
-    {:else}
-      —
-    {/if}
-  </p>
-</section>
-
 {#if phase === 'working'}
-  <p class="loading">確かめています…</p>
+  <section class="hero">
+    <h1>
+      {#if intent === 'signup'}
+        アカウントを作っています…
+      {:else if intent === 'login'}
+        ログイン画面に、ご案内しています…
+      {:else}
+        すこし待ってください…
+      {/if}
+    </h1>
+  </section>
+  <p class="loading">ちょっと待っていてください。</p>
 {:else if phase === 'error'}
+  <section class="hero">
+    <h1>うまく進めませんでした。</h1>
+  </section>
   <p class="error">{error}</p>
   <div class="stack">
     <button class="lane-door" on:click={retry} style="max-width: 16rem;">
