@@ -27,6 +27,13 @@ defmodule SukhiApi.Views.MastodonStatus do
     counts = Map.get(ctx, :counts, %{})
     viewer = Map.get(ctx, :viewer, %{})
 
+    # Mastodon spec の `uri` は「常に文字列」。Moshidon など
+    # Kotlin/Gson クライアントは non-null String で受けるので、
+    # `ap_id` が未設定だった瞬間に NPE で落ちる。ローカル発の
+    # note には `https://<domain>/users/<user>/notes/<id>` を
+    # 推測フォールバックとして組み立てる。
+    uri = Map.get(note, :ap_id) || derived_uri(note)
+
     %{
       id: Id.encode(note.id),
       created_at: format_dt(Map.get(note, :created_at)),
@@ -36,8 +43,8 @@ defmodule SukhiApi.Views.MastodonStatus do
       spoiler_text: Map.get(note, :cw) || "",
       visibility: Map.get(note, :visibility) || "public",
       language: nil,
-      uri: Map.get(note, :ap_id),
-      url: Map.get(note, :ap_id),
+      uri: uri,
+      url: uri,
       replies_count: Map.get(counts, :replies, 0),
       reblogs_count: Map.get(counts, :reblogs, 0),
       favourites_count: Map.get(counts, :favourites, 0),
@@ -85,7 +92,14 @@ defmodule SukhiApi.Views.MastodonStatus do
     if is_map(account) and Map.has_key?(account, :username) do
       MastodonAccount.render(account, %{})
     else
-      nil
+      # spec 上 `account` も非 null。ハイドレートし忘れた経路から
+      # うっかり nil が漏れると、Moshidon など Kotlin/Gson 系で
+      # NPE になる。username 不明でも plausible な形を返して
+      # クラッシュさせない。 [[mastodon_account.render の空 fallback と対]]
+      MastodonAccount.render(
+        %{id: Map.get(note, :account_id) || 0, username: "unknown"},
+        %{}
+      )
     end
   end
 
@@ -112,4 +126,21 @@ defmodule SukhiApi.Views.MastodonStatus do
 
   defp format_dt(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp format_dt(_), do: nil
+
+  # ap_id が落ちているときの最後の砦。account がぶら下がっていれば
+  # そこから username を拾って `users/<u>/notes/<id>` を組む。それも
+  # 無ければ `notes/<id>` だけでも返す ─ 形式が崩れていても non-null
+  # の文字列であることが優先。
+  defp derived_uri(note) do
+    domain = SukhiApi.Config.domain!()
+    id = Map.get(note, :id)
+
+    case Map.get(note, :account) do
+      %{username: u} when is_binary(u) ->
+        "https://#{domain}/users/#{u}/notes/#{id}"
+
+      _ ->
+        "https://#{domain}/notes/#{id}"
+    end
+  end
 end
