@@ -18,7 +18,7 @@
 //     verifyRequest の fast path に乗りやすい
 //   ─ 既定は cavage-12。
 
-import { signRequest, type HttpMessageSignaturesSpec } from "@fedify/fedify";
+import { signRequest, importJwk, type HttpMessageSignaturesSpec } from "@fedify/fedify";
 import { getImportedPrivateKey, type JwkInput } from "../fedify/key_cache.ts";
 
 export interface SignDeliveryPayload {
@@ -101,6 +101,70 @@ export async function handleSignDelivery(
         out_headers: outHeaders,
       }),
     );
+
+    // 自己検証 ─ 「Failed to verify the request signature」が消えない
+    // ので、我々が作った署名を我々自身の公開鍵で verify できるかを
+    // 確かめる。これが false なら署名そのものがおかしい(鍵 import の
+    // 不整合、digest 計算の不整合、message 構築のずれ、など)。
+    // true なら、署名は数学的に valid で、原因は受け手側 (cached key
+    // が違うなど) にある。 [[fedify-401-diagnostic]]
+    try {
+      // private bits を落として public 部分だけ拾う。
+      const priv = payload.privateKeyJwk as Record<string, unknown>;
+      const publicOnly: Record<string, unknown> = {};
+      for (const k of ["kty", "n", "e", "alg", "use", "kid"]) {
+        if (k in priv) publicOnly[k] = priv[k];
+      }
+      const publicKey = await importJwk(
+        publicOnly as Parameters<typeof importJwk>[0],
+        "public",
+      );
+
+      // signed Request から (request-target) + 署名対象ヘッダで
+      // message を組み直す。
+      const sigHeader = signed.headers.get("signature") || "";
+      const headersMatch = sigHeader.match(/headers="([^"]*)"/);
+      const signedNames = headersMatch ? headersMatch[1].split(/\s+/g) : [];
+      const url = new URL(payload.inbox);
+      const message = signedNames
+        .map((name) =>
+          name === "(request-target)"
+            ? `(request-target): post ${url.pathname}`
+            : name === "host"
+              ? `host: ${signed.headers.get("host") ?? url.host}`
+              : `${name}: ${signed.headers.get(name) ?? ""}`,
+        )
+        .join("\n");
+
+      const sigMatch = sigHeader.match(/signature="([^"]*)"/);
+      const sigB64 = sigMatch ? sigMatch[1] : "";
+      const sigBytes = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
+
+      const ok = await crypto.subtle.verify(
+        "RSASSA-PKCS1-v1_5",
+        publicKey,
+        sigBytes,
+        new TextEncoder().encode(message),
+      );
+
+      console.error(
+        JSON.stringify({
+          event: "sign.selftest",
+          inbox: payload.inbox,
+          ok,
+          signed_names: signedNames,
+          message_bytes: message.length,
+        }),
+      );
+    } catch (vErr) {
+      console.error(
+        JSON.stringify({
+          event: "sign.selftest.error",
+          inbox: payload.inbox,
+          error: vErr instanceof Error ? vErr.message : String(vErr),
+        }),
+      );
+    }
 
     return { headers: outHeaders };
   } catch (err) {
