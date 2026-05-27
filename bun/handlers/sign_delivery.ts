@@ -1,5 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { signRequest } from "@fedify/fedify";
+//
+// Sign an outbound ActivityPub POST (delivery / inbox post) and hand
+// the signed headers back to Elixir. The actual HTTP POST is done by
+// `SukhiDelivery.Delivery.Worker` with these headers.
+//
+// fedify が要求するもの:
+//   - signRequest(request, privateKey, keyId, options?)
+//   - options.spec = "draft-cavage-http-signatures-12" | "rfc9421"
+//   - options.body = ArrayBuffer | null
+//       POST body のクローンを fedify 内部でやらせると Bun で潰れる
+//       ことがあった(Request.clone は仕様上 OK だが、digest 計算の
+//       fast path が失敗する) ─ 明示的に渡す方が安全。
+//
+// fediverse の実勢:
+//   - Mastodon / Misskey / Sharkey / Akkoma / Pleroma 全部 cavage-12
+//   - hackers.pub のような Fedify 1.x 製も両方受けるが、cavage の方が
+//     verifyRequest の fast path に乗りやすい
+//   ─ 既定は cavage-12。
+
+import { signRequest, type HttpMessageSignaturesSpec } from "@fedify/fedify";
 import { getImportedPrivateKey, type JwkInput } from "../fedify/key_cache.ts";
 
 export interface SignDeliveryPayload {
@@ -9,13 +28,9 @@ export interface SignDeliveryPayload {
   privateKeyJwk: JwkInput;
   keyId: string;
   /**
-   * Preferred HTTP Signature algorithm.
+   * Preferred HTTP Signature spec.
    * - "rfc9421"  → Signature-Input + Signature headers (RFC 9421)
    * - "cavage"   → single Signature header (draft-cavage, default)
-   *
-   * Fedify's verifyRequest accepts both on the receiving side, so either
-   * format is interoperable. Choosing "rfc9421" makes outbound deliveries
-   * compliant with the modern standard.
    */
   algorithm?: "rfc9421" | "cavage";
 }
@@ -24,38 +39,54 @@ export interface SignDeliveryResult {
   headers: Record<string, string>;
 }
 
+const enc = new TextEncoder();
+
 export async function handleSignDelivery(
   payload: SignDeliveryPayload,
 ): Promise<SignDeliveryResult> {
   const privateKey = await getImportedPrivateKey(payload.privateKeyJwk);
+  const bodyBuf = enc.encode(payload.body).buffer as ArrayBuffer;
 
   const request = new Request(payload.inbox, {
     method: "POST",
     headers: {
       "Content-Type": "application/activity+json",
-      "User-Agent": "sukhi-fedi/0.1.0",
+      "User-Agent": "sukhi-fedi/0.1.0 (+https://sukhi.f3liz.casa/)",
+      Accept: "application/activity+json",
     },
     body: payload.body,
   });
 
-  // Fedify 1.x signRequest options — attempt RFC 9421 when requested.
-  // The `preferRfc9421` option was added in Fedify 1.3.0 (available in 1.10.4).
-  const signOptions: Record<string, unknown> = {};
-  if (payload.algorithm === "rfc9421") {
-    signOptions.preferRfc9421 = true;
-  }
+  // fedify は `options.spec` を見て cavage / 9421 を切り替える。
+  // 引数名を間違えると静かに default (cavage-12) になるので注意。
+  const spec: HttpMessageSignaturesSpec =
+    payload.algorithm === "rfc9421"
+      ? "rfc9421"
+      : "draft-cavage-http-signatures-12";
 
-  let signed: Request;
   try {
-    signed = await signRequest(request, privateKey, new URL(payload.keyId), signOptions as Parameters<typeof signRequest>[3]);
-  } catch {
-    // Fallback: sign without extra options (cavage format)
-    signed = await signRequest(request, privateKey, new URL(payload.keyId));
-  }
+    const signed = await signRequest(
+      request,
+      privateKey,
+      new URL(payload.keyId),
+      { spec, body: bodyBuf },
+    );
 
-  const outHeaders: Record<string, string> = {};
-  signed.headers.forEach((v, k) => {
-    outHeaders[k] = v;
-  });
-  return { headers: outHeaders };
+    const outHeaders: Record<string, string> = {};
+    signed.headers.forEach((v, k) => {
+      outHeaders[k] = v;
+    });
+    return { headers: outHeaders };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        event: "sign.failed",
+        inbox: payload.inbox,
+        spec,
+        error: detail,
+      }),
+    );
+    throw new Error(`sign for ${payload.inbox} (spec=${spec}) failed: ${detail}`);
+  }
 }
