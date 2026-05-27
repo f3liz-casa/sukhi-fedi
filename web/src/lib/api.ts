@@ -331,3 +331,32 @@ export async function unfollowAccount(id: string): Promise<Relationship> {
   if (!res.ok) throw new Error(`unfollow_failed_${res.status}`);
   return (await res.json()) as Relationship;
 }
+
+// ── search ───────────────────────────────────────────────────────────
+
+export type SearchResult = {
+  accounts: Account[];
+  hashtags: Tag[];
+  statuses: Status[];
+};
+
+// resolve=true は WebFinger で remote actor を取りにいく(初フォロー
+// の前段)。auth 必須。q 未入力なら空結果を返して silent に no-op。
+export async function searchAll(
+  q: string,
+  opts: { resolve?: boolean; limit?: number; type?: 'accounts' | 'hashtags' | 'statuses' } = {}
+): Promise<SearchResult> {
+  const trimmed = q.trim();
+  if (!trimmed) return { accounts: [], hashtags: [], statuses: [] };
+
+  const qs = new URLSearchParams();
+  qs.set('q', trimmed);
+  if (opts.resolve) qs.set('resolve', 'true');
+  if (opts.limit) qs.set('limit', String(opts.limit));
+  if (opts.type) qs.set('type', opts.type);
+
+  const res = await get(`/api/v2/search?${qs}`);
+  failOn401(res);
+  if (!res.ok) throw new Error(`search_failed_${res.status}`);
+  return (await res.json()) as SearchResult;
+}

@@ -50,6 +50,32 @@ defmodule SukhiFedi.Tags do
   end
 
   @doc """
+  Prefix search by tag name. `q` の先頭 `#` は呼び出し側で落として
+  もらう前提で、ここではそのまま小文字化して `LIKE q%` で引く。
+  Mastodon の /api/v2/search が叩く想定。
+  """
+  @spec search(String.t(), keyword()) :: [Tag.t()]
+  def search(q, opts \\ []) when is_binary(q) do
+    limit = Keyword.get(opts, :limit, 10)
+    norm = String.downcase(String.trim(q))
+
+    cond do
+      norm == "" ->
+        []
+
+      true ->
+        like = norm <> "%"
+
+        from(t in Tag,
+          where: like(fragment("lower(?)", t.name), ^like),
+          order_by: [asc: fragment("length(?)", t.name), asc: t.name],
+          limit: ^limit
+        )
+        |> Repo.all()
+    end
+  end
+
+  @doc """
   Upsert tags for a note (idempotent both on tag names and on
   note_tags links). Returns the list of tag names attached.
   """
