@@ -47,12 +47,19 @@ export async function handleSignDelivery(
   const privateKey = await getImportedPrivateKey(payload.privateKeyJwk);
   const bodyBuf = enc.encode(payload.body).buffer as ArrayBuffer;
 
+  // 署名対象のヘッダは最小限に。fedify は Request に居る全 header を
+  // 拾って `headers="..."` に並べて全部署名する。Cloudflare や HTTP
+  // クライアント (Req) が `accept` / `user-agent` を勝手に再書き出し
+  // すると、verify 側の `headers.get(name)` が違う値を返して
+  // "Failed to verify the request signature." になる。
+  // Mastodon と同じ最小セット `(request-target) content-type date
+  // digest host` だけにしておけば、それ以外のヘッダを CF が触っても
+  // 署名検証には影響しない。Accept / User-Agent は POST 時に
+  // Elixir 側で追加するので情報は失われない。
   const request = new Request(payload.inbox, {
     method: "POST",
     headers: {
       "Content-Type": "application/activity+json",
-      "User-Agent": "sukhi-fedi/0.1.0 (+https://sukhi.f3liz.casa/)",
-      Accept: "application/activity+json",
     },
     body: payload.body,
   });
