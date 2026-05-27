@@ -211,7 +211,28 @@ defmodule SukhiApi.Capabilities.OAuthTest do
       assert {"content-type", "text/html; charset=utf-8"} in resp.headers
     end
 
-    test "renders consent form for known client_id" do
+    test "no session cookie → 302 to /login" do
+      # GET /oauth/authorize は未ログインのとき consent を見せず、
+      # /login に飛ばす(oauth.ex: redirect_to_login/1)。
+      {:ok, resp} =
+        Router.handle(%{
+          method: "GET",
+          path: "/oauth/authorize",
+          query: "client_id=cid&redirect_uri=https://example.com/cb&response_type=code",
+          headers: []
+        })
+
+      assert resp.status == 302
+      assert {"location", location} = List.keyfind(resp.headers, "location", 0)
+      assert String.starts_with?(location, "/login?next=")
+      assert location =~ "%2Foauth%2Fauthorize"
+    end
+
+    test "renders consent form for known client_id with a valid session and non-first-party redirect" do
+      Application.put_env(:sukhi_api, :fake_sessions, %{
+        "sess_token" => %{id: 1, username: "alice"}
+      })
+
       Application.put_env(:sukhi_api, :fake_oauth, %{
         find_app_by_client_id:
           {:ok,
@@ -229,7 +250,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           path: "/oauth/authorize",
           query:
             "client_id=cid_in_form&redirect_uri=https://example.com/cb&scope=read&response_type=code&state=xyz",
-          headers: []
+          headers: [{"cookie", "session_token=sess_token"}]
         })
 
       assert resp.status == 200

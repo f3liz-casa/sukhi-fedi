@@ -137,7 +137,11 @@ defmodule SukhiApi.RouterAuthTest do
     assert resp.status == 200
   end
 
-  test "scope mismatch (required=read:accounts, granted=read) → 403" do
+  test "scope mismatch (required=write:statuses, granted=read) → 403" do
+    # `read` は read:* を覆う umbrella scope (oauth.ex / router.granted?/2)
+    # なので、read granted で read:accounts を要求しても通る。本当に
+    # 通らないペアを assert したいので、write:statuses を要求する
+    # `POST /api/v1/statuses` に対して granted=[read] を当てる。
     Application.put_env(:sukhi_api, :fake_rpc, %{
       "narrow" =>
         {:ok,
@@ -150,15 +154,15 @@ defmodule SukhiApi.RouterAuthTest do
 
     {:ok, resp} =
       Router.handle(%{
-        method: "GET",
-        path: "/api/v1/accounts/verify_credentials",
+        method: "POST",
+        path: "/api/v1/statuses",
         headers: [{"authorization", "Bearer narrow"}]
       })
 
     assert resp.status == 403
     body = Jason.decode!(resp.body)
     assert body["error"] == "insufficient_scope"
-    assert body["scope"] == "read:accounts"
+    assert body["scope"] == "write:statuses"
   end
 
   test "verify_bearer returned :invalid_token → 401" do
