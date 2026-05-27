@@ -223,6 +223,13 @@ defmodule SukhiFedi.Web.Router do
     SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))
   end
 
+  # v2 (search 等) も同じプラグインノードに流す。Mastodon は v1/v2 を
+  # 混ぜて持つので、v2 だけ別出口にすると capability ファイルだけ
+  # 増えて見えなくなる、という事故が起きる(実際 v0.1.65 で起きた)。
+  match "/api/v2/*_" do
+    SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))
+  end
+
   # OAuth 2.0 server endpoints (`/oauth/authorize`, `/oauth/token`,
   # `/oauth/revoke`) live on the api plugin node. PluginPlug is
   # path-agnostic so the same forwarder handles them.
