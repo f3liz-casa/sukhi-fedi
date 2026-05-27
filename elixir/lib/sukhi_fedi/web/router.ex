@@ -243,15 +243,23 @@ defmodule SukhiFedi.Web.Router do
     if Enum.any?(path_segments, &(&1 == "..")) do
       send_resp(conn, 400, "")
     else
-      root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
       relative = Path.join(path_segments)
-      full = Path.join(root, relative)
+      override_root = Path.join([:code.priv_dir(:sukhi_fedi), "static-override"])
+      baked_root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
 
       cond do
-        not String.starts_with?(Path.expand(full), Path.expand(root)) ->
-          send_resp(conn, 400, "")
+        # Host bind-mount takes precedence so operators can `scp` a
+        # fresh CSS / SPA build without re-rolling the image.
+        safe_regular?(override_root, relative) ->
+          full = Path.join(override_root, relative)
 
-        File.regular?(full) ->
+          conn
+          |> put_resp_content_type(content_type_for(full))
+          |> send_file(200, full)
+
+        safe_regular?(baked_root, relative) ->
+          full = Path.join(baked_root, relative)
+
           conn
           |> put_resp_content_type(content_type_for(full))
           |> send_file(200, full)
@@ -260,6 +268,12 @@ defmodule SukhiFedi.Web.Router do
           send_resp(conn, 404, "")
       end
     end
+  end
+
+  defp safe_regular?(root, relative) do
+    full = Path.join(root, relative)
+
+    String.starts_with?(Path.expand(full), Path.expand(root)) and File.regular?(full)
   end
 
   # Path-traversal-safe static serve for `/uploads/<key>`. The key is

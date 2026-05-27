@@ -17,6 +17,15 @@ const config = {
     paths: {
       base: '',
       relative: false
+    },
+    // SvelteKit が `/_app/version.json` を pollInterval 毎に取りに
+    // いって、ビルドの version 文字列が変わったら `$updated.current`
+    // が true になる。+layout.svelte の UpdateBanner がそれを見て
+    // 「新しい版が来ました、リロードしますか?」を出す。
+    // 60s は「読んでいる人にうるさすぎず、置き去りにもしない」
+    // 中間。
+    version: {
+      pollInterval: 60_000
     }
   }
 };

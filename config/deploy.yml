@@ -112,7 +112,6 @@ proxy:
   ssl: true
   host: sukhi.f3liz.casa
   app_port: 8080
-  deploy_timeout: 60
   healthcheck:
     path: /nodeinfo/2.1
     interval: 5
@@ -133,6 +132,10 @@ env:
     TARGET: http://sukhi-fedi-gateway:4000
     COOKIE_DOMAIN: sukhi.f3liz.casa
     COOKIE_PARTITIONED: "true"
+    # kamal-proxy doesn't set X-Real-Ip, so Anubis must use the TCP
+    # connection's remote address instead. Without this, every request
+    # fails with "[misconfiguration] X-Real-Ip header is not set".
+    USE_REMOTE_ADDRESS: "true"
   # ANUBIS_ED25519_KEY (32-byte hex) は .kamal/secrets に書いてから
   # 下の secret: にも入れて、コンテナ再起動を跨いで cookie が生き残る
   # ようにする。無くても起動はするが、再起動のたびに鍵が新しくなって
@@ -181,6 +184,12 @@ accessories:
       hostname: elixir
       memory: 2g
       cpus: "1.5"
+      # Host dir for live static overrides. Anything placed under
+      # /var/lib/sukhi-fedi/static/ on the box is served at the same
+      # path before falling back to the image-baked priv/static. Means
+      # CSS / SPA tweaks can land via plain scp ─ no image rebuild,
+      # no container reboot. See docs/static-override.md.
+      volume: "/var/lib/sukhi-fedi/static:/app/priv/static-override:ro"
 
   postgres:
     image: postgres:16-alpine
