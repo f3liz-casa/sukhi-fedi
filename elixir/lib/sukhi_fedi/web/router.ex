@@ -244,7 +244,13 @@ defmodule SukhiFedi.Web.Router do
       send_resp(conn, 400, "")
     else
       relative = Path.join(path_segments)
-      override_root = Path.join([:code.priv_dir(:sukhi_fedi), "static-override"])
+      # `:code.priv_dir/1` returns the versioned release path
+      # (/app/lib/sukhi_fedi-<vsn>/priv), which would force the
+      # deploy.yml bind-mount target to change on every release.
+      # Read the override location from env instead — defaults to the
+      # container's /app/priv/static-override, where the kamal
+      # accessory bind-mounts the host's /var/lib/sukhi-fedi/static.
+      override_root = System.get_env("STATIC_OVERRIDE_DIR", "/app/priv/static-override")
       baked_root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
 
       cond do

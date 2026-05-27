@@ -44,19 +44,20 @@
 
 <form class="form stack" on:submit|preventDefault={submit}>
   <label class="stack-tight">
-    <span>なまえ</span>
+    <span>ID</span>
     <input
       type="text"
       bind:value={username}
       autocomplete="username"
       pattern="[a-z0-9_]{'{1,30}'}"
-      title="小文字英数字とアンダースコア、30字まで"
+      title="小文字英字、数字、アンダースコアだけ。30字まで。"
       required
     />
+    <span class="help">小文字英字、数字、_（アンダースコア）。30字まで。例: <code>usagi_05</code></span>
   </label>
 
   <label class="stack-tight">
-    <span>あいことば（8字以上）</span>
+    <span>あいことば</span>
     <input
       type="password"
       bind:value={password}
@@ -64,6 +65,7 @@
       minlength="8"
       required
     />
+    <span class="help">8字以上。</span>
   </label>
 
   <label class="stack-tight">

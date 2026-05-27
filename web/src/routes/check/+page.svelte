@@ -22,16 +22,42 @@
   let intent: 'login' | 'signup' | null = null;
   let error: string | null = null;
 
+  // API (api/lib/sukhi_api/capabilities/mastodon_accounts.ex) が
+  // 実際に返すキーに揃える。新しいキーをサーバに足したら、ここも
+  // 一緒に書く。
   const errorText: Record<string, string> = {
+    invite_code_required: '招待コードを入れてください。',
     invite_invalid: 'その招待コードは、見つかりませんでした。',
     invite_used: 'その招待コードは、もう使われています。',
     invite_expired: 'その招待コードは、もう古くなっています。',
-    invite_missing: '招待コードを入れてください。',
     password_too_short: 'あいことばは、8 文字以上で。',
     validation_failed: '入れた中で、なにかひとつ、見直してみてください。',
+    client_credentials_required: 'サーバとの最初の握手が、できていませんでした。',
+    token_mint_failed: 'アカウントは作れたのに、入れる札が出ませんでした。',
     gateway_not_connected: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
+    gateway_rpc_failed: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
+    internal_error: 'サーバの中で、なにかが転びました。',
     no_draft: '下書きが見つかりませんでした。もう一度はじめからお願いします。'
   };
+
+  // changeset の details: {username: ["...", ...]} を日本語に。
+  // 一個目だけ拾えば十分(複数あっても見せると目が散る)。
+  const fieldName: Record<string, string> = {
+    username: 'ID',
+    password: 'あいことば',
+    email: 'メール',
+    invite_code: '招待コード'
+  };
+
+  function formatValidation(details: Record<string, string[]> | undefined): string | null {
+    if (!details) return null;
+    const first = Object.entries(details)[0];
+    if (!first) return null;
+    const [field, msgs] = first;
+    const label = fieldName[field] ?? field;
+    const msg = msgs?.[0] ?? '';
+    return `${label}${msg}`;
+  }
 
   onMount(async () => {
     const params = new URLSearchParams(window.location.search);
@@ -60,7 +86,9 @@
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
-      error = errorText[msg] ?? 'うまく進めませんでした。もう一度ためしますか?';
+      const details = (e as Error & { details?: Record<string, string[]> })?.details;
+      const fieldHint = msg === 'validation_failed' ? formatValidation(details) : null;
+      error = fieldHint ?? errorText[msg] ?? 'うまく進めませんでした。もう一度ためしますか?';
       phase = 'error';
     }
   });

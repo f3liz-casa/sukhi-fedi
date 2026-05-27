@@ -153,6 +153,20 @@
   margin-top: var(--space-1);
 }
 
+.form .help {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.form .help code {
+  font-size: 0.95em;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
 .prose-small {
   max-width: var(--measure);
   font-size: var(--text-sm);

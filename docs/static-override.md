@@ -6,9 +6,14 @@ override dir を一枚かぶせている。仕組みは単純:
 
 ```
 gateway container
-  ├── /app/priv/static/          ← image にビルド時に焼き込まれたもの
-  └── /app/priv/static-override/ ← ホストの /var/lib/sukhi-fedi/static を read-only bind
+  ├── /app/lib/sukhi_fedi-<vsn>/priv/static/   ← image にビルド時に焼き込まれたもの
+  └── /app/priv/static-override/               ← ホストの /var/lib/sukhi-fedi/static を read-only bind
 ```
+
+baked path は `:code.priv_dir/1` が release version 込みで返すので、
+override は version に依らない固定パスにして deploy.yml を毎回直さ
+ずに済むようにしている(`STATIC_OVERRIDE_DIR` 環境変数で上書きも
+可能)。
 
 `SukhiFedi.Web.Router.serve_static/2` は **override を先に見て、無ければ
 baked を返す**。だから:

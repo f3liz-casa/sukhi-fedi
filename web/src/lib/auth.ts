@@ -211,7 +211,12 @@ export async function signup(input: SignupDraft): Promise<TokenSet> {
 
   if (!res.ok) {
     const reason = body?.error ?? `signup_failed_${res.status}`;
-    throw new Error(reason);
+    const err = new Error(reason);
+    // validation_failed は details に
+    // `{username: ["は小文字英数字..."], ...}` が入っていることがある。
+    // /check 側で field 名 + メッセージを出すために括って渡す。
+    (err as Error & { details?: Record<string, string[]> }).details = body?.details;
+    throw err;
   }
 
   saveToken(body as TokenSet);
