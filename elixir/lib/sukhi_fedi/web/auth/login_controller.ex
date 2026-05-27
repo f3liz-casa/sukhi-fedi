@@ -17,8 +17,14 @@ defmodule SukhiFedi.Web.Auth.LoginController do
 
   @cookie "session_token"
 
+  # ホームから直接来たときは next が無いので、デフォルトで
+  # /check?intent=login に渡す。これでログイン → Anubis →
+  # OAuth フローの順に進む。/oauth/authorize から redirect されて
+  # きたときは next にその URL が入っているので、そちらが優先。
+  @default_next "/check?intent=login"
+
   def show(conn) do
-    next = conn.query_params["next"] || "/"
+    next = conn.query_params["next"] || @default_next
     error = conn.query_params["error"]
 
     html = render_login(next: next, error: error, username: "")
@@ -30,7 +36,7 @@ defmodule SukhiFedi.Web.Auth.LoginController do
 
   def submit(conn) do
     %{"username" => username, "password" => password} = conn.body_params
-    next = (conn.body_params["next"] || "/") |> safe_next()
+    next = (conn.body_params["next"] || @default_next) |> safe_next()
 
     case LocalAccounts.authenticate(to_string(username), to_string(password)) do
       {:ok, account} ->

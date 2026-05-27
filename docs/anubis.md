@@ -31,12 +31,20 @@ PoW」ではなく「久しぶりに来た人は一度だけ」)。
 ```
 1. ユーザが「入る」を押す
    ↓
-2. /check?intent=login        ← Anubis が CHALLENGE
+2. /login                    ← server-rendered, PoW なし
+   ↓ 名前と合言葉を入れて submit
+3. session_token cookie が立つ → /check?intent=login へ redirect
+   ↓
+4. /check                    ← ここで初めて Anubis が CHALLENGE
    ↓ PoW 解けた
-3. SPA が /oauth/authorize?... に飛ばす
-   ↓ (session_token cookie が無ければ /login に寄って戻る)
-4. /app/callback?code=... → トークン取得 → /timeline
+5. SPA が /oauth/authorize?... を発射 → consent
+   ↓
+6. /app/callback?code=... → トークン取得 → /timeline
 ```
+
+ログインの form 表示は素通し、submit のあとに Anubis ─ signup と
+同じ「フォームの先にゲート」の姿勢。何もしていないうちに確認を
+要求しない。
 
 ### signup
 ```

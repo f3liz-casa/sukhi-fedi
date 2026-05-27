@@ -3,8 +3,7 @@
   import {
     goToCheck,
     saveSignupDraft,
-    loadSignupDraft,
-    clearSignupDraft
+    loadSignupDraft
   } from '$lib/auth';
 
   let username = '';
@@ -29,11 +28,9 @@
     goToCheck('signup');
   }
 
-  function onLoginLink(e: MouseEvent) {
-    e.preventDefault();
-    clearSignupDraft();
-    goToCheck('login');
-  }
+  // 「こちらから入れます」は /login(server)へ直接。下書きが残って
+  // いると signup に戻ってきたとき紛らわしいので、ここでは消さない
+  // ─ 下書きは sessionStorage なので、タブを閉じれば自然に消える。
 </script>
 
 <section class="hero">
@@ -78,5 +75,5 @@
 </form>
 
 <p class="prose-small">
-  すでに住んでいる人は、<a href="/login" on:click={onLoginLink}>こちらから入れます</a>。
+  すでに住んでいる人は、<a href="/login" data-sveltekit-reload>こちらから入れます</a>。
 </p>
