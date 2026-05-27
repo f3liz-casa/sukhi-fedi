@@ -43,6 +43,7 @@ defmodule SukhiApi.Capabilities.OAuth do
     scope = params["scope"] || "read"
     state = params["state"] || ""
     response_type = params["response_type"] || "code"
+    session_token = session_token_from_cookies(req[:headers] || [])
 
     cond do
       response_type != "code" ->
@@ -50,6 +51,13 @@ defmodule SukhiApi.Capabilities.OAuth do
 
       is_nil(client_id) or client_id == "" ->
         html_error(400, "invalid_request", "missing client_id")
+
+      # ログインしていない人に consent 画面を見せない。`/login` に
+      # 飛ばし、ログインが済んだら同じ /oauth/authorize?... に戻って
+      # こられるよう `next` に元 URL を載せる。
+      match?({:error, :no_session}, resolve_session(session_token)) ->
+        next = "/oauth/authorize?" <> (req[:query] || "")
+        redirect_to_login(next)
 
       true ->
         case GatewayRpc.call(@gateway, :find_app_by_client_id, [client_id]) do
@@ -66,6 +74,17 @@ defmodule SukhiApi.Capabilities.OAuth do
             html_error(503, "gateway_rpc_failed", inspect(reason))
         end
     end
+  end
+
+  defp redirect_to_login(next) do
+    location = "/login?next=" <> URI.encode_www_form(next)
+
+    {:ok,
+     %{
+       status: 302,
+       body: "",
+       headers: [{"location", location}]
+     }}
   end
 
   # ── POST /oauth/authorize ────────────────────────────────────────────────
