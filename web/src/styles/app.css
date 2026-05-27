@@ -273,9 +273,15 @@ input:focus {
   border-color: var(--color-text);
 }
 
-button:not(.chip):not(.tabs button):not(.load-more):not(.follow-btn) {
+/* Composer / settings-form / timeline 内 form の送信ボタンは、
+   既存の `.form button[type='submit']` をそのまま使いたいので、
+   個別に同じ見た目を当てる。global `button` 規則は .tabs button
+   などを巻き込むので避ける。 */
+.composer button[type='submit'],
+.settings-form button[type='submit'],
+.timeline.form button[type='submit'] {
   font: inherit;
-  padding: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-6);
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border-strong);
@@ -283,7 +289,10 @@ button:not(.chip):not(.tabs button):not(.load-more):not(.follow-btn) {
   cursor: pointer;
 }
 
-button:not(.chip):not(.tabs button):not(.load-more):not(.follow-btn):hover:not(:disabled) {
+.composer button[type='submit']:hover:not(:disabled),
+.settings-form button[type='submit']:hover:not(:disabled),
+.timeline.form button[type='submit']:hover:not(:disabled),
+.form button[type='submit']:hover:not(:disabled) {
   border-color: var(--color-text);
 }
 

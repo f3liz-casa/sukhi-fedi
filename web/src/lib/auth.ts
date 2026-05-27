@@ -19,6 +19,11 @@ export type ClientCreds = {
   client_id: string;
   client_secret: string;
   redirect_uri: string;
+  // 登録時に申告した scope。SCOPES 定数が広がったとき (例: read →
+  // read write follow)、ここを見て古い credentials を捨てて再登録する。
+  // 古いブラウザに置いてある creds は scopes が無いので、その場合も
+  // 「古い・狭い」と見なして再登録する。
+  scopes?: string;
 };
 
 export type TokenSet = {
@@ -107,12 +112,31 @@ export function isLoggedIn(): boolean {
   return !!loadToken();
 }
 
+// scope を「順番のゆらぎ」「重複」「空白の数」に寛容に比べる。
+// "read write follow" と "follow read write" を同じものとして扱いたい。
+function sameScopes(a: string | undefined, b: string): boolean {
+  if (!a) return false;
+  const norm = (s: string) =>
+    s.trim().split(/\s+/).filter(Boolean).sort().join(' ');
+  return norm(a) === norm(b);
+}
+
 async function loadOrRegisterClient(): Promise<ClientCreds> {
   if (!browser) throw new Error('no browser');
   const raw = localStorage.getItem(CLIENT_KEY);
   if (raw) {
     try {
-      return JSON.parse(raw) as ClientCreds;
+      const cached = JSON.parse(raw) as ClientCreds;
+      // 登録済み app の scope が、いま要求したい SCOPES と一致して
+      // いればそのまま使う。一致しなければ、サーバ側の app 行は
+      // 古い(狭い)ままなので /oauth/authorize で invalid_scope を
+      // 食らう ─ creds を捨てて新しい app を登録しなおす。
+      // 同じ理由で、scope 情報を持っていない古いキャッシュも捨てる。
+      if (sameScopes(cached.scopes, SCOPES)) return cached;
+      localStorage.removeItem(CLIENT_KEY);
+      // 古い app に紐づく token も無効になるはずなので、ここで一緒に
+      // 落としておく。再ログインで広い token を取り直してもらう。
+      localStorage.removeItem(TOKEN_KEY);
     } catch {
       /* fallthrough — re-register */
     }
@@ -138,7 +162,8 @@ async function loadOrRegisterClient(): Promise<ClientCreds> {
   const creds: ClientCreds = {
     client_id: body.client_id,
     client_secret: body.client_secret,
-    redirect_uri
+    redirect_uri,
+    scopes: SCOPES
   };
   localStorage.setItem(CLIENT_KEY, JSON.stringify(creds));
   return creds;

@@ -17,6 +17,9 @@ defmodule SukhiApi.Views.MastodonAccount do
 
   alias SukhiApi.Views.Id
 
+  # 1x1 透明 PNG。avatar/header に既定 asset を置くまでの繋ぎ。
+  @default_image "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
   @doc """
   Render a single account.
 
@@ -36,6 +39,16 @@ defmodule SukhiApi.Views.MastodonAccount do
     username = account.username
     actor_uri = "https://#{domain}/users/#{username}"
 
+    # Mastodon spec は avatar/header を「常に非 null の URL」と決めて
+    # おり、Moshidon など Kotlin/Gson 系のクライアントは String non-null
+    # で受けるので、null を返すと NPE で即クラッシュする。サーバ側で
+    # 既定の missing.png を配るのが本筋だが、まだ asset を置いて
+    # いないので、最小の透明 PNG を data URL で返してフォールバック
+    # する(クラッシュさせないことが先)。落ち着いたら /static/missing.png
+    # にしてここを差し戻す。
+    avatar = Map.get(account, :avatar_url) || @default_image
+    header = Map.get(account, :banner_url) || @default_image
+
     %{
       id: Id.encode(account.id),
       username: username,
@@ -49,10 +62,10 @@ defmodule SukhiApi.Views.MastodonAccount do
       note: Map.get(account, :summary) || "",
       url: actor_uri,
       uri: actor_uri,
-      avatar: Map.get(account, :avatar_url),
-      avatar_static: Map.get(account, :avatar_url),
-      header: Map.get(account, :banner_url),
-      header_static: Map.get(account, :banner_url),
+      avatar: avatar,
+      avatar_static: avatar,
+      header: header,
+      header_static: header,
       followers_count: Map.get(counts, :followers, 0),
       following_count: Map.get(counts, :following, 0),
       statuses_count: Map.get(counts, :statuses, 0),

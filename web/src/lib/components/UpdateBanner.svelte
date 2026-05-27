@@ -1,8 +1,13 @@
 <script lang="ts">
   // SvelteKit が `_app/version.json` を kit.version.pollInterval ごと
   // に取りに行く。サーバ側で新しいビルドが配られて version 文字列が
-  // 変わると `$updated.current` が true になるので、その瞬間に静かに
-  // 「リロードしますか?」を出す。
+  // 変わると `$updated` (boolean ストア) が true になるので、その
+  // 瞬間に静かに「リロードしますか?」を出す。
+  //
+  // 以前 `$updated.current` を見ていたが、`$app/stores` の updated は
+  // ただの boolean ストアで `.current` プロパティは無い。これに気付か
+  // ず本番にいて、新版が降りてもバナーが出ない状態がしばらく続いた。
+  // (`.current` 形は `$app/state` 側のもので、別の API。)
   //
   // 即時 reload で押し付けない理由:
   // - 入力中だったり読書中だったりすると失礼
@@ -25,7 +30,7 @@
   }
 
   let show = false;
-  $: if ($updated.current) show = true;
+  $: if ($updated) show = true;
 </script>
 
 {#if show}
