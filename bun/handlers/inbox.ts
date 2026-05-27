@@ -1,9 +1,5 @@
-import {
-  Accept,
-  Follow,
-  getAuthenticatedDocumentLoader,
-  importJwk,
-} from "@fedify/fedify";
+import { Accept, Follow } from "@fedify/fedify/vocab";
+import { getAuthenticatedDocumentLoader, importJwk } from "@fedify/fedify";
 import { cachedDocumentLoader } from "../fedify/context.ts";
 import { classifyActivity, KIND_PARSERS } from "../fedify/activity_kinds.ts";
 import { logJson, newTrace, type Trace } from "../fedify/trace.ts";

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { Create, Note } from "@fedify/fedify";
-import { Temporal } from "@js-temporal/polyfill";
+import { Create, Note } from "@fedify/fedify/vocab";
+import { nowInstant } from "../../fedify/temporal.ts";
 import { injectMisskey, signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
@@ -35,7 +35,7 @@ export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmRes
     id: new URL(payload.noteId),
     attribution: new URL(payload.actor),
     content: payload.content,
-    published: Temporal.Now.instant(),
+    published: nowInstant(),
     tos: audience.tos,
     ccs: audience.ccs,
     ...(payload.inReplyToId ? { replyTarget: new URL(payload.inReplyToId) } : {}),

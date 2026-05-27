@@ -1,5 +1,5 @@
-import { EmojiReact, Like, Follow, Undo } from "@fedify/fedify";
-import { Temporal } from "@js-temporal/polyfill";
+import { EmojiReact, Like, Follow, Undo } from "@fedify/fedify/vocab";
+import { nowInstant } from "../../fedify/temporal.ts";
 import { signAndSerialize } from "../../fedify/utils.ts";
 import { mirrorAudience } from "../../fedify/addressing.ts";
 
@@ -42,7 +42,7 @@ export async function handleBuildUndo(
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: inner,
-    published: Temporal.Now.instant(),
+    published: nowInstant(),
     tos: audience.tos,
     ccs: audience.ccs,
   });

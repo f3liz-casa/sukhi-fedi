@@ -1,4 +1,4 @@
-import { Follow } from "@fedify/fedify";
+import { Follow } from "@fedify/fedify/vocab";
 import { signAndSerialize } from "../../fedify/utils.ts";
 
 export interface BuildFollowPayload {

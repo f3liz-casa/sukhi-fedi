@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { Add, Remove } from "@fedify/fedify";
+import { Add, Remove } from "@fedify/fedify/vocab";
 import { signAndSerialize } from "../../fedify/utils.ts";
 
 export interface CollectionOpPayload {

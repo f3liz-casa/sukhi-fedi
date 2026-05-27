@@ -1,5 +1,5 @@
-import { Announce } from "@fedify/fedify";
-import { Temporal } from "@js-temporal/polyfill";
+import { Announce } from "@fedify/fedify/vocab";
+import { nowInstant } from "../../fedify/temporal.ts";
 import { signAndSerialize } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
@@ -24,7 +24,7 @@ export async function handleBuildAnnounce(
     id: new URL(payload.activityId),
     actor: new URL(payload.actor),
     object: new URL(payload.object),
-    published: Temporal.Now.instant(),
+    published: nowInstant(),
     tos: audience.tos,
     ccs: audience.ccs,
   });

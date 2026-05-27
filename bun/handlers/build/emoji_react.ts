@@ -5,8 +5,8 @@
 // `content`, which carries the emoji (a unicode glyph or a
 // `:shortcode:`).
 
-import { EmojiReact } from "@fedify/fedify";
-import { Temporal } from "@js-temporal/polyfill";
+import { EmojiReact } from "@fedify/fedify/vocab";
+import { nowInstant } from "../../fedify/temporal.ts";
 import { signAndSerialize } from "../../fedify/utils.ts";
 
 export interface BuildEmojiReactPayload {
@@ -31,7 +31,7 @@ export async function handleBuildEmojiReact(
     actor: new URL(payload.actor),
     object: new URL(payload.object),
     content: payload.content,
-    published: Temporal.Now.instant(),
+    published: nowInstant(),
   });
 
   const emojiReactJson = await signAndSerialize(payload.actor, react);

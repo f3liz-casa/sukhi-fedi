@@ -20,7 +20,7 @@ import {
   Remove,
   Undo,
   Update,
-} from "@fedify/fedify";
+} from "@fedify/fedify/vocab";
 import { cachedDocumentLoader } from "./context.ts";
 
 export type GenericActivityKind =
