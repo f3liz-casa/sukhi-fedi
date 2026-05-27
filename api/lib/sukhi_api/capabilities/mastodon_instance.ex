@@ -21,9 +21,14 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
   end
 
   @impl true
-  def routes, do: [{:get, "/api/v1/instance", &instance/1}]
+  def routes do
+    [
+      {:get, "/api/v1/instance", &instance_v1/1},
+      {:get, "/api/v2/instance", &instance_v2/1}
+    ]
+  end
 
-  def instance(_req) do
+  def instance_v1(_req) do
     domain = SukhiApi.Config.domain!()
     title = Application.get_env(:sukhi_api, :title, "sukhi-fedi")
 
@@ -44,9 +49,65 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
       rules: []
     }
 
+    json(200, body)
+  end
+
+  # Mastodon v4+ clients prefer /api/v2/instance — same data,
+  # restructured into nested groups. Falling back from v2 to v1 works
+  # but logs a 404 each app start, which is what Moshidon was doing.
+  def instance_v2(_req) do
+    domain = SukhiApi.Config.domain!()
+    title = Application.get_env(:sukhi_api, :title, "sukhi-fedi")
+
+    body = %{
+      domain: domain,
+      title: title,
+      version: "4.0.0 (compatible; sukhi-fedi #{sukhi_version()})",
+      source_url: "https://github.com/f3liz-casa/sukhi-fedi",
+      description: "ActivityPub server (sukhi-fedi)",
+      usage: %{users: %{active_month: 0}},
+      thumbnail: %{url: "https://#{domain}/favicon.png"},
+      languages: ["en", "ja"],
+      configuration: %{
+        urls: %{streaming: "wss://#{domain}"},
+        accounts: %{max_featured_tags: 10, max_pinned_statuses: 5},
+        statuses: %{
+          max_characters: 500,
+          max_media_attachments: 4,
+          characters_reserved_per_url: 23
+        },
+        media_attachments: %{
+          supported_mime_types: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          image_size_limit: 8 * 1024 * 1024,
+          image_matrix_limit: 16_777_216,
+          video_size_limit: 0,
+          video_frame_rate_limit: 0,
+          video_matrix_limit: 0
+        },
+        polls: %{
+          max_options: 4,
+          max_characters_per_option: 50,
+          min_expiration: 300,
+          max_expiration: 2_629_746
+        },
+        translation: %{enabled: false}
+      },
+      registrations: %{
+        enabled: true,
+        approval_required: false,
+        message: nil
+      },
+      contact: %{email: "", account: nil},
+      rules: []
+    }
+
+    json(200, body)
+  end
+
+  defp json(status, body) do
     {:ok,
      %{
-       status: 200,
+       status: status,
        body: Jason.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
