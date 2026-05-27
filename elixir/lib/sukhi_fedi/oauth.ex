@@ -261,6 +261,20 @@ defmodule SukhiFedi.OAuth do
     :ok
   end
 
+  @doc """
+  Mint an access token for a freshly-signed-up account. Called by the
+  `POST /api/v1/accounts` capability after `LocalAccounts.create/1`
+  succeeds: the SPA needs a Bearer token immediately so it can drop
+  the user into the timeline without a second redirect through
+  `/oauth/authorize`.
+  """
+  @spec issue_initial_token(integer(), integer(), String.t()) ::
+          {:ok, map()} | {:error, term()}
+  def issue_initial_token(app_id, account_id, scopes)
+      when is_integer(app_id) and is_integer(account_id) and is_binary(scopes) do
+    mint_token(app_id, account_id, scopes, refresh: true)
+  end
+
   # ── internals ────────────────────────────────────────────────────────────
 
   defp mint_token(app_id, account_id, scopes, refresh: with_refresh?) do

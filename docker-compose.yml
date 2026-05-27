@@ -141,6 +141,44 @@ services:
       com.centurylinklabs.watchtower.enable: "true"
     restart: unless-stopped
 
+  # ── Anubis: PoW gate in front of /login ──────────────────────────────────
+  # Sits between the edge and the gateway. Only `/login` is challenged —
+  # everything else (federation, API, OAuth, static) is ALLOW-listed in
+  # config/anubis/botPolicies.yaml so SPA fetches and ActivityPub
+  # delivery keep working. See docs/anubis.md for the rationale.
+  #
+  # The edge (Coolify, nginx, host) should now route HTTP traffic to
+  # this service on port 8080 instead of `gateway:4000`. Anubis itself
+  # proxies through to `gateway:4000`.
+  anubis:
+    image: ghcr.io/techarohq/anubis:latest
+    environment:
+      BIND: ":8080"
+      DIFFICULTY: "4"
+      METRICS_BIND: ":9090"
+      POLICY_FNAME: /data/cfg/botPolicies.yaml
+      SERVE_ROBOTS_TXT: "true"
+      TARGET: http://gateway:4000
+      # challenge ページの下に出る連絡先。通れない人に届くように。
+      # Anubis のバージョンで env 名が変わることがある(IMPRINT_FILE /
+      # POLICY_IMPRINT_FILE) ─ 起動後にページを開いて出ているか確認。
+      IMPRINT_FILE: /data/cfg/imprint.md
+      # 32-byte hex. Generate once with:
+      #   openssl rand -hex 32
+      # then put it in `.env` as ANUBIS_ED25519_KEY=... so cookies
+      # signed before a restart still verify after.
+      ED25519_PRIVATE_KEY_HEX: ${ANUBIS_ED25519_KEY:-}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      COOKIE_PARTITIONED: "true"
+    volumes:
+      - ./config/anubis:/data/cfg:ro
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
   # ── Watchtower: drop-in image upgrades ───────────────────────────────────
   # Polls GHCR for new images on the pinned tag; recreates containers
   # on change. Only services with the watchtower label are touched —

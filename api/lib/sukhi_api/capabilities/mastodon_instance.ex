@@ -26,9 +26,9 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
       version: "4.0.0 (compatible; sukhi-fedi 0.1.0)",
       urls: %{streaming_api: "wss://#{domain}"},
       languages: ["en", "ja"],
-      registrations: false,
+      registrations: true,
       approval_required: false,
-      invites_enabled: false,
+      invites_enabled: true,
       stats: %{user_count: 0, status_count: 0, domain_count: 0},
       contact_account: nil,
       rules: []

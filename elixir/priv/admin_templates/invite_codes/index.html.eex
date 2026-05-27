@@ -1,0 +1,48 @@
+<h1>Invite codes</h1>
+
+<div class="toolbar">
+  <form method="post" action="/admin/invite_codes" style="display: flex; gap: 8px;">
+    <input type="text" name="note" placeholder="Note (who is this for?)" style="flex: 1;" />
+    <button type="submit">Issue new code</button>
+  </form>
+</div>
+
+<div class="panel" style="padding: 0;">
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Issued</th>
+      <th>Note</th>
+      <th>Consumed by</th>
+      <th>Consumed at</th>
+    </tr>
+  </thead>
+  <tbody>
+<%= if codes == [] do %>
+    <tr><td colspan="5" class="muted" style="text-align: center; padding: 24px;">No codes yet.</td></tr>
+<% else %>
+<%= for c <- codes do %>
+    <tr>
+      <td><code><%= h(c.code) %></code></td>
+      <td><%= h(c.created_at) %></td>
+      <td><%= h(c.note) %></td>
+      <td>
+<%= cond do %>
+<%   c.consumed_by -> %><%= h(c.consumed_by.username) %>
+<%   true -> %><span class="muted">—</span>
+<% end %>
+      </td>
+      <td>
+<%= if c.consumed_at do %>
+        <%= h(c.consumed_at) %>
+<% else %>
+        <span class="muted">unused</span>
+<% end %>
+      </td>
+    </tr>
+<% end %>
+<% end %>
+  </tbody>
+</table>
+</div>

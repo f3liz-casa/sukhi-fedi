@@ -1,0 +1,109 @@
+/* Base — framework-agnostic. Reset, element defaults, layout helpers. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Cross-fade same-origin navigations instead of a hard reload — most visible
+ * on the language switch, where the root font-size differs per locale, so a
+ * hard jump in size felt abrupt. Pure CSS, no client JS; browsers without
+ * cross-document view transitions just navigate as before. */
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01s !important;
+  }
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  color: var(--color-text);
+  background: var(--color-bg);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+/* CJK line breaking.
+ * Korean: break at word boundaries (어절), never mid-word.
+ * Japanese: break only at the <wbr> points BudouX inserts at build time
+ *   (see i18n/budoux.ts) — keep-all stops the browser breaking between kana.
+ * overflow-wrap is the safety net for long unbreakable runs. */
+html[lang='ko'],
+html[lang='ja'] {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* Links read as ink with an underline — the plainest, most recognisable
+ * link there is. No coloured link text. */
+a {
+  color: var(--color-text);
+  text-underline-offset: 0.16em;
+  text-decoration-color: var(--color-border-strong);
+}
+
+a:hover {
+  text-decoration-color: var(--color-text);
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+/* layout helpers */
+.wrap {
+  width: 100%;
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: var(--space-6);
+}
+
+.stack > * + * {
+  margin-top: var(--space-4);
+}
+
+.prose {
+  max-width: var(--measure);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

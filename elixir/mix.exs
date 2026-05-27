@@ -57,6 +57,9 @@ defmodule SukhiFedi.MixProject do
       # Rate limiting (ETS-backed, node-local).
       {:hammer, "~> 6.1"},
 
+      # Password hashing for local accounts.
+      {:argon2_elixir, "~> 4.0"},
+
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:bypass, "~> 2.1", only: :test},
       {:mox, "~> 1.0", only: :test}

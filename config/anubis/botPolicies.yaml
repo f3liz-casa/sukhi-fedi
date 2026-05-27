@@ -1,0 +1,67 @@
+# Anubis bot policies for sukhi-fedi.
+#
+# 守る対象は `/login` だけ。Fediverse 連携 (`/inbox`, `/users/*`,
+# `/.well-known/*`, `/nodeinfo/*`) と SPA の API 通信 (`/api/*`,
+# `/oauth/*`) は素通し。ここを止めると federation か signup が壊れる。
+#
+# open registration に切り替わる日が来たら `/signup` と
+# `POST /api/v1/accounts` の matcher を足す ─ docs/anubis.md を読む。
+
+bots:
+  # ── federation を一切止めない ───────────────────────────────────────────
+  # ActivityPub の inbox / actor / collections は known instances から
+  # 自動署名つきで来るので、PoW を要求すると配送が詰まる。最初に
+  # ALLOW を置いて他のルールより優先させる。
+  - name: activitypub-inbox
+    path_regex: ^/(inbox|users/[^/]+(/inbox|/outbox|/followers|/following|/featured|/notes/.*)?)$
+    action: ALLOW
+
+  - name: webfinger-and-nodeinfo
+    path_regex: ^/\.well-known/(webfinger|nodeinfo)$
+    action: ALLOW
+
+  - name: nodeinfo-v2
+    path_regex: ^/nodeinfo/2\.\d+$
+    action: ALLOW
+
+  # ── SPA の API / OAuth は素通し ────────────────────────────────────────
+  # JSON で fetch されるので HTML challenge ページが返ると SPA が
+  # 落ちる。レート制限は gateway 側の RateLimitPlug にまかせる。
+  - name: api-and-oauth
+    path_regex: ^/(api|oauth)/
+    action: ALLOW
+
+  - name: static-assets
+    path_regex: ^/(static|uploads)/
+    action: ALLOW
+
+  - name: health
+    path_regex: ^/(up|metrics)$
+    action: ALLOW
+
+  # ── 守る対象 ────────────────────────────────────────────────────────────
+  # ログインとサインアップの共通通り道。SPA はこの path を経由してから
+  # OAuth フローを始めたり、`POST /api/v1/accounts` を呼んだりする。
+  # `/login` `/signup` 自体は ALLOW で、フォーム表示は止めない。守る
+  # のは「人が次の一歩を踏み出す瞬間」だけ。
+  - name: check-gate
+    path_regex: ^/check$
+    action: CHALLENGE
+
+  - name: login-page
+    path_regex: ^/(login|logout|signup)$
+    action: ALLOW
+
+  # ── 既知の良い bot は通す ──────────────────────────────────────────────
+  # Anubis 同梱の標準ルール (Googlebot, Bingbot, IA, etc.) に任せる。
+  - import: (data)/bots/_deny-pathological.yaml
+  - import: (data)/bots/ai-robots-txt.yaml
+  - import: (data)/crawlers/_allow-good.yaml
+
+  # ── 既定: それ以外は素通し ─────────────────────────────────────────────
+  # 「最小限を守る」方針。/login 以外は今までどおり gateway が裁く。
+  - name: default-allow
+    path_regex: .
+    action: ALLOW
+
+dnsbl: false

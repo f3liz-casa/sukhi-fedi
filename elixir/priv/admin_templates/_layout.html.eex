@@ -67,6 +67,7 @@
       <a href="/admin"<%= if current_path == "/admin", do: " class=\"active\"" %>>Dashboard</a>
       <a href="/admin/users"<%= if String.starts_with?(current_path, "/admin/users"), do: " class=\"active\"" %>>Users</a>
       <a href="/admin/reports"<%= if String.starts_with?(current_path, "/admin/reports"), do: " class=\"active\"" %>>Reports</a>
+      <a href="/admin/invite_codes"<%= if String.starts_with?(current_path, "/admin/invite_codes"), do: " class=\"active\"" %>>Invites</a>
       <a href="/admin/instance_blocks"<%= if String.starts_with?(current_path, "/admin/instance_blocks"), do: " class=\"active\"" %>>Federation</a>
     </nav>
     <span class="muted"><%= h(admin.username) %></span>

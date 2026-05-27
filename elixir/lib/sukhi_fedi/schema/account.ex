@@ -32,6 +32,11 @@ defmodule SukhiFedi.Schema.Account do
     field :public_key_id, :string
     field :last_fetched_at, :utc_datetime
 
+    # Local-account credentials. Both `domain IS NULL` only. `email`
+    # is nullable for now; signup may omit it.
+    field :email, :string
+    field :password_hash, :string
+
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end
 
@@ -74,6 +79,34 @@ defmodule SukhiFedi.Schema.Account do
     |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot])
     |> validate_length(:display_name, max: 100)
     |> validate_length(:summary, max: 1024)
+  end
+
+  @doc """
+  Changeset for `POST /api/v1/accounts` — local signup. `domain` is
+  forced to `nil`; the AP keypair and `public_key_pem` are minted by
+  the caller before insert (see `SukhiFedi.LocalAccounts.create/1`).
+
+  `password_hash` is the already-hashed value; raw passwords never
+  reach this layer.
+  """
+  def changeset_local(account, attrs) do
+    account
+    |> cast(attrs, [
+      :username,
+      :display_name,
+      :email,
+      :password_hash,
+      :public_key_pem,
+      :public_key_jwk,
+      :private_key_jwk
+    ])
+    |> put_change(:domain, nil)
+    |> validate_required([:username, :password_hash, :public_key_pem])
+    |> validate_format(:username, ~r/^[a-z0-9_]{1,30}$/,
+      message: "は小文字英数字とアンダースコアのみ、30字までです"
+    )
+    |> validate_length(:display_name, max: 100)
+    |> unique_constraint(:username, name: :accounts_username_index)
   end
 
   defp normalize_credentials_attrs(attrs) when is_map(attrs) do

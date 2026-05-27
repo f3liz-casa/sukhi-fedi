@@ -11,6 +11,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.NoteController
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
+  alias SukhiFedi.Web.Auth.LoginController
 
   plug(Plug.Logger)
   plug(SukhiFedi.Web.AccessLogPlug)
@@ -21,10 +22,12 @@ defmodule SukhiFedi.Web.Router do
   plug(:match)
 
   plug(Plug.Parsers,
-    parsers: [:json],
+    parsers: [:json, :urlencoded],
     json_decoder: Jason,
     body_reader: {SukhiFedi.Web.CacheBodyReader, :read_body, []}
   )
+
+  plug(:fetch_query_params)
 
   plug(:dispatch)
 
@@ -33,6 +36,30 @@ defmodule SukhiFedi.Web.Router do
   # session middleware (cookie-signed via SECRET_KEY_BASE) and runs the
   # Mastodon-OAuth-bearer auth check on every request.
   forward("/admin", to: SukhiFedi.Web.Admin.Router)
+
+  # ── User-facing login (session_token cookie minter) ────────────────────
+
+  get "/login" do
+    LoginController.show(conn)
+  end
+
+  post "/login" do
+    LoginController.submit(conn)
+  end
+
+  post "/logout" do
+    LoginController.logout(conn)
+  end
+
+  # ── Static assets for the SPA + login page ─────────────────────────────
+  # The SvelteKit build at `web/build` is copied (or symlinked) into
+  # `priv/static`. Cloudflare Pages style deploys can ignore this and
+  # serve the SPA from the CDN; this fallback keeps a self-contained
+  # one-binary deploy possible.
+
+  get "/static/*path" do
+    serve_static(conn, path)
+  end
 
   # ── ActivityPub / well-known (handled natively by Elixir) ────────────────
 
@@ -98,9 +125,33 @@ defmodule SukhiFedi.Web.Router do
   # DISABLE_ADDONS=nodeinfo_monitor and these routes go 404.
 
   get "/" do
-    if nodeinfo_monitor_enabled?(),
-      do: ViewerController.home(conn, []),
-      else: send_resp(conn, 404, "")
+    cond do
+      nodeinfo_monitor_enabled?() -> ViewerController.home(conn, [])
+      true -> serve_spa(conn)
+    end
+  end
+
+  # SPA-owned client routes. Each one is just the same SvelteKit shell
+  # (`priv/static/index.html`); the bundled JS reads the URL and
+  # renders the matching page. Listing them explicitly keeps `/api`,
+  # `/oauth`, `/.well-known` untouched.
+
+  get "/signup" do
+    serve_spa(conn)
+  end
+
+  get "/timeline" do
+    serve_spa(conn)
+  end
+
+  get "/app/callback" do
+    serve_spa(conn)
+  end
+
+  # PoW で守られる「通り道」。Anubis がこの path だけを challenge する。
+  # 中身は SPA shell ─ JS で intent / next を読んで分岐する。
+  get "/check" do
+    serve_spa(conn)
   end
 
   get "/api/nodeinfo" do
@@ -163,6 +214,42 @@ defmodule SukhiFedi.Web.Router do
 
   match _ do
     send_resp(conn, 404, "not found")
+  end
+
+  defp serve_spa(conn) do
+    root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
+    index = Path.join(root, "index.html")
+
+    if File.regular?(index) do
+      conn
+      |> put_resp_content_type("text/html; charset=utf-8")
+      |> send_file(200, index)
+    else
+      send_resp(conn, 404, "frontend not built — run `cd web && npm run build`")
+    end
+  end
+
+  defp serve_static(conn, path_segments) do
+    if Enum.any?(path_segments, &(&1 == "..")) do
+      send_resp(conn, 400, "")
+    else
+      root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
+      relative = Path.join(path_segments)
+      full = Path.join(root, relative)
+
+      cond do
+        not String.starts_with?(Path.expand(full), Path.expand(root)) ->
+          send_resp(conn, 400, "")
+
+        File.regular?(full) ->
+          conn
+          |> put_resp_content_type(content_type_for(full))
+          |> send_file(200, full)
+
+        true ->
+          send_resp(conn, 404, "")
+      end
+    end
   end
 
   # Path-traversal-safe static serve for `/uploads/<key>`. The key is

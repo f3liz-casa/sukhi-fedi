@@ -15,6 +15,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
   @impl true
   def routes do
     [
+      {:post, "/api/v1/accounts", &create/1, scope: "read"},
       {:get, "/api/v1/accounts/verify_credentials", &verify_credentials/1,
        scope: "read:accounts"},
       {:patch, "/api/v1/accounts/update_credentials", &update_credentials/1,
@@ -26,6 +27,85 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
       {:get, "/api/v1/accounts/:id/followers", &followers/1},
       {:get, "/api/v1/accounts/:id/following", &following/1}
     ]
+  end
+
+  # ── create (signup) ──────────────────────────────────────────────────────
+
+  @doc """
+  Mastodon `POST /api/v1/accounts`. Invite-code gated. The bearer must
+  be a `client_credentials` token (the SPA registers via `/api/v1/apps`
+  then exchanges for an app token); on success a user-bound access
+  token is minted under that same app and returned in the same shape
+  as `/oauth/token`.
+  """
+  def create(req) do
+    %{current_app: app} = req[:assigns]
+    attrs = decode_create_attrs(req)
+
+    case app do
+      nil ->
+        ok(403, %{error: "client_credentials_required"})
+
+      %{id: app_id} ->
+        case GatewayRpc.call(SukhiFedi.LocalAccounts, :create, [attrs]) do
+          {:ok, {:ok, %{id: account_id}}} ->
+            scopes = attrs["scopes"] || "read"
+
+            case GatewayRpc.call(SukhiFedi.OAuth, :issue_initial_token, [app_id, account_id, scopes]) do
+              {:ok, {:ok, token}} ->
+                ok(200, token)
+
+              _ ->
+                ok(500, %{error: "token_mint_failed"})
+            end
+
+          {:ok, {:error, :invite_missing}} ->
+            ok(422, %{error: "invite_code_required"})
+
+          {:ok, {:error, :invite_invalid}} ->
+            ok(422, %{error: "invite_invalid"})
+
+          {:ok, {:error, :invite_used}} ->
+            ok(422, %{error: "invite_used"})
+
+          {:ok, {:error, :invite_expired}} ->
+            ok(422, %{error: "invite_expired"})
+
+          {:ok, {:error, :password_too_short}} ->
+            ok(422, %{error: "password_too_short"})
+
+          {:ok, {:error, {:validation, details}}} ->
+            ok(422, %{error: "validation_failed", details: details})
+
+          {:error, :not_connected} ->
+            ok(503, %{error: "gateway_not_connected"})
+
+          {:error, {:badrpc, reason}} ->
+            ok(503, %{error: "gateway_rpc_failed", detail: inspect(reason)})
+
+          _ ->
+            ok(500, %{error: "internal_error"})
+        end
+    end
+  end
+
+  defp decode_create_attrs(req) do
+    headers = req[:headers] || []
+    ct = content_type(headers)
+
+    cond do
+      String.contains?(ct, "application/json") ->
+        case Jason.decode(req[:body] || "") do
+          {:ok, %{} = m} -> m
+          _ -> %{}
+        end
+
+      String.contains?(ct, "application/x-www-form-urlencoded") ->
+        URI.decode_query(req[:body] || "")
+
+      true ->
+        %{}
+    end
   end
 
   # ── verify_credentials ───────────────────────────────────────────────────
