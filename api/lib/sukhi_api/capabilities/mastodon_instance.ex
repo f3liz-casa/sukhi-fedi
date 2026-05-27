@@ -10,6 +10,16 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
 
   use SukhiApi.Capability, addon: :mastodon_api
 
+  # Same VERSION file as :sukhi_fedi reads. Runtime lookup (not a
+  # compile-time module attribute) because :sukhi_api isn't loaded
+  # during its own compile, so the attribute would freeze in as nil.
+  defp sukhi_version do
+    case Application.spec(:sukhi_api, :vsn) do
+      nil -> "0.0.0"
+      vsn -> to_string(vsn)
+    end
+  end
+
   @impl true
   def routes, do: [{:get, "/api/v1/instance", &instance/1}]
 
@@ -23,7 +33,7 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
       short_description: "ActivityPub server (sukhi-fedi)",
       description: "ActivityPub server (sukhi-fedi)",
       email: "",
-      version: "4.0.0 (compatible; sukhi-fedi 0.1.0)",
+      version: "4.0.0 (compatible; sukhi-fedi #{sukhi_version()})",
       urls: %{streaming_api: "wss://#{domain}"},
       languages: ["en", "ja"],
       registrations: true,

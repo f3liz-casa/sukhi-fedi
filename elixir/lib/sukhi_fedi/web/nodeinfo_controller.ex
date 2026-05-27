@@ -34,12 +34,24 @@ defmodule SukhiFedi.Web.NodeinfoController do
     |> send_resp(200, Jason.encode!(body))
   end
 
+  # mix.exs の :sukhi_fedi バージョンを単一の出どころにする。
+  # Mastodon `/api/v1/instance` の `version` 文字列も同じ VERSION ファイル
+  # を読むので、nodeinfo と instance が必ず一致する。
+  # 起動時(:sukhi_fedi が load 済み)の Application.spec から取るので
+  # release 再ビルド不要で値が更新される。
+  def software_version do
+    case Application.spec(:sukhi_fedi, :vsn) do
+      nil -> "0.0.0"
+      vsn -> to_string(vsn)
+    end
+  end
+
   def v2_1(conn, _opts) do
     body = %{
       version: "2.1",
       software: %{
         name: "sukhi-fedi",
-        version: "0.1.0"
+        version: software_version()
       },
       protocols: ["activitypub"],
       services: %{
@@ -54,6 +66,8 @@ defmodule SukhiFedi.Web.NodeinfoController do
         },
         localPosts: count_safe(Note)
       },
+      # 招待制サーバ。完全 open になる日が来たら
+      # `SukhiFedi.Config` か runtime env でひっくり返せるようにする。
       openRegistrations: false,
       metadata: %{}
     }

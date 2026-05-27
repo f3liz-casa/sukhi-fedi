@@ -3,10 +3,17 @@
 defmodule SukhiFedi.MixProject do
   use Mix.Project
 
+  # The single source of truth lives at the repo root in `VERSION`.
+  # Both `:sukhi_fedi` and `:sukhi_api` read from it, the release CI
+  # bumps it once and tags off the same string, so /nodeinfo/2.1 and
+  # /api/v1/instance can never drift.
+  @external_resource Path.expand("../VERSION", __DIR__)
+  @version Path.expand("../VERSION", __DIR__) |> File.read!() |> String.trim()
+
   def project do
     [
       app: :sukhi_fedi,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,

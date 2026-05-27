@@ -1,18 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Build context is the repo root so this Dockerfile can read the
+# shared `VERSION` file. release.yml passes `context: .` and
+# `file: ./api/Dockerfile`.
+
 FROM elixir:1.16-alpine AS build
 
 WORKDIR /app
 
 RUN apk add --no-cache build-base git
 
-COPY mix.exs ./
-COPY mix.lock* ./
+# VERSION lives at the repo root and is read at compile time by
+# api/mix.exs. Mirror the on-disk layout (`../VERSION` relative to the
+# api directory) so the mix.exs path expression resolves the same in
+# the container as it does in dev.
+COPY VERSION ../VERSION
+COPY api/mix.exs ./
+COPY api/mix.lock* ./
 RUN mix local.hex --force && mix local.rebar --force
 RUN MIX_ENV=prod mix deps.get
 RUN MIX_ENV=prod mix deps.compile
 
-COPY config config
-COPY lib lib
+COPY api/config config
+COPY api/lib lib
 
 RUN MIX_ENV=prod mix release
 

@@ -38,10 +38,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # gateway and api builds need to read the repo-root `VERSION`
+        # file (and gateway additionally bundles web/ as a multi-stage
+        # SPA build), so their context is `.` and an explicit `file:`
+        # points at the sub-tree Dockerfile.
         image:
-          - { name: gateway, context: ./elixir }
+          - { name: gateway, context: ., file: elixir/Dockerfile }
           - { name: delivery, context: ./delivery }
-          - { name: api, context: ./api }
+          - { name: api, context: ., file: api/Dockerfile }
           - { name: bun, context: ./bun }
           - { name: nats-bootstrap, context: ./infra/nats }
         platform:
@@ -65,6 +69,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file || format('{0}/Dockerfile', matrix.image.context) }}
           platforms: ${{ matrix.platform.docker }}
           outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/sukhi-fedi-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
           cache-from: |
