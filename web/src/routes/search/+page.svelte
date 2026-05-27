@@ -13,16 +13,16 @@
   import { clearToken, isLoggedIn } from '$lib/auth';
   import AccountRow from '$lib/components/AccountRow.svelte';
 
-  let q = '';
-  let pending = '';
-  let result: SearchResult = { accounts: [], hashtags: [], statuses: [] };
-  let relations = new Map<string, Relationship>();
-  let loading = false;
-  let error: string | null = null;
-  let searched = false;
+  let q = $state('');
+  let pending = $state('');
+  let result = $state<SearchResult>({ accounts: [], hashtags: [], statuses: [] });
+  let relations = $state(new Map<string, Relationship>());
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let searched = $state(false);
   // 「remote 解決中…」表示。WebFinger を踏むので結果が出るまで
   // 数秒待つことがある。
-  let resolving = false;
+  let resolving = $state(false);
 
   // URL の `?q=...` で初期化(リンクで飛ばれたとき)
   onMount(() => {
@@ -102,7 +102,13 @@
   <a class="chip" href="/timeline">戻る</a>
 </header>
 
-<form class="form stack" on:submit|preventDefault={submit}>
+<form
+  class="form stack"
+  onsubmit={(e) => {
+    e.preventDefault();
+    submit();
+  }}
+>
   <label class="stack-tight">
     <span>名前、ID、または <code>@user@host</code> / <code>#tag</code></span>
     <input

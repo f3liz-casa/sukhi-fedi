@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import {
     followAccount,
     unfollowAccount,
@@ -8,27 +7,36 @@
   import { clearToken, isLoggedIn } from '$lib/auth';
   import { goto } from '$app/navigation';
 
-  export let accountId: string;
-  // null = まだ取れていない / 自分自身 などで「ボタンを出さない」
-  export let relationship: Relationship | null;
+  let {
+    accountId,
+    // null = まだ取れていない / 自分自身 などで「ボタンを出さない」
+    relationship,
+    onchange
+  }: {
+    accountId: string;
+    relationship: Relationship | null;
+    onchange?: (r: Relationship) => void;
+  } = $props();
 
-  const dispatch = createEventDispatcher<{ change: Relationship }>();
+  let pending = $state(false);
+  let error = $state<string | null>(null);
 
-  let pending = false;
-  let error: string | null = null;
+  // `state` という名前は rune `$state` の解析と衝突するのでズラす。
+  let currentState = $derived(
+    relationship?.following
+      ? 'following'
+      : relationship?.requested
+        ? 'requested'
+        : 'idle'
+  );
 
-  $: state = relationship?.following
-    ? 'following'
-    : relationship?.requested
-      ? 'requested'
-      : 'idle';
-
-  $: label =
-    state === 'following'
+  let label = $derived(
+    currentState === 'following'
       ? 'フォロー中'
-      : state === 'requested'
+      : currentState === 'requested'
         ? '承認まち'
-        : 'フォロー';
+        : 'フォロー'
+  );
 
   async function toggle() {
     if (!isLoggedIn()) {
@@ -40,11 +48,10 @@
     error = null;
     try {
       const r =
-        state === 'following' || state === 'requested'
+        currentState === 'following' || currentState === 'requested'
           ? await unfollowAccount(accountId)
           : await followAccount(accountId);
-      relationship = r;
-      dispatch('change', r);
+      onchange?.(r);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg === 'unauthorized') {
@@ -63,8 +70,8 @@
   <button
     type="button"
     class="follow-btn"
-    data-state={state}
-    on:click={toggle}
+    data-state={currentState}
+    onclick={toggle}
     disabled={pending}
   >
     {pending ? '…' : label}

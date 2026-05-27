@@ -6,10 +6,10 @@
     loadSignupDraft
   } from '$lib/auth';
 
-  let username = '';
-  let password = '';
-  let invite_code = '';
-  let error: string | null = null;
+  let username = $state('');
+  let password = $state('');
+  let invite_code = $state('');
+  let error = $state<string | null>(null);
 
   // /check で失敗して戻ってきた人のために下書きを復元するが、
   // password だけは(/check が clearSignupPassword で落としてあるので)
@@ -45,7 +45,13 @@
   <p class="error">{error}</p>
 {/if}
 
-<form class="form stack" on:submit|preventDefault={submit}>
+<form
+  class="form stack"
+  onsubmit={(e) => {
+    e.preventDefault();
+    submit();
+  }}
+>
   <label class="stack-tight">
     <span>ID</span>
     <input

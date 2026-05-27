@@ -6,25 +6,25 @@
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
 
-  let replyTo: Status | null = null;
-  let composerOpen = false;
+  let replyTo = $state<Status | null>(null);
+  let composerOpen = $state(false);
 
   function openCompose() {
     replyTo = null;
     composerOpen = true;
   }
 
-  function onReply(ev: CustomEvent<Status>) {
-    replyTo = ev.detail;
+  function onReply(s: Status) {
+    replyTo = s;
     composerOpen = true;
     // 上に composer があるのでスクロール。
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function onPosted(ev: CustomEvent<Status>) {
+  function onPosted(s: Status) {
     // home / public のときは先頭に挿す。tag のときは混ぜずに閉じるだけ。
     if (kind === 'home' || kind === 'public') {
-      items = [ev.detail, ...items];
+      items = [s, ...items];
     }
     composerOpen = false;
     replyTo = null;
@@ -35,15 +35,15 @@
     replyTo = null;
   }
 
-  let kind: TimelineKind = 'home';
-  let tag = '';
-  let pendingTag = '';
+  let kind = $state<TimelineKind>('home');
+  let tag = $state('');
+  let pendingTag = $state('');
 
-  let items: Status[] = [];
-  let nextMaxId: string | null = null;
-  let loading = false;
-  let error: string | null = null;
-  let initial = true;
+  let items = $state<Status[]>([]);
+  let nextMaxId = $state<string | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let initial = $state(true);
 
   onMount(() => {
     if (!isLoggedIn()) {
@@ -118,8 +118,8 @@
   <span style="display: flex; gap: var(--space-2);">
     <a class="chip" href="/search">さがす</a>
     <a class="chip" href="/settings">設定</a>
-    <button class="chip" on:click={openCompose}>書く</button>
-    <button class="chip" on:click={signOut}>ログアウト</button>
+    <button class="chip" onclick={openCompose}>書く</button>
+    <button class="chip" onclick={signOut}>ログアウト</button>
   </span>
 </header>
 
@@ -127,8 +127,8 @@
   <Composer
     {replyTo}
     prefillMention={!!replyTo}
-    on:posted={onPosted}
-    on:cancel={onCancel}
+    onposted={onPosted}
+    oncancel={onCancel}
   />
 {/if}
 
@@ -136,24 +136,27 @@
   <button
     type="button"
     aria-pressed={kind === 'home'}
-    on:click={() => selectKind('home')}
+    onclick={() => selectKind('home')}
   >ホーム</button>
   <button
     type="button"
     aria-pressed={kind === 'public'}
-    on:click={() => selectKind('public')}
+    onclick={() => selectKind('public')}
   >みんな</button>
   <button
     type="button"
     aria-pressed={kind === 'tag'}
-    on:click={() => selectKind('tag')}
+    onclick={() => selectKind('tag')}
   >タグ</button>
 </nav>
 
 {#if kind === 'tag'}
   <form
     class="timeline form"
-    on:submit|preventDefault={submitTag}
+    onsubmit={(e) => {
+      e.preventDefault();
+      submitTag();
+    }}
     style="margin-bottom: var(--space-4);"
   >
     <label class="stack-tight">
@@ -183,7 +186,7 @@
   {/if}
 
   {#each items as s (s.id)}
-    <StatusCard status={s} canReply on:reply={onReply} />
+    <StatusCard status={s} canReply onreply={onReply} />
   {/each}
 
   {#if !initial && loading}
@@ -191,6 +194,6 @@
   {/if}
 
   {#if nextMaxId && !loading}
-    <button class="load-more" on:click={() => load(false)}>もっと読む</button>
+    <button class="load-more" onclick={() => load(false)}>もっと読む</button>
   {/if}
 </section>

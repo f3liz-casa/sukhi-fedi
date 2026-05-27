@@ -1,19 +1,23 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Status } from '$lib/api';
 
-  export let status: Status;
-  // 返信ボタンを出すか。タイムラインでは true、プロフィール一覧では false
-  // など、置き場ごとに切り替えたい。
-  export let canReply = false;
-
-  const dispatch = createEventDispatcher<{ reply: Status }>();
+  let {
+    status,
+    // 返信ボタンを出すか。タイムラインでは true、プロフィール一覧では false
+    // など、置き場ごとに切り替えたい。
+    canReply = false,
+    onreply
+  }: {
+    status: Status;
+    canReply?: boolean;
+    onreply?: (s: Status) => void;
+  } = $props();
 
   // Display name falls back to username when servers omit it (Misskey
   // sometimes does for fresh actors).
-  $: name = status.account.display_name || status.account.username;
-  $: avatar = status.account.avatar || null;
-  $: ts = formatTime(status.created_at);
+  let name = $derived(status.account.display_name || status.account.username);
+  let avatar = $derived(status.account.avatar || null);
+  let ts = $derived(formatTime(status.created_at));
 
   function formatTime(iso: string): string {
     try {
@@ -67,7 +71,7 @@
 
     {#if canReply}
       <footer class="status-actions">
-        <button type="button" class="chip" on:click={() => dispatch('reply', status)}>
+        <button type="button" class="chip" onclick={() => onreply?.(status)}>
           返信
         </button>
       </footer>

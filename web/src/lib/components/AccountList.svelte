@@ -10,19 +10,18 @@
   import { loadAccountList, type AccountKind } from '$lib/relations';
   import AccountRow from './AccountRow.svelte';
 
-  export let acct: string;
-  export let kind: AccountKind;
+  let { acct, kind }: { acct: string; kind: AccountKind } = $props();
 
-  let owner: Account | null = null;
-  let items: Account[] = [];
-  let relations = new Map<string, Relationship>();
-  let meId: string | null = null;
-  let nextMaxId: string | null = null;
-  let loading = false;
-  let initial = true;
-  let error: string | null = null;
+  let owner = $state<Account | null>(null);
+  let items = $state<Account[]>([]);
+  let relations = $state(new Map<string, Relationship>());
+  let meId = $state<string | null>(null);
+  let nextMaxId = $state<string | null>(null);
+  let loading = $state(false);
+  let initial = $state(true);
+  let error = $state<string | null>(null);
 
-  $: heading = kind === 'followers' ? 'フォロワー' : 'フォロー中';
+  let heading = $derived(kind === 'followers' ? 'フォロワー' : 'フォロー中');
 
   onMount(() => {
     void start();
@@ -62,7 +61,6 @@
       items = [...items, ...r.page.items];
       nextMaxId = r.page.nextMaxId;
       for (const [k, v] of r.relations) relations.set(k, v);
-      relations = relations;
     } catch {
       // 静かに止める
     } finally {
@@ -100,7 +98,7 @@
     {/if}
 
     {#if nextMaxId && !loading}
-      <button class="load-more" on:click={more}>もっと読む</button>
+      <button class="load-more" onclick={more}>もっと読む</button>
     {/if}
   </section>
 {/if}

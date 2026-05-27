@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { untrack } from 'svelte';
   import {
     postStatus,
     uploadMedia,
@@ -10,23 +10,36 @@
   import { clearToken } from '$lib/auth';
   import { goto } from '$app/navigation';
 
-  export let replyTo: Status | null = null;
-  // 返信のとき、返信先 acct をテキスト先頭に入れたい場合に使う
-  // (Mastodon 互換クライアントは「@user@host 」を頭につけて出す慣習)
-  export let prefillMention = false;
+  let {
+    replyTo = null,
+    // 返信のとき、返信先 acct をテキスト先頭に入れたい場合に使う
+    // (Mastodon 互換クライアントは「@user@host 」を頭につけて出す慣習)
+    prefillMention = false,
+    onposted,
+    oncancel
+  }: {
+    replyTo?: Status | null;
+    prefillMention?: boolean;
+    onposted?: (s: Status) => void;
+    oncancel?: () => void;
+  } = $props();
 
-  const dispatch = createEventDispatcher<{ posted: Status; cancel: void }>();
-
-  let text = prefillMention && replyTo ? `@${replyTo.account.acct} ` : '';
-  let spoiler = '';
-  let useSpoiler = false;
-  let sensitive = false;
-  let visibility: Visibility = replyTo?.visibility ?? 'public';
-  let media: MediaAttachment[] = [];
-  let uploading = false;
-  let posting = false;
-  let error: string | null = null;
-  let fileInput: HTMLInputElement;
+  // 初期値だけ prop を見たい(あとはユーザが書き換える)ので untrack で
+  // 拾う。これがないと state_referenced_locally の warning が出る。
+  let text = $state(
+    untrack(() =>
+      prefillMention && replyTo ? `@${replyTo.account.acct} ` : ''
+    )
+  );
+  let spoiler = $state('');
+  let useSpoiler = $state(false);
+  let sensitive = $state(false);
+  let visibility = $state<Visibility>(untrack(() => replyTo?.visibility ?? 'public'));
+  let media = $state<MediaAttachment[]>([]);
+  let uploading = $state(false);
+  let posting = $state(false);
+  let error = $state<string | null>(null);
+  let fileInput: HTMLInputElement | undefined = $state();
 
   const visLabels: Record<Visibility, string> = {
     public: 'みんなに',
@@ -35,10 +48,11 @@
     direct: '指名した人だけに'
   };
 
-  $: canPost =
+  let canPost = $derived(
     !posting &&
-    !uploading &&
-    (text.trim().length > 0 || media.length > 0);
+      !uploading &&
+      (text.trim().length > 0 || media.length > 0)
+  );
 
   async function onFiles(ev: Event) {
     const input = ev.currentTarget as HTMLInputElement;
@@ -82,7 +96,7 @@
       useSpoiler = false;
       sensitive = false;
       media = [];
-      dispatch('posted', s);
+      onposted?.(s);
     } catch (e) {
       error = handleErr(e, 'うまく送れませんでした。もう一度、ためしますか?');
     } finally {
@@ -101,11 +115,17 @@
   }
 </script>
 
-<form class="composer" on:submit|preventDefault={submit}>
+<form
+  class="composer"
+  onsubmit={(e) => {
+    e.preventDefault();
+    void submit();
+  }}
+>
   {#if replyTo}
     <p class="composer-reply">
       <span>@{replyTo.account.acct} へ、返信</span>
-      <button type="button" class="chip" on:click={() => dispatch('cancel')}>やめる</button>
+      <button type="button" class="chip" onclick={() => oncancel?.()}>やめる</button>
     </p>
   {/if}
 
@@ -137,7 +157,7 @@
           {#if m.preview_url || m.url}
             <img src={m.preview_url || m.url} alt={m.description ?? ''} />
           {/if}
-          <button type="button" class="chip" on:click={() => removeMedia(m.id)}>
+          <button type="button" class="chip" onclick={() => removeMedia(m.id)}>
             はずす
           </button>
         </li>
@@ -153,7 +173,7 @@
         type="file"
         accept="image/*"
         multiple
-        on:change={onFiles}
+        onchange={onFiles}
         style="display: none;"
       />
     </label>
@@ -171,7 +191,7 @@
     <label class="stack-tight">
       <span class="visually-hidden">公開の範囲</span>
       <select bind:value={visibility}>
-        {#each Object.entries(visLabels) as [v, label]}
+        {#each Object.entries(visLabels) as [v, label] (v)}
           <option value={v}>{label}</option>
         {/each}
       </select>

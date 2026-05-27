@@ -19,9 +19,9 @@
     clearSignupPassword
   } from '$lib/auth';
 
-  let phase: 'working' | 'error' = 'working';
-  let intent: 'login' | 'signup' | null = null;
-  let error: string | null = null;
+  let phase = $state<'working' | 'error'>('working');
+  let intent = $state<'login' | 'signup' | null>(null);
+  let error = $state<string | null>(null);
 
   // API (api/lib/sukhi_api/capabilities/mastodon_accounts.ex) が
   // 実際に返すキーに揃える。新しいキーをサーバに足したら、ここも
@@ -132,7 +132,7 @@
   </section>
   <p class="error">{error}</p>
   <div class="stack">
-    <button class="lane-door" on:click={retry} style="max-width: 16rem;">
+    <button class="lane-door" onclick={retry} style="max-width: 16rem;">
       <h3>もう一度</h3>
     </button>
     {#if intent === 'signup'}

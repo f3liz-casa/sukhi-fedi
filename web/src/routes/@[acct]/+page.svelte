@@ -16,17 +16,17 @@
   import FollowButton from '$lib/components/FollowButton.svelte';
   import { phrase } from '$lib/phrase';
 
-  let account: Account | null = null;
-  let me: Account | null = null;
-  let rel: Relationship | null = null;
-  let items: Status[] = [];
-  let nextMaxId: string | null = null;
-  let loading = false;
-  let error: string | null = null;
-  let initial = true;
+  let account = $state<Account | null>(null);
+  let me = $state<Account | null>(null);
+  let rel = $state<Relationship | null>(null);
+  let items = $state<Status[]>([]);
+  let nextMaxId = $state<string | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let initial = $state(true);
 
-  $: acct = $page.params.acct ?? '';
-  $: isSelf = !!account && !!me && me.id === account.id;
+  let acct = $derived($page.params.acct ?? '');
+  let isSelf = $derived(!!account && !!me && me.id === account.id);
 
   onMount(() => {
     void load();
@@ -110,7 +110,7 @@
       {#if isSelf}
         <a class="chip" href="/settings">編集</a>
       {:else}
-        <FollowButton accountId={account.id} relationship={rel} on:change={(e) => (rel = e.detail)} />
+        <FollowButton accountId={account.id} relationship={rel} onchange={(r) => (rel = r)} />
       {/if}
     </div>
 
@@ -143,7 +143,7 @@
     {/if}
 
     {#if nextMaxId && !loading}
-      <button class="load-more" on:click={loadMore}>もっと読む</button>
+      <button class="load-more" onclick={loadMore}>もっと読む</button>
     {/if}
   </section>
 {/if}

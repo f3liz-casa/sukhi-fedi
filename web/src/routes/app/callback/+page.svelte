@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { completeLogin } from '$lib/auth';
 
-  let error: string | null = null;
+  let error = $state<string | null>(null);
 
   onMount(async () => {
     const params = new URLSearchParams(window.location.search);

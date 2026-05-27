@@ -22,6 +22,8 @@
     window.location.reload();
   }
 
+  let show = $state(false);
+
   function dismiss() {
     // 一度閉じても polling は続くので、本当に新しい版が来たら
     // 次の interval で再表示される。明示的に消したいときは
@@ -29,16 +31,17 @@
     show = false;
   }
 
-  let show = false;
-  $: if ($updated) show = true;
+  $effect(() => {
+    if ($updated) show = true;
+  });
 </script>
 
 {#if show}
   <aside class="update-banner" role="status" aria-live="polite">
     <p>新しい版が、来ました。</p>
     <div class="actions">
-      <button type="button" on:click={reload}>読み込みなおす</button>
-      <button type="button" class="secondary" on:click={dismiss}>あとで</button>
+      <button type="button" onclick={reload}>読み込みなおす</button>
+      <button type="button" class="secondary" onclick={dismiss}>あとで</button>
     </div>
   </aside>
 {/if}

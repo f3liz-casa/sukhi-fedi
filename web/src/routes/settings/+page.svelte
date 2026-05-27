@@ -8,17 +8,17 @@
   } from '$lib/api';
   import { clearToken, isLoggedIn } from '$lib/auth';
 
-  let me: Account | null = null;
-  let displayName = '';
-  let note = '';
-  let locked = false;
+  let me = $state<Account | null>(null);
+  let displayName = $state('');
+  let note = $state('');
+  let locked = $state(false);
   let avatarFile: File | null = null;
   let headerFile: File | null = null;
 
-  let loading = true;
-  let saving = false;
-  let error: string | null = null;
-  let saved = false;
+  let loading = $state(true);
+  let saving = $state(false);
+  let error = $state<string | null>(null);
+  let saved = $state(false);
 
   onMount(() => {
     if (!isLoggedIn()) {
@@ -113,7 +113,13 @@
 {#if loading}
   <p class="loading">読んでいます…</p>
 {:else if me}
-  <form class="settings-form" on:submit|preventDefault={save}>
+  <form
+    class="settings-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void save();
+    }}
+  >
     <p class="muted">@{me.acct}</p>
 
     <label class="stack-tight">
@@ -131,7 +137,7 @@
       {#if me.avatar}
         <img class="avatar avatar-lg" src={me.avatar} alt="" />
       {/if}
-      <input type="file" accept="image/*" on:change={onAvatar} />
+      <input type="file" accept="image/*" onchange={onAvatar} />
     </label>
 
     <label class="stack-tight">
@@ -139,7 +145,7 @@
       {#if me.header}
         <img class="profile-header" src={me.header} alt="" />
       {/if}
-      <input type="file" accept="image/*" on:change={onHeader} />
+      <input type="file" accept="image/*" onchange={onHeader} />
     </label>
 
     <label class="stack-tight">

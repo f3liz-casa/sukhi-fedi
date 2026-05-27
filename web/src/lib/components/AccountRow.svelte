@@ -3,11 +3,16 @@
   import FollowButton from './FollowButton.svelte';
   import { phrase } from '$lib/phrase';
 
-  export let account: Account;
-  // 自分自身のときはボタンを出さない、外から null を渡す。
-  export let relationship: Relationship | null = null;
+  let {
+    account,
+    // 自分自身のときはボタンを出さない、外から null を渡す。
+    relationship = null
+  }: {
+    account: Account;
+    relationship?: Relationship | null;
+  } = $props();
 
-  $: name = account.display_name || account.username;
+  let name = $derived(account.display_name || account.username);
 </script>
 
 <article class="account-row">

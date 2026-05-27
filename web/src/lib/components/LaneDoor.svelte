@@ -1,8 +1,15 @@
 <script lang="ts">
-  export let href: string;
-  export let title: string;
-  export let lane: 'use' | 'build' = 'use';
-  export let description: string = '';
+  let {
+    href,
+    title,
+    lane = 'use',
+    description = ''
+  }: {
+    href: string;
+    title: string;
+    lane?: 'use' | 'build';
+    description?: string;
+  } = $props();
 </script>
 
 <a class="lane-door" data-lane={lane} {href}>
