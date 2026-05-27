@@ -8,6 +8,14 @@
 @import './base.css';
 @import './components.css';
 
+/* どのページも上にひと呼吸ぶん余白を持たせる。homepage の hero
+ * などはこの上に自前の padding を重ねるので、視覚的にはほんの
+ * 少し下がるくらい。timeline のように hero を持たないページが
+ * いきなり屋根にぶつからないように。 */
+main.wrap {
+  padding-block-start: var(--space-8);
+}
+
 /* タイムラインの一本道。中央寄せ、measure に揃える。 */
 .timeline {
   max-width: var(--measure);
@@ -212,4 +220,310 @@
 
 .lane-door p {
   margin: 0;
+}
+
+/* ── 小さい共通 ──────────────────────────────────────────────────── */
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+  flex-shrink: 0;
+  object-fit: cover;
+  display: inline-block;
+}
+
+.avatar-lg {
+  width: 72px;
+  height: 72px;
+}
+
+/* form 要素を最低限揃える。.composer や .settings-form など、.form
+   クラスを付けていないところでも読みやすいように、textarea / select /
+   input[type=file] の素の見た目を整える。 */
+textarea,
+select,
+input[type='text'],
+input[type='password'],
+input[type='email'] {
+  font: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+textarea:focus,
+select:focus,
+input:focus {
+  outline: none;
+  border-color: var(--color-text);
+}
+
+button:not(.chip):not(.tabs button):not(.load-more):not(.follow-btn) {
+  font: inherit;
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+button:not(.chip):not(.tabs button):not(.load-more):not(.follow-btn):hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 投稿フォーム ────────────────────────────────────────────────── */
+
+.composer {
+  max-width: var(--measure);
+  margin: 0 auto var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.composer-reply {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.composer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.composer-row label.stack-tight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.composer-row > button[type='submit'] {
+  margin-left: auto;
+}
+
+.composer-media {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+.composer-media li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.composer-media img {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  display: block;
+}
+
+/* 返信ボタンを Status カードの下に。 */
+.status-actions {
+  margin-top: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── プロフィール ────────────────────────────────────────────────── */
+
+.profile-head {
+  max-width: var(--measure);
+  margin: 0 auto var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.profile-header {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.profile-id {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.profile-note {
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+
+.profile-note p + p {
+  margin-top: var(--space-2);
+}
+
+.profile-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.profile-counts a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-counts a:hover {
+  color: var(--color-text);
+}
+
+.profile-counts strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* ── アカウント一覧 (followers / following) ──────────────────────── */
+
+.account-list {
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+.account-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.account-row:last-child {
+  border-bottom: 0;
+}
+
+.account-row-link {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex: 1;
+  text-decoration: none;
+  color: inherit;
+}
+
+.account-row-link:hover .display-name {
+  text-decoration: underline;
+}
+
+.account-row .display-name {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* ── フォローボタン ──────────────────────────────────────────────── */
+
+.follow-btn {
+  font: inherit;
+  padding: var(--space-1) var(--space-4);
+  border-radius: 999px;
+  border: 1px solid var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.follow-btn[data-state='following'],
+.follow-btn[data-state='requested'] {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.follow-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+/* ── 設定 ────────────────────────────────────────────────────────── */
+
+.settings-form {
+  max-width: var(--measure);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-form label.stack-tight > span {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.settings-form input[type='text'],
+.settings-form textarea {
+  width: 100%;
+}
+
+/* ── OAuth 同意画面の権限リスト ─────────────────────────────────── */
+
+.scope-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--measure);
+}
+
+.scope-list li {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.scope-list strong {
+  display: block;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
 }

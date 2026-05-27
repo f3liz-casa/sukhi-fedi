@@ -1,12 +1,29 @@
 import { loadToken, clearToken } from './auth';
 
+export type Field = {
+  name: string;
+  value: string;
+  verified_at?: string | null;
+};
+
 export type Account = {
   id: string;
   username: string;
   acct: string;
   display_name: string;
   avatar: string | null;
+  avatar_static?: string | null;
+  header?: string | null;
+  header_static?: string | null;
   url: string;
+  note?: string;
+  locked?: boolean;
+  bot?: boolean;
+  created_at?: string;
+  followers_count?: number;
+  following_count?: number;
+  statuses_count?: number;
+  fields?: Field[];
 };
 
 export type MediaAttachment = {
@@ -22,16 +39,30 @@ export type Tag = {
   url: string;
 };
 
+export type Visibility = 'public' | 'unlisted' | 'private' | 'direct';
+
 export type Status = {
   id: string;
   created_at: string;
   content: string;
   spoiler_text?: string;
   sensitive?: boolean;
+  visibility?: Visibility;
+  in_reply_to_id?: string | null;
+  in_reply_to_account_id?: string | null;
   account: Account;
   media_attachments: MediaAttachment[];
   tags: Tag[];
   url?: string;
+};
+
+export type Relationship = {
+  id: string;
+  following: boolean;
+  followed_by: boolean;
+  requested: boolean;
+  blocking?: boolean;
+  muting?: boolean;
 };
 
 export type TimelineKind = 'home' | 'public' | 'tag';
@@ -40,18 +71,46 @@ type FetchOpts = {
   auth?: boolean;
 };
 
+function authHeader(): Record<string, string> {
+  const t = loadToken();
+  return t ? { authorization: `Bearer ${t.access_token}` } : {};
+}
+
 async function get(path: string, opts: FetchOpts = {}): Promise<Response> {
   const headers: Record<string, string> = { accept: 'application/json' };
-  if (opts.auth !== false) {
-    const t = loadToken();
-    if (t) headers.authorization = `Bearer ${t.access_token}`;
-  }
+  if (opts.auth !== false) Object.assign(headers, authHeader());
   return fetch(path, { headers });
+}
+
+async function sendJson(method: string, path: string, body: unknown): Promise<Response> {
+  return fetch(path, {
+    method,
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...authHeader()
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function sendForm(method: string, path: string, form: FormData): Promise<Response> {
+  return fetch(path, {
+    method,
+    headers: { accept: 'application/json', ...authHeader() },
+    body: form
+  });
+}
+
+function failOn401(res: Response): void {
+  if (res.status === 401) {
+    clearToken();
+    throw new Error('unauthorized');
+  }
 }
 
 function parseLinkMaxId(link: string | null): string | null {
   if (!link) return null;
-  // Link: <https://…?max_id=42>; rel="next", <…>; rel="prev"
   for (const part of link.split(',')) {
     const m = part.match(/<([^>]+)>;\s*rel="next"/);
     if (m) {
@@ -70,6 +129,8 @@ export type Page<T> = {
   items: T[];
   nextMaxId: string | null;
 };
+
+// ── timelines ────────────────────────────────────────────────────────
 
 export async function fetchTimeline(
   kind: TimelineKind,
@@ -98,17 +159,175 @@ export async function fetchTimeline(
   }
 
   const res = await get(path, { auth: needsAuth });
-
-  if (res.status === 401 && needsAuth) {
-    clearToken();
-    throw new Error('unauthorized');
-  }
-
-  if (!res.ok) {
-    throw new Error(`timeline_failed_${res.status}`);
-  }
+  if (needsAuth) failOn401(res);
+  if (!res.ok) throw new Error(`timeline_failed_${res.status}`);
 
   const items = (await res.json()) as Status[];
   const nextMaxId = parseLinkMaxId(res.headers.get('link'));
   return { items, nextMaxId };
+}
+
+// ── statuses ─────────────────────────────────────────────────────────
+
+export type ComposeInput = {
+  status: string;
+  spoiler_text?: string;
+  sensitive?: boolean;
+  visibility?: Visibility;
+  in_reply_to_id?: string | null;
+  media_ids?: string[];
+};
+
+export async function postStatus(input: ComposeInput): Promise<Status> {
+  // null / undefined / 空配列をそぎ落として送る。送らないことが
+  // 「サーバ既定」を意味する API なので、こちらで余計なキーを入れない。
+  const body: Record<string, unknown> = { status: input.status };
+  if (input.spoiler_text) body.spoiler_text = input.spoiler_text;
+  if (input.sensitive) body.sensitive = true;
+  if (input.visibility) body.visibility = input.visibility;
+  if (input.in_reply_to_id) body.in_reply_to_id = input.in_reply_to_id;
+  if (input.media_ids && input.media_ids.length > 0) body.media_ids = input.media_ids;
+
+  const res = await sendJson('POST', '/api/v1/statuses', body);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `post_failed_${res.status}`);
+  }
+  return (await res.json()) as Status;
+}
+
+// ── media ────────────────────────────────────────────────────────────
+
+export async function uploadMedia(file: File, description?: string): Promise<MediaAttachment> {
+  const fd = new FormData();
+  fd.set('file', file);
+  if (description) fd.set('description', description);
+  // v1 は同期で返す。v2 は処理中なら 202 を返して
+  // /api/v1/media/:id で polling、というのが Mastodon の仕様。
+  // 最初は v1 のシンプルさを取る。重い変換が要るときは server 側で
+  // 設定するか、別途 v2 にスイッチ。
+  const res = await sendForm('POST', '/api/v1/media', fd);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `media_failed_${res.status}`);
+  }
+  return (await res.json()) as MediaAttachment;
+}
+
+// ── accounts: self ───────────────────────────────────────────────────
+
+export async function verifyCredentials(): Promise<Account> {
+  const res = await get('/api/v1/accounts/verify_credentials');
+  failOn401(res);
+  if (!res.ok) throw new Error(`verify_failed_${res.status}`);
+  return (await res.json()) as Account;
+}
+
+export type CredentialsUpdate = {
+  display_name?: string;
+  note?: string;
+  avatar?: File | null;
+  header?: File | null;
+  locked?: boolean;
+};
+
+export async function updateCredentials(input: CredentialsUpdate): Promise<Account> {
+  const fd = new FormData();
+  if (input.display_name !== undefined) fd.set('display_name', input.display_name);
+  if (input.note !== undefined) fd.set('note', input.note);
+  if (input.locked !== undefined) fd.set('locked', input.locked ? 'true' : 'false');
+  if (input.avatar) fd.set('avatar', input.avatar);
+  if (input.header) fd.set('header', input.header);
+
+  const res = await sendForm('PATCH', '/api/v1/accounts/update_credentials', fd);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `update_failed_${res.status}`);
+  }
+  return (await res.json()) as Account;
+}
+
+// ── accounts: lookup / show ──────────────────────────────────────────
+
+export async function lookupAccount(acct: string): Promise<Account> {
+  const qs = new URLSearchParams({ acct });
+  const res = await get(`/api/v1/accounts/lookup?${qs}`, { auth: false });
+  if (res.status === 404) throw new Error('not_found');
+  if (!res.ok) throw new Error(`lookup_failed_${res.status}`);
+  return (await res.json()) as Account;
+}
+
+export async function getAccount(id: string): Promise<Account> {
+  const res = await get(`/api/v1/accounts/${encodeURIComponent(id)}`, { auth: false });
+  if (res.status === 404) throw new Error('not_found');
+  if (!res.ok) throw new Error(`account_failed_${res.status}`);
+  return (await res.json()) as Account;
+}
+
+export async function getAccountStatuses(
+  id: string,
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Status>> {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? 20));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+
+  const res = await get(`/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`, {
+    auth: false
+  });
+  if (!res.ok) throw new Error(`account_statuses_failed_${res.status}`);
+  const items = (await res.json()) as Status[];
+  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+async function fetchAccountList(
+  endpoint: 'followers' | 'following',
+  id: string,
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Account>> {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? 40));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+  const res = await get(
+    `/api/v1/accounts/${encodeURIComponent(id)}/${endpoint}?${qs}`,
+    { auth: false }
+  );
+  if (!res.ok) throw new Error(`${endpoint}_failed_${res.status}`);
+  const items = (await res.json()) as Account[];
+  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+export const getAccountFollowers = (id: string, opts?: { maxId?: string | null; limit?: number }) =>
+  fetchAccountList('followers', id, opts);
+
+export const getAccountFollowing = (id: string, opts?: { maxId?: string | null; limit?: number }) =>
+  fetchAccountList('following', id, opts);
+
+// ── follows ──────────────────────────────────────────────────────────
+
+export async function getRelationships(ids: string[]): Promise<Relationship[]> {
+  if (ids.length === 0) return [];
+  const qs = new URLSearchParams();
+  for (const id of ids) qs.append('id[]', id);
+  const res = await get(`/api/v1/accounts/relationships?${qs}`);
+  failOn401(res);
+  if (!res.ok) throw new Error(`relationships_failed_${res.status}`);
+  return (await res.json()) as Relationship[];
+}
+
+export async function followAccount(id: string): Promise<Relationship> {
+  const res = await sendJson('POST', `/api/v1/accounts/${encodeURIComponent(id)}/follow`, {});
+  failOn401(res);
+  if (!res.ok) throw new Error(`follow_failed_${res.status}`);
+  return (await res.json()) as Relationship;
+}
+
+export async function unfollowAccount(id: string): Promise<Relationship> {
+  const res = await sendJson('POST', `/api/v1/accounts/${encodeURIComponent(id)}/unfollow`, {});
+  failOn401(res);
+  if (!res.ok) throw new Error(`unfollow_failed_${res.status}`);
+  return (await res.json()) as Relationship;
 }

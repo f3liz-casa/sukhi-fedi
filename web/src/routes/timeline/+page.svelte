@@ -4,6 +4,36 @@
   import { fetchTimeline, type Status, type TimelineKind } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
+  import Composer from '$lib/components/Composer.svelte';
+
+  let replyTo: Status | null = null;
+  let composerOpen = false;
+
+  function openCompose() {
+    replyTo = null;
+    composerOpen = true;
+  }
+
+  function onReply(ev: CustomEvent<Status>) {
+    replyTo = ev.detail;
+    composerOpen = true;
+    // 上に composer があるのでスクロール。
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function onPosted(ev: CustomEvent<Status>) {
+    // home / public のときは先頭に挿す。tag のときは混ぜずに閉じるだけ。
+    if (kind === 'home' || kind === 'public') {
+      items = [ev.detail, ...items];
+    }
+    composerOpen = false;
+    replyTo = null;
+  }
+
+  function onCancel() {
+    composerOpen = false;
+    replyTo = null;
+  }
 
   let kind: TimelineKind = 'home';
   let tag = '';
@@ -83,10 +113,23 @@
   }
 </script>
 
-<header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline;">
+<header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);">
   <h1 style="font-size: var(--text-lg);">sukhi-fedi</h1>
-  <button class="chip" on:click={signOut}>ログアウト</button>
+  <span style="display: flex; gap: var(--space-2);">
+    <a class="chip" href="/settings">設定</a>
+    <button class="chip" on:click={openCompose}>書く</button>
+    <button class="chip" on:click={signOut}>ログアウト</button>
+  </span>
 </header>
+
+{#if composerOpen}
+  <Composer
+    {replyTo}
+    prefillMention={!!replyTo}
+    on:posted={onPosted}
+    on:cancel={onCancel}
+  />
+{/if}
 
 <nav class="tabs timeline" aria-label="タイムラインの選び方">
   <button
@@ -139,7 +182,7 @@
   {/if}
 
   {#each items as s (s.id)}
-    <StatusCard status={s} />
+    <StatusCard status={s} canReply on:reply={onReply} />
   {/each}
 
   {#if !initial && loading}

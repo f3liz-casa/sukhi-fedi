@@ -82,3 +82,4 @@
 <p class="prose-small">
   すでに住んでいる人は、<a href="/login" data-sveltekit-reload>こちらから入れます</a>。
 </p>
+<p class="prose-small"><a href="/">表のページに戻る</a></p>

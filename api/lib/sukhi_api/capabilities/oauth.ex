@@ -142,7 +142,13 @@ defmodule SukhiApi.Capabilities.OAuth do
   # ── POST /oauth/authorize ────────────────────────────────────────────────
 
   def authorize_submit(req) do
-    body = parse_form_body(req[:body])
+    # POST /oauth/authorize は同意フォーム(ブラウザの form submit)から
+    # 来るので元の content-type は application/x-www-form-urlencoded だが、
+    # `SukhiFedi.Web.PluginPlug` が body_params を JSON に再エンコード
+    # してから渡してくる(`plugin_plug.ex` の `body =` 参照)。なので
+    # ここは JSON で読む。直接呼ばれた古いテスト等のために
+    # form 形式へのフォールバックも残す。
+    body = decode_request_body(req)
     client_id = body["client_id"]
     redirect_uri = body["redirect_uri"] || ""
     scope = body["scope"] || "read"
@@ -307,26 +313,18 @@ defmodule SukhiApi.Capabilities.OAuth do
   defp oauth_error_for(:invalid_scope), do: "invalid_scope"
   defp oauth_error_for(_), do: "invalid_request"
 
-  defp decode_token_body(req) do
-    headers = req[:headers] || []
-    ct = content_type(headers)
+  defp decode_token_body(req), do: decode_request_body(req)
 
-    cond do
-      String.contains?(ct, "application/json") ->
-        case Jason.decode(req[:body] || "") do
-          {:ok, %{} = m} -> m
-          _ -> %{}
-        end
+  # PluginPlug が body_params を JSON 再エンコードして渡してくるので、
+  # まず JSON で読む。空 body や、テストなどで直接 form 文字列が来た
+  # 場合は URI.decode_query へフォールバック。
+  defp decode_request_body(req) do
+    raw = req[:body] || ""
 
-      true ->
-        parse_form_body(req[:body])
+    case Jason.decode(raw) do
+      {:ok, %{} = m} -> m
+      _ -> parse_form_body(raw)
     end
-  end
-
-  defp content_type(headers) do
-    Enum.find_value(headers, "", fn {k, v} ->
-      if String.downcase(to_string(k)) == "content-type", do: to_string(v), else: nil
-    end)
   end
 
   defp parse_form_body(nil), do: %{}
@@ -376,14 +374,7 @@ defmodule SukhiApi.Capabilities.OAuth do
     sc = h(scope)
     st = h(state)
 
-    # scope を読みやすい日本語に。read = 読むだけ / write = 書ける /
-    # follow = フォローできる。複雑な :sub は素直にカタログにしない。
-    scope_label =
-      case sc do
-        "read" -> "ここで起きていることを、読めるようになります。"
-        "write" -> "ここに、書き込めるようになります。"
-        s -> "次のことが、できるようになります: <code>#{s}</code>"
-      end
+    scope_list = render_scope_list(scope)
 
     body = """
     <!doctype html>
@@ -398,8 +389,9 @@ defmodule SukhiApi.Capabilities.OAuth do
       <main class="wrap stack">
         <section class="hero">
           <h1>#{name} に、許可しますか?</h1>
-          <p class="tagline">#{scope_label}</p>
+          <p class="tagline">この道具に、こんなことが、できるようになります。</p>
         </section>
+        #{scope_list}
         <p class="prose-small">
           「いいよ」を押すと、<code>#{redir}</code> に戻ります。
         </p>
@@ -418,6 +410,65 @@ defmodule SukhiApi.Capabilities.OAuth do
 
     {:ok, %{status: 200, body: body, headers: [{"content-type", "text/html; charset=utf-8"}]}}
   end
+
+  # scope は空白区切り (Mastodon 互換)。"read write follow" や
+  # "read:statuses write:statuses" のような形で来る。1 つずつ短い
+  # 日本語に直して、見たことのない sub-scope はそのまま並べる。
+  defp render_scope_list(scope) do
+    items =
+      scope
+      |> to_string()
+      |> String.split([" ", "+"], trim: true)
+      |> Enum.uniq()
+      |> Enum.map(&scope_explain/1)
+      |> Enum.map(fn {label, detail} ->
+        "<li><strong>#{h(label)}</strong> — #{h(detail)}</li>"
+      end)
+      |> Enum.join("\n          ")
+
+    case items do
+      "" -> ""
+      _ -> ~s|<ul class="scope-list">\n          #{items}\n        </ul>|
+    end
+  end
+
+  # 既知の scope はやさしい日本語で。未知のものはそのまま見せて、
+  # ぼかさずに「これがついています」と置く。
+  defp scope_explain("read"), do: {"読む", "あなたのところで起きていることを、読みます。"}
+  defp scope_explain("write"), do: {"書く", "あなたに代わって、投稿したり、プロフィールを変えたりします。"}
+  defp scope_explain("follow"),
+    do: {"フォロー", "あなたに代わって、誰かをフォロー/アンフォローします。"}
+
+  defp scope_explain("push"), do: {"通知", "新しい通知を、この道具に届けます。"}
+
+  defp scope_explain("read:accounts"),
+    do: {"アカウントを読む", "あなたや他の人のプロフィールを、読みます。"}
+
+  defp scope_explain("read:statuses"),
+    do: {"投稿を読む", "タイムラインや個別の投稿を、読みます。"}
+
+  defp scope_explain("read:notifications"),
+    do: {"通知を読む", "届いた通知を、読みます。"}
+
+  defp scope_explain("read:follows"),
+    do: {"フォローを読む", "あなたがフォローしている人/されている人を、読みます。"}
+
+  defp scope_explain("write:statuses"),
+    do: {"投稿を書く", "あなたに代わって、投稿したり、消したりします。"}
+
+  defp scope_explain("write:media"),
+    do: {"画像を上げる", "投稿に添える画像などを、サーバへ上げます。"}
+
+  defp scope_explain("write:accounts"),
+    do: {"プロフィールを変える", "あなたの表示名・自己紹介・アイコンを、書き換えます。"}
+
+  defp scope_explain("write:follows"),
+    do: {"フォローを変える", "あなたに代わって、フォロー/アンフォローします。"}
+
+  defp scope_explain("write:notifications"),
+    do: {"通知を整える", "通知を消したり、まとめて既読にしたりします。"}
+
+  defp scope_explain(other), do: {other, "この権限の説明は、まだ用意していません。"}
 
   defp html_error(status, code, detail) do
     body = """

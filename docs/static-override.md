@@ -70,3 +70,25 @@ bind しているので、accessory boot 時に自動でマウントされる。
   されない
 - `serve_static/2` の path-traversal guard はそのまま生きる ─ override
   でも `..` は弾く
+
+## 抜け穴(やらかしやすい二つ)
+
+### 1. SPA の CSS は `/static/styles/` 経由では更新できない
+
+SPA は Vite が CSS を bundle して `_app/immutable/assets/<hash>.css`
+を吐く。`+layout.svelte` の `import '../styles/app.css'` はビルド時に
+そっちへ食われる。だから `web/src/styles/app.css` を `push-styles`
+で投げても、SPA のページ(timeline / signup / check)には反映されない。
+
+`/static/styles/app.css` を読むのは **server-rendered な /login と
+/oauth/authorize の consent 画面だけ**。SPA 側のスタイルを直したい
+ときは `make push-static`(`npm run build` + rsync 一式)が必要。
+
+### 2. `rsync --delete` が `styles/` を吹き飛ばす
+
+`web/build/` の出力に `styles/` は含まれない(あれは別管理)。
+だから素朴に `rsync -av --delete web/build/ host:STATIC_DIR/` を
+やると、host 側の `styles/` まで削られて /login が裸 HTML になる。
+
+Makefile の `push-static` は `--exclude=styles` を付けてこれを
+避けている。手で rsync するときも同じ exclude を忘れない。

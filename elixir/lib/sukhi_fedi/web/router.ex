@@ -148,6 +148,10 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  get "/settings" do
+    serve_spa(conn)
+  end
+
   # PoW で守られる「通り道」。Anubis がこの path だけを challenge する。
   # 中身は SPA shell ─ JS で intent / next を読んで分岐する。
   get "/check" do
@@ -222,8 +226,18 @@ defmodule SukhiFedi.Web.Router do
     SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))
   end
 
+  # SPA のプロフィール画面 (`/@alice`, `/@alice@example.tld`,
+  # `/@alice/followers`, `/@alice/following`) は `/@` プレフィクスで
+  # 来る。ActivityPub の actor URL は `/users/:name` 側に分けてあるので
+  # 衝突しない。Plug.Router の `*glob` は segment の先頭にしか書けず、
+  # `/@` で始まる任意のパスを 1 行で書けないので、catch-all の中で
+  # 文字列マッチして SPA に渡す。
   match _ do
-    send_resp(conn, 404, "not found")
+    if String.starts_with?(conn.request_path, "/@") do
+      serve_spa(conn)
+    else
+      send_resp(conn, 404, "not found")
+    end
   end
 
   defp serve_spa(conn) do

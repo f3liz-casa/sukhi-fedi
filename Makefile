@@ -15,12 +15,18 @@ check:
 # back to the image-baked priv/static, so this lands instantly ─ no
 # image rebuild, no container reboot. Same for `make push-styles`
 # which is the lighter "only the raw token CSS" variant.
+#
+# `--delete --exclude=styles` 一行が肝。styles/ は build 出力に居な
+# いので、素朴に --delete をかけると styles/ ごと吹き飛ばしてしまい
+# /login の素のCSSがその瞬間に行方不明になる。styles/ は別の
+# rsync で別途同期する役割なので、build rsync の delete 対象から
+# 外しておく。
 push-static:
 	cd web && npm run build
 	ssh $(DEPLOY_USER)@$(DEPLOY_HOST) "sudo mkdir -p $(STATIC_DIR) && sudo chown $(DEPLOY_USER) $(STATIC_DIR)"
-	rsync -av --delete web/build/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/
-	rsync -av web/src/styles/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/styles/
+	rsync -av --delete --exclude=styles web/build/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/
+	rsync -av --delete web/src/styles/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/styles/
 
 push-styles:
 	ssh $(DEPLOY_USER)@$(DEPLOY_HOST) "sudo mkdir -p $(STATIC_DIR)/styles && sudo chown -R $(DEPLOY_USER) $(STATIC_DIR)"
-	rsync -av web/src/styles/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/styles/
+	rsync -av --delete web/src/styles/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(STATIC_DIR)/styles/

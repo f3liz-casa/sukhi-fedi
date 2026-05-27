@@ -1,7 +1,13 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import type { Status } from '$lib/api';
 
   export let status: Status;
+  // 返信ボタンを出すか。タイムラインでは true、プロフィール一覧では false
+  // など、置き場ごとに切り替えたい。
+  export let canReply = false;
+
+  const dispatch = createEventDispatcher<{ reply: Status }>();
 
   // Display name falls back to username when servers omit it (Misskey
   // sometimes does for fresh actors).
@@ -34,8 +40,8 @@
 
   <div class="body">
     <header class="meta">
-      <span class="display-name">{name}</span>
-      <span>@{status.account.acct}</span>
+      <a class="display-name" href={`/@${status.account.acct}`}>{name}</a>
+      <a href={`/@${status.account.acct}`}>@{status.account.acct}</a>
       <span>·</span>
       <a href={status.url ?? '#'} rel="external noopener">{ts}</a>
     </header>
@@ -57,6 +63,14 @@
           {/if}
         {/each}
       </div>
+    {/if}
+
+    {#if canReply}
+      <footer class="status-actions">
+        <button type="button" class="chip" on:click={() => dispatch('reply', status)}>
+          返信
+        </button>
+      </footer>
     {/if}
   </div>
 </article>
