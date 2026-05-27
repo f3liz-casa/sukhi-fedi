@@ -171,10 +171,23 @@ defmodule SukhiApi.Router do
 
   defp check_scope(required, granted) when is_list(granted) do
     needed = String.split(required, ~r/\s+/, trim: true)
-    if Enum.all?(needed, &(&1 in granted)), do: :ok, else: {:error, :insufficient_scope}
+    if Enum.all?(needed, &granted?(&1, granted)), do: :ok, else: {:error, :insufficient_scope}
   end
 
   defp check_scope(_, _), do: {:error, :insufficient_scope}
+
+  # Mastodon の慣例で `read` は `read:*` を、`write` は `write:*` を
+  # 包む umbrella scope。granted に "read" があれば "read:statuses" を
+  # 要求するハンドラも通す。
+  defp granted?(needed, granted) do
+    cond do
+      needed in granted -> true
+      String.contains?(needed, ":") ->
+        [umbrella, _sub] = String.split(needed, ":", parts: 2)
+        umbrella in granted
+      true -> false
+    end
+  end
 
   # ── path matching ─────────────────────────────────────────────────────────
 
