@@ -19,7 +19,11 @@ defmodule SukhiApi.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      # `:crypto` を明示的に並べておかないと release に同梱されず、
+      # SukhiApi.TokenRateLimit や OAuth view が呼ぶ `:crypto.hash/2`
+      # が UndefinedFunctionError で落ちる(api の deps が jason だけ
+      # で transitive に crypto が来ないため)。
+      extra_applications: [:logger, :crypto],
       mod: {SukhiApi.Application, []}
     ]
   end
