@@ -56,7 +56,7 @@ services:
       DB_POOL_SIZE: "10"
       NATS_HOST: nats
       NATS_PORT: "4222"
-      RELEASE_DISTRIBUTION: name
+      RELEASE_DISTRIBUTION: sname
       RELEASE_NODE: gateway@elixir
       RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
       PLUGIN_NODES: api@api
@@ -130,7 +130,7 @@ services:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-api:${SUKHI_VERSION:-v1}
     hostname: api
     environment:
-      RELEASE_DISTRIBUTION: name
+      RELEASE_DISTRIBUTION: sname
       RELEASE_NODE: api@api
       RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
       DOMAIN: ${DOMAIN:-localhost:4000}

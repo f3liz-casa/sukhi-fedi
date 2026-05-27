@@ -121,7 +121,7 @@ env:
     DB_POOL_SIZE: "15"
     NATS_HOST: sukhi-fedi-nats
     NATS_PORT: "4222"
-    RELEASE_DISTRIBUTION: name
+    RELEASE_DISTRIBUTION: sname
     RELEASE_NODE: gateway@elixir
     PLUGIN_NODES: api@api
     DOMAIN: sukhi.f3liz.casa
@@ -247,7 +247,7 @@ accessories:
     host: 217.142.242.103
     env:
       clear:
-        RELEASE_DISTRIBUTION: name
+        RELEASE_DISTRIBUTION: sname
         RELEASE_NODE: api@api
         DOMAIN: sukhi.f3liz.casa
         INSTANCE_TITLE: sukhi.f3liz.casa
