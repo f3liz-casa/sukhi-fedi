@@ -50,7 +50,13 @@ defmodule SukhiApi.TokenCache do
       cutoff = now - ttl_ms
 
       case lookup(key, cutoff) do
-        {:ok, ctx} -> {:ok, ctx}
+        # Mirror the wire shape of `SukhiFedi.OAuth.verify_bearer/1`
+        # as it comes out of GatewayRpc: `{:ok, {:ok, ctx}}`. The
+        # router's `with` clause matches against the double wrap, so a
+        # cache hit returning a single `{:ok, ctx}` would fall through
+        # and the request would 401 ─ the bug that ate every second
+        # /api/v1/timelines/home call.
+        {:ok, ctx} -> {:ok, {:ok, ctx}}
         :miss -> do_verify(key, token, now)
       end
     else
