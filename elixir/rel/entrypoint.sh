@@ -18,5 +18,11 @@ if [ -n "$ERLANG_COOKIE" ] && [ -z "${RELEASE_COOKIE:-}" ]; then
   export RELEASE_COOKIE="$ERLANG_COOKIE"
 fi
 
+# 16-char sha256 prefix of the cookie, for cluster sanity checking via
+# logs. The value itself is never printed. Remove after the cluster
+# stays up between deploys.
+COOKIE_FP=$(printf '%s' "${RELEASE_COOKIE:-(unset)}" | sha256sum | head -c 16)
+echo "[entrypoint] gateway cookie_fp=$COOKIE_FP"
+
 /app/bin/sukhi_fedi eval 'SukhiFedi.Release.migrate_all()'
 exec /app/bin/sukhi_fedi start
