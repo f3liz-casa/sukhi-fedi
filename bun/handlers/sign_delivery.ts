@@ -76,6 +76,29 @@ export async function handleSignDelivery(
     signed.headers.forEach((v, k) => {
       outHeaders[k] = v;
     });
+
+    // 401 を食い続けたとき、実際に署名された header set を覗きたい。
+    // 1〜2 deploy 分の追加情報のためのコンソール出力。落ち着いたら剥がす。
+    // [[fedify-401-diagnostic]]
+    console.error(
+      JSON.stringify({
+        event: "sign.done",
+        inbox: payload.inbox,
+        spec,
+        body_bytes: bodyBuf.byteLength,
+        key_id: payload.keyId,
+        out_headers: Object.fromEntries(
+          Object.entries(outHeaders).map(([k, v]) => [
+            k,
+            // Signature は長いので頭尾だけ。
+            k.toLowerCase() === "signature" && v.length > 80
+              ? v.slice(0, 60) + "...(" + v.length + " chars)"
+              : v,
+          ]),
+        ),
+      }),
+    );
+
     return { headers: outHeaders };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
