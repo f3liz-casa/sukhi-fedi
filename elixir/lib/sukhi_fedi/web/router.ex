@@ -21,8 +21,13 @@ defmodule SukhiFedi.Web.Router do
   plug(SukhiFedi.Web.RateLimitPlug, bucket: "global", limit: 500, scale_ms: 60_000)
   plug(:match)
 
+  # multipart/form-data はここでは parse しない。account の avatar/header
+  # と media upload は plugin node 側で raw body から自前 parse するので、
+  # ここで Plug.Upload を介して temp file に書き出されると二重コピーに
+  # なる。`pass:` 指定で body は未読のまま PluginPlug に届く。
   plug(Plug.Parsers,
     parsers: [:json, :urlencoded],
+    pass: ["multipart/form-data"],
     json_decoder: Jason,
     body_reader: {SukhiFedi.Web.CacheBodyReader, :read_body, []}
   )

@@ -9,8 +9,11 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
   use SukhiApi.Capability, addon: :mastodon_api
 
-  alias SukhiApi.{GatewayRpc, Pagination}
+  alias SukhiApi.{GatewayRpc, Multipart, Pagination}
   alias SukhiApi.Views.{MastodonAccount, MastodonRelationship, MastodonStatus}
+
+  # avatar/header の inline 上限。/api/v1/media と揃える。
+  @max_upload_bytes 8 * 1024 * 1024
 
   @impl true
   def routes do
@@ -134,49 +137,125 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
         ok(403, %{error: "this endpoint requires a user-bound token"})
 
       %{id: id} ->
-        attrs = decode_update_attrs(req)
+        case decode_update_attrs(req, id) do
+          {:ok, attrs} ->
+            do_update_credentials(req, id, attrs)
 
-        case GatewayRpc.call(SukhiFedi.Accounts, :update_credentials, [id, attrs]) do
-          {:ok, {:ok, updated}} ->
-            counts = counts_for(updated.id)
-            ok(200, MastodonAccount.render_credential(updated, counts, req[:assigns][:scopes]))
-
-          {:ok, {:error, :not_found}} ->
-            ok(404, %{error: "account_not_found"})
-
-          {:ok, {:error, {:validation, errors}}} ->
-            ok(422, %{error: "validation_failed", details: errors})
-
-          {:error, :not_connected} ->
-            ok(503, %{error: "gateway_not_connected"})
-
-          {:error, {:badrpc, reason}} ->
-            ok(503, %{error: "gateway_rpc_failed", detail: inspect(reason)})
-
-          _ ->
-            ok(500, %{error: "internal_error"})
+          {:error, status, body} ->
+            ok(status, body)
         end
     end
   end
 
-  defp decode_update_attrs(req) do
+  defp do_update_credentials(req, id, attrs) do
+    case GatewayRpc.call(SukhiFedi.Accounts, :update_credentials, [id, attrs]) do
+      {:ok, {:ok, updated}} ->
+        counts = counts_for(updated.id)
+        ok(200, MastodonAccount.render_credential(updated, counts, req[:assigns][:scopes]))
+
+      {:ok, {:error, :not_found}} ->
+        ok(404, %{error: "account_not_found"})
+
+      {:ok, {:error, {:validation, errors}}} ->
+        ok(422, %{error: "validation_failed", details: errors})
+
+      {:error, :not_connected} ->
+        ok(503, %{error: "gateway_not_connected"})
+
+      {:error, {:badrpc, reason}} ->
+        ok(503, %{error: "gateway_rpc_failed", detail: inspect(reason)})
+
+      _ ->
+        ok(500, %{error: "internal_error"})
+    end
+  end
+
+  # multipart の場合は avatar/header を先に Media pipeline に通して
+  # URL を取り、それを attrs に詰める。テキスト 3 項目(display_name,
+  # note, locked)は fields からそのまま渡す。SPA は常に multipart で
+  # 来るが、JSON / urlencoded も Mastodon 互換のため受け付ける。
+  defp decode_update_attrs(req, account_id) do
     headers = req[:headers] || []
     ct = content_type(headers)
 
     cond do
+      String.contains?(ct, "multipart/form-data") ->
+        decode_multipart(req[:body] || "", ct, account_id)
+
       String.contains?(ct, "application/json") ->
         case Jason.decode(req[:body] || "") do
-          {:ok, %{} = m} -> m
-          _ -> %{}
+          {:ok, %{} = m} -> {:ok, m}
+          _ -> {:ok, %{}}
         end
 
       String.contains?(ct, "application/x-www-form-urlencoded") ->
-        URI.decode_query(req[:body] || "")
+        {:ok, URI.decode_query(req[:body] || "")}
 
       true ->
-        %{}
+        {:ok, %{}}
     end
   end
+
+  defp decode_multipart(body, ct, account_id) do
+    case Multipart.parse_multifile(body, ct, max_file_bytes: @max_upload_bytes) do
+      {:ok, %{fields: fields, files: files}} ->
+        with {:ok, avatar_url} <- maybe_upload(files["avatar"], account_id),
+             {:ok, banner_url} <- maybe_upload(files["header"], account_id) do
+          attrs =
+            fields
+            |> Map.take(["display_name", "note", "locked"])
+            |> maybe_put("avatar_url", avatar_url)
+            |> maybe_put("banner_url", banner_url)
+
+          {:ok, attrs}
+        end
+
+      {:error, :file_too_large} ->
+        {:error, 413, %{error: "file_too_large"}}
+
+      {:error, reason} ->
+        {:error, 400, %{error: "bad_multipart", detail: to_string(reason)}}
+    end
+  end
+
+  defp maybe_upload(nil, _account_id), do: {:ok, nil}
+
+  defp maybe_upload(%{filename: filename, content_type: ct, bytes: bytes}, account_id) do
+    attrs = %{"filename" => filename, "content_type" => ct}
+
+    case GatewayRpc.call(SukhiFedi.Addons.Media, :create_from_upload, [
+           account_id,
+           bytes,
+           attrs
+         ]) do
+      {:ok, {:ok, media}} ->
+        {:ok, media.url}
+
+      {:ok, {:error, :empty_upload}} ->
+        {:error, 422, %{error: "empty_upload"}}
+
+      {:ok, {:error, :file_too_large}} ->
+        {:error, 413, %{error: "file_too_large"}}
+
+      {:ok, {:error, {:validation, errors}}} ->
+        {:error, 422, %{error: "validation_failed", details: errors}}
+
+      {:ok, {:error, reason}} ->
+        {:error, 422, %{error: inspect(reason)}}
+
+      {:error, :not_connected} ->
+        {:error, 503, %{error: "gateway_not_connected"}}
+
+      {:error, {:badrpc, reason}} ->
+        {:error, 503, %{error: "gateway_rpc_failed", detail: inspect(reason)}}
+
+      _ ->
+        {:error, 500, %{error: "internal_error"}}
+    end
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   # ── lookup ───────────────────────────────────────────────────────────────
 

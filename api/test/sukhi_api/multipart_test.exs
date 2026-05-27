@@ -81,6 +81,54 @@ defmodule SukhiApi.MultipartTest do
     assert {:ok, %{fields: %{}, file: nil}} = Multipart.parse(body, ct)
   end
 
+  describe "parse_multifile/3" do
+    test "collects multiple file parts keyed by form name" do
+      avatar = "AVATAR_BYTES"
+      header = "HEADER_BYTES"
+
+      {body, ct} =
+        build("BB", [
+          ~s|Content-Disposition: form-data; name="display_name"\r\n\r\nEve|,
+          ~s|Content-Disposition: form-data; name="avatar"; filename="a.png"\r\nContent-Type: image/png\r\n\r\n| <>
+            avatar,
+          ~s|Content-Disposition: form-data; name="header"; filename="h.jpg"\r\nContent-Type: image/jpeg\r\n\r\n| <>
+            header
+        ])
+
+      assert {:ok, %{fields: fields, files: files}} =
+               Multipart.parse_multifile(body, ct)
+
+      assert fields == %{"display_name" => "Eve"}
+      assert files["avatar"].bytes == avatar
+      assert files["avatar"].content_type == "image/png"
+      assert files["header"].bytes == header
+      assert files["header"].content_type == "image/jpeg"
+    end
+
+    test "fields-only body parses with empty files map" do
+      {body, ct} =
+        build("BB", [
+          ~s|Content-Disposition: form-data; name="note"\r\n\r\nhello|
+        ])
+
+      assert {:ok, %{fields: %{"note" => "hello"}, files: %{}}} =
+               Multipart.parse_multifile(body, ct)
+    end
+
+    test "enforces max_file_bytes on any file part" do
+      big = :binary.copy(<<0>>, 1024)
+
+      {body, ct} =
+        build("BB", [
+          ~s|Content-Disposition: form-data; name="avatar"; filename="big.bin"\r\nContent-Type: image/png\r\n\r\n| <>
+            big
+        ])
+
+      assert {:error, :file_too_large} =
+               Multipart.parse_multifile(body, ct, max_file_bytes: 256)
+    end
+  end
+
   test "handles boundary with quoted value in content-type" do
     {body, ct_unquoted} =
       build("BB", [

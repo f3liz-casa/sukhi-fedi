@@ -46,6 +46,74 @@ defmodule SukhiApi.Multipart do
     end
   end
 
+  @doc """
+  Same wire format as `parse/3` but returns *all* file parts keyed by
+  their form `name`, instead of collapsing to a single `:file`. Used by
+  endpoints that take multiple uploads in one request (e.g. Mastodon's
+  `PATCH /api/v1/accounts/update_credentials` carrying both `avatar`
+  and `header`).
+
+      {:ok, %{
+        fields: %{"display_name" => "..."},
+        files: %{
+          "avatar" => %{filename: ..., content_type: ..., bytes: ...},
+          "header" => %{...}
+        }
+      }}
+  """
+  @spec parse_multifile(binary(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, atom()}
+  def parse_multifile(body, content_type, opts \\ [])
+      when is_binary(body) and is_binary(content_type) do
+    max_bytes = Keyword.get(opts, :max_file_bytes, @default_max)
+
+    case extract_boundary(content_type) do
+      {:ok, boundary} -> parse_multifile_with_boundary(body, boundary, max_bytes)
+      :error -> {:error, :no_boundary}
+    end
+  end
+
+  defp parse_multifile_with_boundary(body, boundary, max_bytes) do
+    delim = "--" <> boundary
+
+    parts =
+      body
+      |> :binary.split(delim, [:global])
+      |> Enum.drop(1)
+      |> Enum.reject(fn p -> p == "" or String.starts_with?(p, "--") end)
+
+    do_parse_multifile(parts, %{fields: %{}, files: %{}}, max_bytes)
+  end
+
+  defp do_parse_multifile([], acc, _max), do: {:ok, acc}
+
+  defp do_parse_multifile([raw | rest], acc, max) do
+    raw =
+      raw
+      |> strip_leading_crlf()
+      |> strip_trailing_crlf()
+
+    case split_headers_and_body(raw) do
+      {:ok, header_block, body} ->
+        case parse_part(header_block, body, max) do
+          {:field, name, value} ->
+            do_parse_multifile(rest, put_in(acc, [:fields, name], value), max)
+
+          {:file, file} ->
+            do_parse_multifile(rest, put_in(acc, [:files, file.name], file), max)
+
+          :ignore ->
+            do_parse_multifile(rest, acc, max)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      :error ->
+        {:error, :bad_multipart}
+    end
+  end
+
   defp extract_boundary(content_type) do
     parts = String.split(content_type, ";", trim: true) |> Enum.map(&String.trim/1)
 
