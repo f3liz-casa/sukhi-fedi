@@ -70,7 +70,21 @@ defmodule SukhiDelivery.Delivery.Worker do
         record_delivery(activity_id, inbox_url, "gone")
         :ok
 
-      {:ok, %{status: status}} ->
+      {:ok, %{status: status, body: resp_body, headers: resp_headers}} ->
+        # 401/403 を踏み続けるとき何が原因か見えるように、サーバから
+        # 返ってきた body と頭の数行を残す。長すぎたら切り詰める。
+        # [[fedify-401-diagnostic]]
+        body_str =
+          resp_body
+          |> to_string()
+          |> String.slice(0, 400)
+
+        require Logger
+
+        Logger.warning(
+          "delivery #{status} from #{inbox_url}: body=#{inspect(body_str)} headers=#{inspect(Enum.take(resp_headers, 8))}"
+        )
+
         {:error, "unexpected status #{status}"}
 
       {:error, reason} ->
