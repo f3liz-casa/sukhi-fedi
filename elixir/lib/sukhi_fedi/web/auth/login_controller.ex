@@ -98,10 +98,12 @@ defmodule SukhiFedi.Web.Auth.LoginController do
     </head>
     <body>
       <main class="wrap stack">
-        <h1>入る</h1>
-        <p class="prose">あなたの名前と、合言葉を、おしえてください。</p>
+        <section class="hero">
+          <h1>入る</h1>
+          <p class="tagline">あなたの名前と、合言葉を、おしえてください。</p>
+        </section>
         #{error_html}
-        <form method="post" action="/login" class="stack form">
+        <form method="post" action="/login" class="form stack">
           <input type="hidden" name="next" value="#{escape(next)}" />
           <label class="stack-tight">
             <span>なまえ</span>
@@ -111,7 +113,7 @@ defmodule SukhiFedi.Web.Auth.LoginController do
             <span>あいことば</span>
             <input type="password" name="password" autocomplete="current-password" required />
           </label>
-          <button type="submit" class="lane-door">入る</button>
+          <button type="submit">入る</button>
         </form>
         <p class="prose-small"><a href="/">いえ、まだはじめての人は、こちらへ。</a></p>
       </main>
