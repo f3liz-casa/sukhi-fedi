@@ -52,29 +52,81 @@ defmodule SukhiApi.Capabilities.OAuth do
       is_nil(client_id) or client_id == "" ->
         html_error(400, "invalid_request", "missing client_id")
 
-      # ログインしていない人に consent 画面を見せない。`/login` に
-      # 飛ばし、ログインが済んだら同じ /oauth/authorize?... に戻って
-      # こられるよう `next` に元 URL を載せる。
-      match?({:error, :no_session}, resolve_session(session_token)) ->
-        next = "/oauth/authorize?" <> (req[:query] || "")
-        redirect_to_login(next)
-
       true ->
-        case GatewayRpc.call(@gateway, :find_app_by_client_id, [client_id]) do
-          {:ok, {:ok, app}} ->
-            html_form(app, redirect_uri, scope, state)
+        case resolve_session(session_token) do
+          {:error, :no_session} ->
+            # ログインしていない人に consent 画面を見せない。`/login`
+            # に飛ばし、ログインが済んだら同じ /oauth/authorize?... に
+            # 戻ってこられるよう `next` に元 URL を載せる。
+            next = "/oauth/authorize?" <> (req[:query] || "")
+            redirect_to_login(next)
 
-          {:ok, {:error, :not_found}} ->
-            html_error(404, "invalid_client", "unknown client_id")
-
-          {:error, :not_connected} ->
-            html_error(503, "gateway_not_connected", "the gateway is unreachable")
-
-          {:error, {:badrpc, reason}} ->
-            html_error(503, "gateway_rpc_failed", inspect(reason))
+          {:ok, account} ->
+            authorize_with_session(account, client_id, redirect_uri, scope, state)
         end
     end
   end
+
+  # 自分のサーバの SPA に「自分が自分を許可する?」を聞くのは形式で
+  # しかないので、redirect_uri が自ホストなら consent を出さずに即
+  # code を発行する。外部の Mastodon クライアント等(別ホスト)が来た
+  # ときは従来どおり consent form。
+  defp authorize_with_session(account, client_id, redirect_uri, scope, state) do
+    case GatewayRpc.call(@gateway, :find_app_by_client_id, [client_id]) do
+      {:ok, {:ok, app}} ->
+        if first_party?(redirect_uri) do
+          mint_and_redirect(app, account, redirect_uri, scope, state)
+        else
+          html_form(app, redirect_uri, scope, state)
+        end
+
+      {:ok, {:error, :not_found}} ->
+        html_error(404, "invalid_client", "unknown client_id")
+
+      {:error, :not_connected} ->
+        html_error(503, "gateway_not_connected", "the gateway is unreachable")
+
+      {:error, {:badrpc, reason}} ->
+        html_error(503, "gateway_rpc_failed", inspect(reason))
+    end
+  end
+
+  defp mint_and_redirect(app, account, redirect_uri, scope, state) do
+    case GatewayRpc.call(@gateway, :create_authorization_code, [
+           app,
+           account,
+           %{redirect_uri: redirect_uri, scopes: scope, state: state}
+         ]) do
+      {:ok, {:ok, %{code: code, state: returned_state}}} ->
+        redirect(redirect_uri, code: code, state: returned_state)
+
+      {:ok, {:error, :invalid_redirect_uri}} ->
+        html_error(400, "invalid_redirect_uri", "redirect_uri does not match registered URIs")
+
+      {:ok, {:error, :invalid_scope}} ->
+        html_error(400, "invalid_scope", "requested scope exceeds the app's allowed scopes")
+
+      {:error, :not_connected} ->
+        html_error(503, "gateway_not_connected", "the gateway is unreachable")
+
+      {:error, {:badrpc, reason}} ->
+        html_error(503, "gateway_rpc_failed", inspect(reason))
+    end
+  end
+
+  defp first_party?(redirect_uri) when is_binary(redirect_uri) do
+    case URI.parse(redirect_uri) do
+      %URI{host: host} when is_binary(host) ->
+        host == SukhiApi.Config.domain!() |> strip_port()
+
+      _ ->
+        false
+    end
+  end
+
+  defp first_party?(_), do: false
+
+  defp strip_port(domain), do: domain |> String.split(":", parts: 2) |> hd()
 
   defp redirect_to_login(next) do
     location = "/login?next=" <> URI.encode_www_form(next)
