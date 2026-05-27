@@ -87,15 +87,11 @@ export async function handleSignDelivery(
         spec,
         body_bytes: bodyBuf.byteLength,
         key_id: payload.keyId,
-        out_headers: Object.fromEntries(
-          Object.entries(outHeaders).map(([k, v]) => [
-            k,
-            // Signature は長いので頭尾だけ。
-            k.toLowerCase() === "signature" && v.length > 80
-              ? v.slice(0, 60) + "...(" + v.length + " chars)"
-              : v,
-          ]),
-        ),
+        // Signature header の中身まで全部出す ─ "Failed to verify
+        // the request signature." を食い続けていて、`headers="..."`
+        // 句が何を含んでいるか・algorithm が何になっているかが
+        // 知りたいので。落ち着いたら切り詰めに戻す。
+        out_headers: outHeaders,
       }),
     );
 

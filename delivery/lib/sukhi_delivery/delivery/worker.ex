@@ -56,6 +56,16 @@ defmodule SukhiDelivery.Delivery.Worker do
           Map.merge(base_headers, sync_headers)
       end
 
+    require Logger
+
+    # 署名検証失敗を追っている間だけ、POST 直前のヘッダ一覧と body の
+    # 先頭バイトを出す。"Failed to verify the request signature."
+    # の原因が「Req が User-Agent 等を上書きしている」「Digest が
+    # ボディ実体と一致していない」のどちらなのかを切り分けたい。
+    Logger.info(
+      "delivery POST #{inbox_url} headers=#{inspect(Enum.to_list(headers))} body_first=#{inspect(String.slice(body, 0, 80))} body_bytes=#{byte_size(body)}"
+    )
+
     case Req.post(inbox_url,
            body: body,
            headers: Enum.to_list(headers),
