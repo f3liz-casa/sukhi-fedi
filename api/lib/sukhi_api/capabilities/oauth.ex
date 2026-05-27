@@ -97,6 +97,16 @@ defmodule SukhiApi.Capabilities.OAuth do
     state = body["state"]
     session_token = session_token_from_cookies(req[:headers] || [])
 
+    cond do
+      is_nil(client_id) or client_id == "" ->
+        html_error(400, "invalid_request", "missing client_id")
+
+      true ->
+        do_authorize_submit(client_id, redirect_uri, scope, state, session_token)
+    end
+  end
+
+  defp do_authorize_submit(client_id, redirect_uri, scope, state, session_token) do
     with {:ok, account} <- resolve_session(session_token),
          {:ok, {:ok, app}} <- GatewayRpc.call(@gateway, :find_app_by_client_id, [client_id]),
          {:ok, {:ok, %{code: code, state: returned_state}}} <-
@@ -314,31 +324,42 @@ defmodule SukhiApi.Capabilities.OAuth do
     sc = h(scope)
     st = h(state)
 
+    # scope を読みやすい日本語に。read = 読むだけ / write = 書ける /
+    # follow = フォローできる。複雑な :sub は素直にカタログにしない。
+    scope_label =
+      case sc do
+        "read" -> "ここで起きていることを、読めるようになります。"
+        "write" -> "ここに、書き込めるようになります。"
+        s -> "次のことが、できるようになります: <code>#{s}</code>"
+      end
+
     body = """
     <!doctype html>
-    <html lang="en">
+    <html lang="ja">
     <head>
       <meta charset="utf-8">
-      <title>Authorize #{name}</title>
-      <style>
-        body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 4rem auto; padding: 0 1rem; }
-        h1 { font-size: 1.25rem; }
-        button { font-size: 1rem; padding: 0.5rem 1rem; }
-        .scope { font-family: monospace; }
-      </style>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>許可する — sukhi-fedi</title>
+      <link rel="stylesheet" href="/static/styles/app.css" />
     </head>
     <body>
-      <h1>Authorize <strong>#{name}</strong></h1>
-      <p>This application is requesting the following scope:</p>
-      <p class="scope">#{sc}</p>
-      <p>If you authorize, you will be redirected to <code>#{redir}</code>.</p>
-      <form action="/oauth/authorize" method="post">
-        <input type="hidden" name="client_id" value="#{cid}">
-        <input type="hidden" name="redirect_uri" value="#{redir}">
-        <input type="hidden" name="scope" value="#{sc}">
-        <input type="hidden" name="state" value="#{st}">
-        <button type="submit">Authorize</button>
-      </form>
+      <main class="wrap stack">
+        <section class="hero">
+          <h1>#{name} に、許可しますか?</h1>
+          <p class="tagline">#{scope_label}</p>
+        </section>
+        <p class="prose-small">
+          「いいよ」を押すと、<code>#{redir}</code> に戻ります。
+        </p>
+        <form action="/oauth/authorize" method="post" class="form stack">
+          <input type="hidden" name="client_id" value="#{cid}">
+          <input type="hidden" name="redirect_uri" value="#{redir}">
+          <input type="hidden" name="scope" value="#{sc}">
+          <input type="hidden" name="state" value="#{st}">
+          <button type="submit">いいよ</button>
+        </form>
+        <p class="prose-small"><a href="/">やめておく</a></p>
+      </main>
     </body>
     </html>
     """
