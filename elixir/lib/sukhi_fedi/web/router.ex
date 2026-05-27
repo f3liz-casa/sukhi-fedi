@@ -154,6 +154,16 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  # SvelteKit がビルド出力に `_app/` を使うので、こちらも static として
+  # 配る(`/static/` と同じ priv/static ルート、prefix だけ別)。
+  get "/_app/*path" do
+    serve_static(conn, ["_app" | path])
+  end
+
+  get "/favicon.ico" do
+    serve_static(conn, ["favicon.ico"])
+  end
+
   get "/api/nodeinfo" do
     if nodeinfo_monitor_enabled?(),
       do: ViewerController.nodeinfo_lookup(conn, []),
@@ -292,10 +302,24 @@ defmodule SukhiFedi.Web.Router do
       ".jpeg" -> "image/jpeg"
       ".gif" -> "image/gif"
       ".webp" -> "image/webp"
+      ".svg" -> "image/svg+xml"
+      ".ico" -> "image/x-icon"
       ".mp4" -> "video/mp4"
       ".webm" -> "video/webm"
       ".mp3" -> "audio/mpeg"
       ".ogg" -> "audio/ogg"
+      # SvelteKit ビルド成果物。.js は ES module として読まれるので
+      # text/javascript が必須(application/octet-stream だと browser
+      # が module load を拒否する)。
+      ".js" -> "text/javascript"
+      ".mjs" -> "text/javascript"
+      ".css" -> "text/css"
+      ".html" -> "text/html; charset=utf-8"
+      ".json" -> "application/json"
+      ".map" -> "application/json"
+      ".woff" -> "font/woff"
+      ".woff2" -> "font/woff2"
+      ".ttf" -> "font/ttf"
       _ -> "application/octet-stream"
     end
   end
