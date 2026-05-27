@@ -94,9 +94,7 @@ defmodule SukhiFedi.Web.Auth.LoginController do
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>入る — sukhi-fedi</title>
-      <link rel="stylesheet" href="/static/styles/tokens.css" />
-      <link rel="stylesheet" href="/static/styles/base.css" />
-      <link rel="stylesheet" href="/static/styles/components.css" />
+      <link rel="stylesheet" href="/static/styles/app.css" />
     </head>
     <body>
       <main class="wrap stack">

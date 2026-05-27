@@ -36,9 +36,16 @@ COPY elixir/priv priv
 COPY elixir/rel rel
 
 # Drop the prebuilt SPA into priv/static so the release embeds it.
-# Gateway's `serve_spa/1` reads `index.html` from there.
+# Gateway's `serve_spa/1` reads `index.html` from there. Separately
+# copy the raw token CSS files into priv/static/styles/ so the
+# server-rendered /login page can reference them at the same paths
+# (the SvelteKit build hashes them under _app/immutable/assets/ which
+# isn't predictable from an EEx template).
 COPY --from=spa /spa/build /spa-build
-RUN mkdir -p priv/static && cp -r /spa-build/. priv/static/
+COPY web/src/styles /spa-styles
+RUN mkdir -p priv/static priv/static/styles && \
+    cp -r /spa-build/. priv/static/ && \
+    cp /spa-styles/tokens.css /spa-styles/base.css /spa-styles/components.css /spa-styles/app.css priv/static/styles/
 
 RUN MIX_ENV=prod mix release
 
