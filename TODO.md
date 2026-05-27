@@ -66,6 +66,79 @@ endpoint surface is mapped out in [`docs/MISSKEY_API.md`](docs/MISSKEY_API.md).
       capability that returns `{upload_url, fields}`. Design in
       [OPEN_QUESTIONS Q5](OPEN_QUESTIONS.md#q5-メディア-8-mib--presigned-url-の-capability-形).
 
+## Federation / signing — hackers.pub 401 から派生
+
+`bun/handlers/sign_delivery.ts` で署名した POST が hackers.pub
+(Fedify 2.x ベース) で `"Failed to verify the request signature."`
+を返し続ける問題から。bun 内の自己 verify は `ok: true`、JWK n と
+PEM modulus も bit-identical。手前のヘッダ最小化 (v0.1.72) も効かず。
+こちら側の rendering / signing の幅を広げて、相互運用性を上げて
+いく。軽い順に並べる。
+
+- [ ] **Update Person で actor 更新通知を撒く.** 既知のフォロワー
+      inbox 全部に `Update {actor}` を送って、相手側の actor cache を
+      強制的に invalidate させる。我々の鍵そのものは変えない (ので
+      他の peer への副作用は最小)。
+      実装場所: `SukhiFedi.Accounts.update_credentials/2` の最後に
+      sns.outbox.actor.updated を outbox に投入する経路がもう一部
+      ある。`Federation.Outbound` から既存 followers 一覧に
+      fan-out するワーカを足すだけ。fedify 側に `update.actor` の
+      translate ハンドラが要る。
+
+- [ ] **HTTP Signature: RFC 9421 単発投げ.** いまは
+      `spec: "draft-cavage-http-signatures-12"` 固定。`spec: "rfc9421"`
+      でも投げてみるオプションを `SignDeliveryPayload.algorithm` で
+      足してあるが、ゲートウェイ側が `cavage` 固定で渡している。
+      `Federation.Outbound` で `algorithm: "rfc9421"` を一度試す
+      A/B フラグを足して、hackers.pub だけ rfc9421 で投げる実験。
+
+- [ ] **Double-knocking 実装.** RFC 9421 で先に投げ、`400`/`401` が
+      返ったら同じ Request を cavage で再送。通った spec を inbox の
+      origin ごとに ETS で覚える。fedify の `fetch` 側 (`handlers/
+      fetch.ts`) は既にこの戦略でやっているので、`handlers/
+      sign_delivery.ts` 側にも同じ shape の specMemory を持たせる。
+      Elixir 側からは `algorithm` を渡さず、bun が判定する形に。
+
+- [ ] **Object Integrity Proofs (FEP-8b32) 出力.** Activity 自体に
+      `proof: {type: "DataIntegrityProof", cryptosuite:
+      "eddsa-jcs-2022", verificationMethod, proofValue}` を埋め込む。
+      これがあれば HTTP Signature が通らなくても peer 側で
+      Activity 自体の真正性を確認できる ─ Misskey/Sharkey 系は
+      これを優先することがある。fedify は `signObject` を持って
+      いるのでハンドラを足せば実装は短い。鍵は Ed25519 を別立てで
+      生成する必要がある (RSA とは別系統)。
+      ─ 影響範囲が大きいので、Update Person と RFC 9421 が
+      ダメだった時の最後の手段。
+
+- [ ] **fedify v2 への上げ.** いまは `@fedify/fedify@1.10.8`。
+      Fedify 2.x は signing/verify の defaults と internal API を
+      変えていて、hackers.pub などピアと同じバージョン世代になれば
+      相互運用が安定する可能性がある。Breaking change を含む:
+      - `signRequest` / `verifyRequest` のオプション形
+      - `getAuthenticatedDocumentLoader` の `identity` 引数まわり
+      - `Federation` クラスの構築方法と context loader
+      - `KvStore` / `KeyCache` インターフェース
+      手順:
+        1. `bun/package.json` の `@fedify/fedify` を `^2` に上げて
+           `bun install` → 型エラー全部洗い出す
+        2. `bun/handlers/{sign_delivery,verify,inbox,fetch,build/*}.ts`
+           を順に v2 シグネチャに合わせる
+        3. `bun test` (まだ薄いので integration を足す)
+        4. staging で kamal 経由 reboot → 既知 peer (Mastodon /
+           Misskey / Sharkey / hackers.pub) と双方向に follow/accept
+           が往復するかスモーク
+        5. 通ったら本番
+
+- [ ] **診断ログを剥がす.** v0.1.69〜v0.1.73 で足した:
+      - `bun/handlers/sign_delivery.ts` の `sign.done` 全 header
+        出力と `sign.selftest` 自己 verify
+      - `bun/handlers/fetch.ts` の `fetch.failed` JSON 出力
+      - `delivery/lib/sukhi_delivery/delivery/worker.ex` の
+        `delivery POST ...` 全 header 出力と `delivery 4xx from`
+        body 残し
+      Federation 周りが落ち着いたら sign.done と delivery POST の
+      フル出力は外す。sign.selftest と非 2xx の body は残してよさそう。
+
 ## Admin frontend (work in progress — paused mid-implementation)
 
 Server-rendered HTML admin UI for the gateway. Stack chosen: **htmx +
