@@ -112,9 +112,10 @@ proxy:
   ssl: true
   host: sukhi.f3liz.casa
   app_port: 8080
+  deploy_timeout: 60
   healthcheck:
     path: /nodeinfo/2.1
-    interval: 10
+    interval: 5
     timeout: 5
 
 # ── Anubis env (the web role) ──────────────────────────────────────────────
