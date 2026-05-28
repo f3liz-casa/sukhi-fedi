@@ -12,8 +12,32 @@
   let displayName = $state('');
   let note = $state('');
   let locked = $state(false);
-  let avatarFile: File | null = null;
-  let headerFile: File | null = null;
+  let avatarFile = $state<File | null>(null);
+  let headerFile = $state<File | null>(null);
+
+  // 選んだファイルのプレビュー URL。$derived で作って、変わるたびに前のを revoke。
+  let avatarPreview = $state<string | null>(null);
+  let headerPreview = $state<string | null>(null);
+
+  $effect(() => {
+    if (!avatarFile) {
+      avatarPreview = null;
+      return;
+    }
+    const url = URL.createObjectURL(avatarFile);
+    avatarPreview = url;
+    return () => URL.revokeObjectURL(url);
+  });
+
+  $effect(() => {
+    if (!headerFile) {
+      headerPreview = null;
+      return;
+    }
+    const url = URL.createObjectURL(headerFile);
+    headerPreview = url;
+    return () => URL.revokeObjectURL(url);
+  });
 
   let loading = $state(true);
   let saving = $state(false);
@@ -133,16 +157,20 @@
     </label>
 
     <label class="stack-tight">
-      <span>いまのアイコン</span>
-      {#if me.avatar}
+      <span>{avatarPreview ? '新しいアイコン（保存前）' : 'いまのアイコン'}</span>
+      {#if avatarPreview}
+        <img class="avatar avatar-lg" src={avatarPreview} alt="" />
+      {:else if me.avatar}
         <img class="avatar avatar-lg" src={me.avatar} alt="" />
       {/if}
       <input type="file" accept="image/*" onchange={onAvatar} />
     </label>
 
     <label class="stack-tight">
-      <span>いまのヘッダ画像</span>
-      {#if me.header}
+      <span>{headerPreview ? '新しいヘッダ画像（保存前）' : 'いまのヘッダ画像'}</span>
+      {#if headerPreview}
+        <img class="profile-header" src={headerPreview} alt="" />
+      {:else if me.header}
         <img class="profile-header" src={me.header} alt="" />
       {/if}
       <input type="file" accept="image/*" onchange={onHeader} />
