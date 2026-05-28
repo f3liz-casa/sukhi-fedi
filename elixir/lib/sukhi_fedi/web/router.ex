@@ -265,17 +265,7 @@ defmodule SukhiFedi.Web.Router do
     override_root = System.get_env("STATIC_OVERRIDE_DIR", "/app/priv/static-override")
     baked_root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
 
-    index =
-      cond do
-        File.regular?(Path.join(override_root, "index.html")) ->
-          Path.join(override_root, "index.html")
-
-        File.regular?(Path.join(baked_root, "index.html")) ->
-          Path.join(baked_root, "index.html")
-
-        true ->
-          nil
-      end
+    index = pick_fresher(override_root, baked_root, "index.html")
 
     if index do
       conn
@@ -301,25 +291,17 @@ defmodule SukhiFedi.Web.Router do
       override_root = System.get_env("STATIC_OVERRIDE_DIR", "/app/priv/static-override")
       baked_root = Path.join([:code.priv_dir(:sukhi_fedi), "static"])
 
-      cond do
-        # Host bind-mount takes precedence so operators can `scp` a
-        # fresh CSS / SPA build without re-rolling the image.
-        safe_regular?(override_root, relative) ->
-          full = Path.join(override_root, relative)
-
-          conn
-          |> put_resp_content_type(content_type_for(full))
-          |> send_file(200, full)
-
-        safe_regular?(baked_root, relative) ->
-          full = Path.join(baked_root, relative)
-
-          conn
-          |> put_resp_content_type(content_type_for(full))
-          |> send_file(200, full)
-
-        true ->
+      # 両方に同じ path があるときは mtime が新しいほうを返す。
+      # 以前は override 先勝ちだったので、古い `make push-static` の
+      # 残骸が新しい kamal deploy の baked を覆い隠す事故があった。
+      case pick_fresher(override_root, baked_root, relative) do
+        nil ->
           send_resp(conn, 404, "")
+
+        full ->
+          conn
+          |> put_resp_content_type(content_type_for(full))
+          |> send_file(200, full)
       end
     end
   end
@@ -328,6 +310,36 @@ defmodule SukhiFedi.Web.Router do
     full = Path.join(root, relative)
 
     String.starts_with?(Path.expand(full), Path.expand(root)) and File.regular?(full)
+  end
+
+  # override と baked のうち、両方あれば mtime が新しいほう、片方しか
+  # 無ければそれ、どちらも無ければ nil を返す。
+  defp pick_fresher(override_root, baked_root, relative) do
+    override_ok = safe_regular?(override_root, relative)
+    baked_ok = safe_regular?(baked_root, relative)
+
+    cond do
+      override_ok and baked_ok ->
+        override_path = Path.join(override_root, relative)
+        baked_path = Path.join(baked_root, relative)
+        if mtime(override_path) >= mtime(baked_path), do: override_path, else: baked_path
+
+      override_ok ->
+        Path.join(override_root, relative)
+
+      baked_ok ->
+        Path.join(baked_root, relative)
+
+      true ->
+        nil
+    end
+  end
+
+  defp mtime(path) do
+    case File.stat(path, time: :posix) do
+      {:ok, %File.Stat{mtime: t}} -> t
+      _ -> 0
+    end
   end
 
   # Path-traversal-safe static serve for `/uploads/<key>`. The key is
