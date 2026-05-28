@@ -172,10 +172,18 @@ accessories:
         DISABLE_ADDONS: nodeinfo_monitor
         ERL_FULLSWEEP_AFTER: "20"
         ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 4 +MBas aobf +MHas aobf"
+        # Object storage (rustfs accessory below). media.ex writes
+        # PutObject here; router serve_upload/2 proxies GetObject back
+        # out at /uploads/<key>. URLs in the DB stay `/uploads/<key>`.
+        S3_ENDPOINT: http://sukhi-fedi-rustfs:9000
+        S3_BUCKET: media
+        S3_REGION: us-east-1
       secret:
         - DB_PASS
         - ERLANG_COOKIE
         - SECRET_KEY_BASE
+        - S3_ACCESS_KEY_ID
+        - S3_SECRET_ACCESS_KEY
     options:
       # `elixir` hostname is still required: gateway's BEAM is
       # `gateway@elixir`. Other containers reach it via the
@@ -246,6 +254,30 @@ accessories:
     env:
       clear:
         NATS_URL: nats://sukhi-fedi-nats:4222
+
+  # ── rustfs (S3-compatible object store for media) ─────────────────────────
+  # MinIO 代替の Rust 実装。S3 v4 で gateway から PutObject / GetObject。
+  # gateway accessory の S3_ENDPOINT がこの container を指す。
+  # Data は kamal の directories: で host に bind されるので、container を
+  # 再作成しても残る。Bucket は自動では作られない ─ gateway 起動時に
+  # SukhiFedi.Addons.Media.Bootstrap が ensure_bucket を実行する。
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.5
+    host: 217.142.242.103
+    env:
+      clear:
+        RUSTFS_VOLUMES: /data
+        RUSTFS_ADDRESS: ":9000"
+        RUSTFS_CONSOLE_ENABLE: "false"
+      secret:
+        - RUSTFS_ACCESS_KEY
+        - RUSTFS_SECRET_KEY
+    directories:
+      - data:/data
+    options:
+      network-alias: rustfs
+      memory: 512m
+      cpus: "0.5"
 
   bun:
     image: ghcr.io/f3liz-casa/sukhi-fedi-bun:v0

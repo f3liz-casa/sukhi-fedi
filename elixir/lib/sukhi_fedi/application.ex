@@ -28,7 +28,14 @@ defmodule SukhiFedi.Application do
     children = core_children ++ SukhiFedi.Addon.Registry.children()
 
     opts = [strategy: :one_for_one, name: SukhiFedi.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # rustfs accessory might not be reachable yet on the very first boot,
+    # so do this fire-and-forget. ensure_bucket/0 logs failures and is
+    # idempotent.
+    Task.start(fn -> SukhiFedi.Addons.Media.Bootstrap.ensure_bucket() end)
+
+    result
   end
 
   defp nats_connection_settings do

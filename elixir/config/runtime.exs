@@ -55,6 +55,33 @@ disabled_addons =
 config :sukhi_fedi, :enabled_addons, enabled_addons
 config :sukhi_fedi, :disabled_addons, disabled_addons
 
+# ── Object storage (S3-compatible, rustfs in prod) ───────────────────────
+# media.ex の uploads はこの bucket に PutObject される。endpoint /
+# 認証情報が無い env(test / 素の dev)では設定しない ─ persist_bytes が
+# {:error, :not_configured} を返す。
+if endpoint = System.get_env("S3_ENDPOINT") do
+  uri = URI.parse(endpoint)
+  scheme = "#{uri.scheme}://"
+  port = uri.port || if(uri.scheme == "https", do: 443, else: 80)
+
+  config :ex_aws, :s3,
+    scheme: scheme,
+    host: uri.host,
+    port: port,
+    region: System.get_env("S3_REGION", "us-east-1")
+
+  config :ex_aws,
+    access_key_id: System.fetch_env!("S3_ACCESS_KEY_ID"),
+    secret_access_key: System.fetch_env!("S3_SECRET_ACCESS_KEY"),
+    json_codec: Jason
+
+  config :sukhi_fedi, :s3,
+    bucket: System.get_env("S3_BUCKET", "media"),
+    enabled: true
+else
+  config :sukhi_fedi, :s3, enabled: false
+end
+
 if config_env() == :prod do
   config :sukhi_fedi, SukhiFedi.Repo,
     database: System.get_env("DB_NAME", "sukhi_fedi"),

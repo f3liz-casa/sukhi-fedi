@@ -56,6 +56,19 @@ services:
     command: ["sh", "/bootstrap.sh"]
     restart: "no"
 
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.5
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_ACCESS_KEY: testaccess
+      RUSTFS_SECRET_KEY: testsecret
+    ports:
+      - "19000:9000"
+    tmpfs:
+      - /data
+
   fedify-service:
     build:
       context: ./bun

@@ -29,6 +29,7 @@ defmodule SukhiFedi.Addons.Media do
 
   use SukhiFedi.Addon, id: :media
 
+  require Logger
   import Ecto.Query
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.Media
@@ -98,20 +99,33 @@ defmodule SukhiFedi.Addons.Media do
     end
   end
 
+  # S3 PutObject. Object lives in the rustfs accessory in prod; URL
+  # returned still points at `/uploads/<key>` on our domain because
+  # router.ex serve_upload/2 proxies GetObject. That keeps existing
+  # DB rows valid if we ever swap the backend again.
   defp persist_bytes(key, bytes) do
-    dir = media_dir()
-    full_path = Path.join(dir, key)
+    if s3_enabled?() do
+      bucket = s3_bucket()
 
-    with :ok <- File.mkdir_p(Path.dirname(full_path)),
-         :ok <- File.write(full_path, bytes) do
-      {:ok, public_local_url(key)}
+      case ExAws.S3.put_object(bucket, key, bytes) |> ExAws.request() do
+        {:ok, _resp} ->
+          {:ok, public_local_url(key)}
+
+        {:error, reason} ->
+          Logger.warning("media: s3 put_object failed key=#{key} reason=#{inspect(reason)}")
+          {:error, :write_failed}
+      end
     else
-      _ -> {:error, :write_failed}
+      {:error, :s3_not_configured}
     end
   end
 
-  defp media_dir do
-    System.get_env("MEDIA_DIR") || Path.join([:code.priv_dir(:sukhi_fedi), "static", "uploads"])
+  defp s3_enabled? do
+    Application.get_env(:sukhi_fedi, :s3, [])[:enabled] == true
+  end
+
+  defp s3_bucket do
+    Application.get_env(:sukhi_fedi, :s3, [])[:bucket] || "media"
   end
 
   defp public_local_url(key) do

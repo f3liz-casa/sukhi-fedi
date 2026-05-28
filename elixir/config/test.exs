@@ -16,3 +16,17 @@ config :sukhi_fedi, :nats,
 # Deterministic admin-session signing key for tests.
 config :sukhi_fedi, :secret_key_base,
   "test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Point ex_aws at the rustfs container from docker-compose.test.yml.
+config :ex_aws, :s3,
+  scheme: "http://",
+  host: System.get_env("S3_HOST", "127.0.0.1"),
+  port: String.to_integer(System.get_env("S3_PORT", "19000")),
+  region: "us-east-1"
+
+config :ex_aws,
+  access_key_id: "testaccess",
+  secret_access_key: "testsecret",
+  json_codec: Jason
+
+config :sukhi_fedi, :s3, bucket: "media-test", enabled: true

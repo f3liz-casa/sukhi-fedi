@@ -53,6 +53,15 @@ defmodule SukhiFedi.MixProject do
       # HTTP client
       {:req, "~> 0.5"},
 
+      # S3-compatible object store client (talks to the rustfs
+      # accessory in prod; can point at minio / AWS S3 / etc. via
+      # S3_ENDPOINT). ex_aws needs its own HTTP + XML deps because
+      # it predates Req.
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
+      {:hackney, "~> 1.20"},
+      {:sweet_xml, "~> 0.7"},
+
       # Lightweight observability: telemetry + PromEx (Prometheus).
       # Distributed tracing is intentionally omitted — use structured
       # Logger messages and Prometheus histograms instead.

@@ -18,20 +18,15 @@ defmodule SukhiFedi.Integration.MediaTest do
   alias SukhiFedi.Schema.{Account, Media}
 
   setup do
-    tmp_dir = Path.join(System.tmp_dir!(), "sukhi_media_test_#{:rand.uniform(1_000_000)}")
-    File.mkdir_p!(tmp_dir)
-    System.put_env("MEDIA_DIR", tmp_dir)
-
-    on_exit(fn ->
-      File.rm_rf(tmp_dir)
-      System.delete_env("MEDIA_DIR")
-    end)
-
-    {:ok, media_dir: tmp_dir}
+    # Bucket は app boot 時の Bootstrap が作るが、test では Application.start
+    # 前に書く順序になりがちなので明示的に ensure。失敗しても続行(rustfs が
+    # 起きていなければ test 自体が落ちる)。
+    _ = SukhiFedi.Addons.Media.Bootstrap.ensure_bucket()
+    :ok
   end
 
   describe "create_from_upload/3" do
-    test "writes file + inserts Media row", %{media_dir: dir} do
+    test "writes object + inserts Media row" do
       a = create_account!("alice_upload")
       bytes = <<137, 80, 78, 71, 13, 10, 26, 10>> <> :binary.copy(<<0>>, 100)
 
@@ -49,9 +44,8 @@ defmodule SukhiFedi.Integration.MediaTest do
       assert m.url =~ "/uploads/"
 
       key = String.replace_leading(URI.parse(m.url).path, "/uploads/", "")
-      full_path = Path.join(dir, key)
-      assert File.exists?(full_path)
-      assert File.read!(full_path) == bytes
+      bucket = Application.get_env(:sukhi_fedi, :s3)[:bucket]
+      assert {:ok, %{body: ^bytes}} = ExAws.S3.get_object(bucket, key) |> ExAws.request()
     end
 
     test "rejects empty upload" do
