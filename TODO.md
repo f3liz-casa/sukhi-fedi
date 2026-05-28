@@ -10,6 +10,49 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 
 ---
 
+## 後で拾う polish (2026-05-28 棚卸し)
+
+今日 `locked` の通り道 + ActorJson parity を片付けたとき横に出てきた
+小ぶりな項目。痛みは中〜小なので個別 plan を立てて順に。
+
+- [ ] **デフォルトアバターを実 PNG にする.**
+      `api/lib/sukhi_api/views/mastodon_account.ex` の `@default_image`
+      は 1×1 透明 PNG の data URL。`/static/missing.png` を本当に
+      置いて差し戻す。「画像見えてる」と「avatar 未設定」を区別
+      できるようにしたい。
+- [ ] **avatar/header serve の cache + presigned 化.**
+      `serve_upload/2` が `ExAws.S3.get_object` を BEAM プロセスで
+      読んで `send_resp` している。content-addressed なので
+      `cache-control: public, max-age=31536000, immutable` を返せる
+      はず。もう一歩進めて rustfs から直接 302 (presigned) にできれば
+      federated peer の毎回 BEAM 叩きが消える。
+- [ ] **`SukhiFedi.Addons.Media` の compile-time `@bucket` / `@endpoint`.**
+      `lib/sukhi_fedi/addons/media.ex:36-41` で `System.get_env` を
+      モジュール属性で読んでいる。release build 時に焼き込まれて
+      runtime で効かない。今は presigned upload 経路でしか使って
+      いないので無害だが、信じて触ると踏む地雷。`Application.get_env`
+      に揃える。
+- [ ] **rustfs first-boot の chown 10001 を script 化.**
+      kamal `directories:` が rocky 所有で作るので container が
+      書けず落ちる。今コメントで残してあるだけ。`scripts/setup.sh`
+      か init container にして「初回も kamal が完結」させる。
+- [ ] **Follow Accept 後の backfill.** `maybe_handle_follow_accept`
+      は相手 outbox を fetch しない (Mastodon 標準ではある)。
+      UX として「フォローしたのに静か」が痒い。意図的後回し。
+      ([memory: sukhi-fedi-follow-backfill](../.claude/projects/-Users-nyanrus--shiro/memory/sukhi-fedi-follow-backfill.md))
+- [ ] **`config/deploy.yml` の IP ハードコード × 6.**
+      `217.142.242.103` が 6 箇所。YAML anchor (`&primary` +
+      `*primary`) で 1 か所に。
+- [ ] **`MEDIA_DIR` 残骸.** `lib/.../web/router.ex:117-120` の
+      コメントと `media.ex` の moduledoc がまだ `MEDIA_DIR
+      (default priv/static/uploads)` を語っている。rustfs 移行で
+      実装上は無効。嘘になっているので落とす。
+- [ ] **Inbound `manuallyApprovesFollowers` の保存.**
+      `RemoteAccounts.upsert_from_actor_json/1` で
+      `manuallyApprovesFollowers` を読んで `:locked` に流し込む。
+      カラムと `changeset_remote` の cast は今日揃えたので追加は
+      parser 行 1〜2 行のみ。
+
 ## Mastodon API surface — open
 
 - [ ] **Streaming WebSocket** — see [OPEN_QUESTIONS Q2](OPEN_QUESTIONS.md#q2-streaming-websocket--どこに置くか).

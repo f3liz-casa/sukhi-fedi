@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+defmodule SukhiDelivery.AP.ActorJsonTest do
+  # Parity-with-gateway test. The shape contract checked here must
+  # match `SukhiFedi.AP.ActorJsonTest` line-for-line; if you add a
+  # field on one side, add it here too, otherwise federated peers will
+  # see a different actor JSON depending on which node served it.
+  use ExUnit.Case, async: false
+
+  alias SukhiDelivery.AP.ActorJson
+  alias SukhiDelivery.Schema.Account
+
+  @expected_top_keys ~w(
+    @context id type preferredUsername name summary inbox outbox
+    followers following featured manuallyApprovesFollowers endpoints
+    publicKey icon image
+  )
+
+  setup do
+    prev = Application.get_env(:sukhi_delivery, :domain)
+    Application.put_env(:sukhi_delivery, :domain, "test.example")
+    on_exit(fn -> Application.put_env(:sukhi_delivery, :domain, prev) end)
+    :ok
+  end
+
+  test "build_person/1 emits the contracted shape" do
+    account = %Account{
+      username: "alice",
+      display_name: "Alice",
+      summary: "hello",
+      public_key_pem: "PEM",
+      avatar_url: "https://cdn.example/a.png",
+      banner_url: "https://cdn.example/b.jpg",
+      locked: true
+    }
+
+    person = ActorJson.build_person(account)
+
+    assert MapSet.new(Map.keys(person)) == MapSet.new(@expected_top_keys)
+    assert person["id"] == "https://test.example/users/alice"
+    assert person["type"] == "Person"
+    assert person["manuallyApprovesFollowers"] == true
+    assert person["endpoints"] == %{"sharedInbox" => "https://test.example/inbox"}
+
+    assert MapSet.new(Map.keys(person["publicKey"])) ==
+             MapSet.new(~w(id owner publicKeyPem))
+
+    for key <- ~w(icon image) do
+      assert MapSet.new(Map.keys(person[key])) == MapSet.new(~w(type mediaType url))
+      assert person[key]["type"] == "Image"
+    end
+  end
+
+  test "build_person/1 omits icon/image when avatar/banner are blank" do
+    account = %Account{username: "bob", public_key_pem: "PEM"}
+    person = ActorJson.build_person(account)
+    refute Map.has_key?(person, "icon")
+    refute Map.has_key?(person, "image")
+    assert person["manuallyApprovesFollowers"] == false
+  end
+end
