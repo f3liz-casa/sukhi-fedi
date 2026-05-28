@@ -260,6 +260,33 @@ defmodule SukhiFedi.Release do
   end
 
   @doc """
+  One-shot: fire `Update {Person}` to every known follower's inbox
+  (+ relays) for a local account, without changing any profile field.
+  Use to nudge a remote server with a stale cached actor — they refresh
+  the cached publicKey and HTTP-sig verification recovers.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.broadcast_actor_update("nyanrus")'
+  """
+  def broadcast_actor_update(username) when is_binary(username) do
+    load_app()
+
+    do_broadcast = fn -> SukhiFedi.Accounts.broadcast_actor_update(username) end
+
+    result =
+      if Process.whereis(SukhiFedi.Repo) do
+        do_broadcast.()
+      else
+        {:ok, r, _apps} =
+          Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_broadcast.() end)
+
+        r
+      end
+
+    IO.inspect(result, label: :broadcast_actor_update)
+    result
+  end
+
+  @doc """
   One-shot: insert a `monitored_instances` row for every existing
   watcher `Account` that doesn't have one yet. Safe to run multiple
   times (no-op on conflict).
