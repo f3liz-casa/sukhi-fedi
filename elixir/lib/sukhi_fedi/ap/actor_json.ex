@@ -41,6 +41,30 @@ defmodule SukhiFedi.AP.ActorJson do
         "publicKeyPem" => account.public_key_pem || ""
       }
     }
+    |> maybe_put_image("icon", account.avatar_url)
+    |> maybe_put_image("image", account.banner_url)
+  end
+
+  defp maybe_put_image(map, _key, nil), do: map
+  defp maybe_put_image(map, _key, ""), do: map
+
+  defp maybe_put_image(map, key, url) do
+    Map.put(map, key, %{
+      "type" => "Image",
+      "mediaType" => media_type_for(url),
+      "url" => url
+    })
+  end
+
+  defp media_type_for(url) do
+    case url |> Path.extname() |> String.downcase() do
+      ".png" -> "image/png"
+      ".jpg" -> "image/jpeg"
+      ".jpeg" -> "image/jpeg"
+      ".gif" -> "image/gif"
+      ".webp" -> "image/webp"
+      _ -> "image/jpeg"
+    end
   end
 
   @spec build_update(Account.t()) :: map()
