@@ -22,6 +22,9 @@ defmodule SukhiDelivery.Schema.Account do
     field :actor_uri, :string
     field :inbox_url, :string
     field :shared_inbox_url, :string
+    # Mirrors AP `manuallyApprovesFollowers` / Mastodon `locked`.
+    # ActorJson.build_person/1 reads it when fanning out Update(Actor).
+    field :locked, :boolean, default: false
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end

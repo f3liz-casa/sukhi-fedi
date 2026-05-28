@@ -12,14 +12,14 @@ defmodule SukhiFedi.Web.NoteController do
   """
 
   import Plug.Conn
+  alias SukhiFedi.AP.ActorJson
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
 
   def show(conn, _opts) do
     username = conn.path_params["name"]
     note_id_raw = conn.path_params["note_id"]
-    domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{username}"
+    actor_uri = ActorJson.actor_uri(username)
 
     with {note_id, ""} <- Integer.parse(note_id_raw || ""),
          %Account{id: aid} <- SukhiFedi.Accounts.by_local_username(username),

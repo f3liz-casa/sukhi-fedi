@@ -6,14 +6,29 @@ defmodule SukhiFedi.AP.ActorJson do
   public state changes (notably right after we Accept a new Follow, so
   remote servers refresh their cached copy instead of showing stale
   follower counts).
+
+  > ⚠️ Must stay shape-compatible with `SukhiDelivery.AP.ActorJson` on
+  > the delivery node. Any key added on one side must be added on the
+  > other in the same commit — see `SukhiFedi.AP.ActorJsonTest`.
   """
 
   alias SukhiFedi.Schema.Account
 
+  @doc """
+  Canonical local actor URI for an account or username. One place so
+  string interpolation doesn't drift away from `build_person/1`.
+  """
+  @spec actor_uri(Account.t() | String.t()) :: String.t()
+  def actor_uri(%Account{username: u}), do: actor_uri(u)
+
+  def actor_uri(username) when is_binary(username) do
+    "https://#{SukhiFedi.Config.domain!()}/users/#{username}"
+  end
+
   @spec build_person(Account.t()) :: map()
   def build_person(%Account{} = account) do
     domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{account.username}"
+    actor_uri = actor_uri(account)
 
     %{
       "@context" => [
@@ -34,6 +49,7 @@ defmodule SukhiFedi.AP.ActorJson do
       "followers" => "#{actor_uri}/followers",
       "following" => "#{actor_uri}/following",
       "featured" => "#{actor_uri}/featured",
+      "manuallyApprovesFollowers" => account.locked || false,
       "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
       "publicKey" => %{
         "id" => "#{actor_uri}#main-key",
@@ -70,7 +86,7 @@ defmodule SukhiFedi.AP.ActorJson do
   @spec build_update(Account.t()) :: map()
   def build_update(%Account{} = account) do
     domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{account.username}"
+    actor_uri = actor_uri(account)
 
     %{
       "@context" => [

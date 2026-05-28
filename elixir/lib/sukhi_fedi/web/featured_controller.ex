@@ -6,12 +6,13 @@ defmodule SukhiFedi.Web.FeaturedController do
   """
 
   import Plug.Conn
+  alias SukhiFedi.AP.ActorJson
   alias SukhiFedi.Addons.PinnedNotes
 
   def show(conn, _opts) do
     username = conn.path_params["name"]
     domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{username}"
+    actor_uri = ActorJson.actor_uri(username)
 
     notes = PinnedNotes.list_for_username(username)
 

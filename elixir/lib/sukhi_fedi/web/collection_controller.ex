@@ -9,12 +9,12 @@ defmodule SukhiFedi.Web.CollectionController do
   import Plug.Conn
   import Ecto.Query
   alias SukhiFedi.{Repo, Social}
+  alias SukhiFedi.AP.ActorJson
   alias SukhiFedi.Schema.Note
 
   def followers(conn, _opts) do
     username = conn.path_params["name"]
-    domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{username}"
+    actor_uri = ActorJson.actor_uri(username)
 
     account = SukhiFedi.Accounts.by_local_username(username)
 
@@ -40,8 +40,7 @@ defmodule SukhiFedi.Web.CollectionController do
 
   def outbox(conn, _opts) do
     username = conn.path_params["name"]
-    domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{username}"
+    actor_uri = ActorJson.actor_uri(username)
 
     account = SukhiFedi.Accounts.by_local_username(username)
 
@@ -98,8 +97,7 @@ defmodule SukhiFedi.Web.CollectionController do
 
   def following(conn, _opts) do
     username = conn.path_params["name"]
-    domain = SukhiFedi.Config.domain!()
-    actor_uri = "https://#{domain}/users/#{username}"
+    actor_uri = ActorJson.actor_uri(username)
 
     account = SukhiFedi.Accounts.by_local_username(username)
 
@@ -109,7 +107,7 @@ defmodule SukhiFedi.Web.CollectionController do
       items =
         follower_uri
         |> Social.list_following()
-        |> Enum.map(fn %{username: u} -> "https://#{domain}/users/#{u}" end)
+        |> Enum.map(fn %{username: u} -> ActorJson.actor_uri(u) end)
 
       collection = %{
         "@context" => "https://www.w3.org/ns/activitystreams",

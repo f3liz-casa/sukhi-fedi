@@ -218,9 +218,8 @@ defmodule SukhiFedi.Accounts do
 
   @doc """
   Update profile fields (display_name, summary/note, avatar/header,
-  bot, locked is currently ignored — no `locked` column yet). Emits
-  `sns.outbox.actor.updated` so federated peers can refresh their
-  cached actor JSON.
+  bot, locked). Emits `sns.outbox.actor.updated` so federated peers
+  can refresh their cached actor JSON.
   """
   @spec update_credentials(Account.t() | integer(), map()) ::
           {:ok, Account.t()} | {:error, :not_found | {:validation, map()}}

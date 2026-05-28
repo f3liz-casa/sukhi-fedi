@@ -6,6 +6,10 @@ defmodule SukhiDelivery.AP.ActorJson do
   Mirrors `SukhiFedi.AP.ActorJson` on the gateway. Lives here because
   `Outbox.Consumer` runs on the delivery node and needs to fan out
   Update(Actor) without a round-trip back to the gateway.
+
+  > ⚠️ Must stay shape-compatible with `SukhiFedi.AP.ActorJson` on the
+  > gateway. Any key added on one side must be added on the other in
+  > the same commit — see `SukhiDelivery.AP.ActorJsonTest`.
   """
 
   alias SukhiDelivery.Schema.Account
@@ -34,6 +38,7 @@ defmodule SukhiDelivery.AP.ActorJson do
       "followers" => "#{actor_uri}/followers",
       "following" => "#{actor_uri}/following",
       "featured" => "#{actor_uri}/featured",
+      "manuallyApprovesFollowers" => account.locked || false,
       "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
       "publicKey" => %{
         "id" => "#{actor_uri}#main-key",

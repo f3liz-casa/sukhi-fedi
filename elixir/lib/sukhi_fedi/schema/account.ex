@@ -18,6 +18,10 @@ defmodule SukhiFedi.Schema.Account do
     field :avatar_url, :string
     field :banner_url, :string
     field :is_admin, :boolean, default: false
+    # Manual follow approval (Mastodon `locked` / AP
+    # `manuallyApprovesFollowers`). For remote rows this mirrors the
+    # value from the upstream actor JSON.
+    field :locked, :boolean, default: false
     field :suspended_at, :utc_datetime
     field :suspended_by_id, :id
     field :suspension_reason, :string
@@ -59,6 +63,7 @@ defmodule SukhiFedi.Schema.Account do
       :public_key_pem,
       :avatar_url,
       :banner_url,
+      :locked,
       :last_fetched_at
     ])
     |> validate_required([:username, :domain, :actor_uri])
@@ -68,15 +73,15 @@ defmodule SukhiFedi.Schema.Account do
   Changeset for `PATCH /api/v1/accounts/update_credentials`.
 
   Mastodon allows clients to update display_name, note (we map to
-  `summary`), avatar/header URLs, and `bot` flag. We don't expose
-  username changes (immutable AP id) and don't accept locked yet
-  (no column).
+  `summary`), avatar/header URLs, `bot` flag, and `locked` (manual
+  follow approval). We don't expose username changes — the AP id is
+  immutable.
   """
   def changeset_credentials(account, attrs) do
     attrs = normalize_credentials_attrs(attrs)
 
     account
-    |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot])
+    |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot, :locked])
     |> validate_length(:display_name, max: 100)
     |> validate_length(:summary, max: 1024)
   end

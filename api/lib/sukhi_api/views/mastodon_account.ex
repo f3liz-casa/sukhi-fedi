@@ -67,7 +67,7 @@ defmodule SukhiApi.Views.MastodonAccount do
       username: username,
       acct: acct,
       display_name: account.display_name || username,
-      locked: false,
+      locked: Map.get(account, :locked, false) || false,
       bot: Map.get(account, :is_bot, false) || false,
       discoverable: true,
       group: false,
