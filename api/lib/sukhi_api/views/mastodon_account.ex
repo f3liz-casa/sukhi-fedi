@@ -35,9 +35,22 @@ defmodule SukhiApi.Views.MastodonAccount do
   def render(nil, _counts), do: nil
 
   def render(account, counts) do
-    domain = SukhiApi.Config.domain!()
+    local_domain = SukhiApi.Config.domain!()
     username = account.username
-    actor_uri = "https://#{domain}/users/#{username}"
+    remote_domain = Map.get(account, :domain)
+
+    # acct は Mastodon の慣習: local は "user"、remote は "user@host"。
+    # url / uri は local なら自分のドメインで組み、remote なら
+    # upsert 時に保存した canonical actor_uri を返す(無い古い行は
+    # local 形式に fallback)。
+    acct =
+      if remote_domain in [nil, ""],
+        do: username,
+        else: "#{username}@#{remote_domain}"
+
+    actor_uri =
+      Map.get(account, :actor_uri) ||
+        "https://#{local_domain}/users/#{username}"
 
     # Mastodon spec は avatar/header を「常に非 null の URL」と決めて
     # おり、Moshidon など Kotlin/Gson 系のクライアントは String non-null
@@ -52,7 +65,7 @@ defmodule SukhiApi.Views.MastodonAccount do
     %{
       id: Id.encode(account.id),
       username: username,
-      acct: username,
+      acct: acct,
       display_name: account.display_name || username,
       locked: false,
       bot: Map.get(account, :is_bot, false) || false,
