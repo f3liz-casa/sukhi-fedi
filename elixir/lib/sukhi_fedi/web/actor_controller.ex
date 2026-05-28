@@ -4,42 +4,18 @@ defmodule SukhiFedi.Web.ActorController do
 
   def show(conn, _opts) do
     username = conn.path_params["name"]
-    
+
     case SukhiFedi.Accounts.by_local_username(username) do
       nil ->
         send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
-      
+
       account ->
-        domain = SukhiFedi.Config.domain!()
-        actor_uri = "https://#{domain}/users/#{username}"
-        
-        actor = %{
-          "@context" => [
-            "https://www.w3.org/ns/activitystreams",
-            "https://w3id.org/security/v1",
-            %{"featured" => %{"@id" => "toot:featured", "@type" => "@id"}, "toot" => "http://joinmastodon.org/ns#"}
-          ],
-          "id" => actor_uri,
-          "type" => "Person",
-          "preferredUsername" => username,
-          "name" => account.display_name || username,
-          "summary" => account.summary || "",
-          "inbox" => "#{actor_uri}/inbox",
-          "outbox" => "#{actor_uri}/outbox",
-          "followers" => "#{actor_uri}/followers",
-          "following" => "#{actor_uri}/following",
-          "featured" => "#{actor_uri}/featured",
-          # Misskey + Mastodon read this to fan out one POST per
-          # peer-domain instead of one per follower; without it
-          # they fall back to per-user inbox and we get hammered.
-          "endpoints" => %{"sharedInbox" => "https://#{domain}/inbox"},
-          "publicKey" => %{
-            "id" => "#{actor_uri}#main-key",
-            "owner" => actor_uri,
-            "publicKeyPem" => account.public_key_pem || ""
-          }
-        }
-        
+        # Use the single source of truth so icon / image / endpoints /
+        # publicKey stay in lockstep with the Update(Person) body that
+        # delivery fans out. Before this collapse, the inline map here
+        # was missing icon/image entirely and avatars never federated.
+        actor = SukhiFedi.AP.ActorJson.build_person(account)
+
         conn
         |> put_resp_content_type("application/activity+json")
         |> send_resp(200, Jason.encode!(actor))
