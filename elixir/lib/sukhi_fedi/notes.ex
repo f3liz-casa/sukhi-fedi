@@ -1124,13 +1124,24 @@ defmodule SukhiFedi.Notes do
           |> MapSet.new()
       end
 
+    emoji_keys = rows |> Enum.map(fn {_, e, _} -> e end) |> Enum.uniq()
+    urls = SukhiFedi.CustomEmojis.lookup_many(emoji_keys)
+
     rows
     |> Enum.group_by(fn {note_id, _emoji, _count} -> note_id end)
     |> Map.new(fn {note_id, group} ->
       list =
         group
         |> Enum.map(fn {_note_id, emoji, count} ->
-          %{name: emoji, count: count, me: MapSet.member?(mine, {note_id, emoji})}
+          icon = Map.get(urls, emoji, %{})
+
+          %{
+            name: emoji,
+            count: count,
+            me: MapSet.member?(mine, {note_id, emoji}),
+            url: Map.get(icon, :url),
+            static_url: Map.get(icon, :static_url) || Map.get(icon, :url)
+          }
         end)
         |> Enum.sort_by(fn %{count: c, name: n} -> {-c, n} end)
 

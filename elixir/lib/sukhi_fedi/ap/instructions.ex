@@ -402,11 +402,13 @@ defmodule SukhiFedi.AP.Instructions do
        when type in ["Like", "EmojiReact"] and is_binary(actor_uri) do
     with %Note{id: note_id, account_id: author_id} <- resolve_target_note(object),
          {:ok, %Account{id: reactor_id}} <- resolve_or_ingest_actor(actor_uri) do
+      stored_emoji = stored_reaction_emoji(activity, actor_uri)
+
       %Reaction{}
       |> Reaction.changeset(%{
         account_id: reactor_id,
         note_id: note_id,
-        emoji: reaction_emoji(type, activity)
+        emoji: stored_emoji
       })
       |> Repo.insert(on_conflict: :nothing)
 
@@ -426,11 +428,63 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_reaction(_), do: :ok
 
-  # `Like` carries no emoji → our favourite star. `EmojiReact` carries
-  # the reaction in `content` (a unicode emoji or a `:shortcode:`);
-  # fall back to the star when a peer omits it.
-  defp reaction_emoji("EmojiReact", %{"content" => c}) when is_binary(c) and c != "", do: c
-  defp reaction_emoji(_type, _activity), do: Notes.favourite_emoji()
+  # Compute the storage key for `reactions.emoji`:
+  # - missing/blank content → favourite star (plain Mastodon Like)
+  # - unicode glyph → stored verbatim
+  # - `:shortcode:` → namespaced with actor's host, and any matching
+  #   `tag` Emoji entry is upserted into the custom emoji directory
+  defp stored_reaction_emoji(activity, actor_uri) do
+    content = activity["content"]
+
+    cond do
+      not is_binary(content) or content == "" ->
+        Notes.favourite_emoji()
+
+      not String.starts_with?(content, ":") ->
+        content
+
+      true ->
+        domain = actor_host(actor_uri)
+        upsert_emoji_from_activity(content, activity["tag"], domain)
+        SukhiFedi.CustomEmojis.namespaced(content, domain)
+    end
+  end
+
+  defp actor_host(actor_uri) do
+    case URI.parse(actor_uri) do
+      %URI{host: h} when is_binary(h) -> h
+      _ -> nil
+    end
+  end
+
+  # `tag` is sometimes a list, sometimes a single map (Misskey occasionally).
+  defp upsert_emoji_from_activity(_content, _tag, nil), do: :ok
+
+  defp upsert_emoji_from_activity(content, tag, domain) do
+    shortcode =
+      case Regex.run(~r/^:([^:]+):$/, content) do
+        [_, s] -> s
+        _ -> nil
+      end
+
+    entry = find_emoji_tag(tag, content)
+
+    if shortcode && is_map(entry) do
+      SukhiFedi.CustomEmojis.upsert_from_tag(shortcode, entry, domain)
+    else
+      :ok
+    end
+  end
+
+  defp find_emoji_tag(tag, name) when is_list(tag) do
+    Enum.find(tag, fn
+      %{"type" => "Emoji", "name" => ^name} -> true
+      _ -> false
+    end)
+  end
+
+  defp find_emoji_tag(%{"type" => "Emoji", "name" => name} = t, name), do: t
+  defp find_emoji_tag(_, _), do: nil
 
   # Inbound `Announce` of a local note → reblog notification.
   defp maybe_notify_announce(%{"type" => "Announce", "actor" => actor_uri, "object" => object_uri}) do
@@ -611,7 +665,7 @@ defmodule SukhiFedi.AP.Instructions do
       type when type in ["Like", "EmojiReact"] ->
         with %Note{id: note_id} <- resolve_target_note(inner["object"]),
              {:ok, %Account{id: reactor_id}} <- resolve_or_ingest_actor(actor_uri) do
-          emoji = reaction_emoji(type, inner)
+          emoji = stored_reaction_emoji(inner, actor_uri)
 
           from(r in Reaction,
             where: r.account_id == ^reactor_id and r.note_id == ^note_id and r.emoji == ^emoji
