@@ -21,11 +21,22 @@
   let pending = $state(false);
   let error = $state<string | null>(null);
 
+  // ボタン自身が持つ最新の relationship。prop から初期化して、
+  // follow / unfollow が返ってきたら上書きする。prop 直バインドだと、
+  // 親がこの relationship を保持し直さないかぎり「フォロー」のまま
+  // 動かなくなる。
+  let current = $state<Relationship | null>(relationship);
+
+  // prop が外から差し替わったら追従。$effect で同期。
+  $effect(() => {
+    current = relationship;
+  });
+
   // `state` という名前は rune `$state` の解析と衝突するのでズラす。
   let currentState = $derived(
-    relationship?.following
+    current?.following
       ? 'following'
-      : relationship?.requested
+      : current?.requested
         ? 'requested'
         : 'idle'
   );
@@ -43,7 +54,7 @@
       void goto('/');
       return;
     }
-    if (pending || !relationship) return;
+    if (pending || !current) return;
     pending = true;
     error = null;
     try {
@@ -51,6 +62,7 @@
         currentState === 'following' || currentState === 'requested'
           ? await unfollowAccount(accountId)
           : await followAccount(accountId);
+      current = r;
       onchange?.(r);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
@@ -66,7 +78,7 @@
   }
 </script>
 
-{#if relationship}
+{#if current}
   <button
     type="button"
     class="follow-btn"
