@@ -7,9 +7,9 @@
 
 import { EmojiReact } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 
-export interface BuildEmojiReactPayload {
+export interface BuildEmojiReactPayload extends SignedPayload {
   actor: string;
   object: string;
   // The reaction emoji: a unicode glyph or a `:shortcode:`.
@@ -34,7 +34,7 @@ export async function handleBuildEmojiReact(
     published: nowInstant(),
   });
 
-  const emojiReactJson = await signAndSerialize(payload.actor, react);
+  const emojiReactJson = await signAndSerialize(payload, react);
 
   return {
     emojiReact: emojiReactJson,

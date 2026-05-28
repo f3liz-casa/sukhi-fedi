@@ -1,9 +1,9 @@
 import { Delete, Tombstone } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
-export interface BuildDeletePayload {
+export interface BuildDeletePayload extends SignedPayload {
   actor: string;
   activityId: string;
   // The AP id of the object being deleted (Note, Article, …).
@@ -32,7 +32,7 @@ export async function handleBuildDelete(
     ccs: audience.ccs,
   });
 
-  const deleteJson = await signAndSerialize(payload.actor, del);
+  const deleteJson = await signAndSerialize(payload, del);
 
   return {
     delete: deleteJson,

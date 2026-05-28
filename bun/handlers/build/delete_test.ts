@@ -6,12 +6,13 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildDelete } from "./delete.ts";
-import { containsPublic, containsFollowers } from "./_test_helpers.ts";
+import { containsPublic, containsFollowers, testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 
 test("Delete(Note) addresses Public on `to` and followers on `cc`", async () => {
   const result = await handleBuildDelete({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/activities/delete/1`,
     objectId: `${ACTOR}/notes/1`,

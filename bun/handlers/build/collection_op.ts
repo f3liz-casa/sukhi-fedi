@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Add, Remove } from "@fedify/fedify/vocab";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 
-export interface CollectionOpPayload {
+export interface CollectionOpPayload extends SignedPayload {
   /** Local actor URI performing the operation. */
   actor: string;
   /** AP URI of the object being added/removed (e.g. note URI). */
@@ -29,7 +29,7 @@ export async function handleBuildAdd(payload: CollectionOpPayload): Promise<Coll
     target: new URL(payload.targetUri),
   });
 
-  const activityJson = await signAndSerialize(payload.actor, activity);
+  const activityJson = await signAndSerialize(payload, activity);
 
   return {
     activity: activityJson,
@@ -46,7 +46,7 @@ export async function handleBuildRemove(payload: CollectionOpPayload): Promise<C
     target: new URL(payload.targetUri),
   });
 
-  const activityJson = await signAndSerialize(payload.actor, activity);
+  const activityJson = await signAndSerialize(payload, activity);
 
   return {
     activity: activityJson,

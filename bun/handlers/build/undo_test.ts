@@ -8,12 +8,13 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildUndo } from "./undo.ts";
-import { asStrings, containsPublic, containsFollowers } from "./_test_helpers.ts";
+import { asStrings, containsPublic, containsFollowers, testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 
 test("Undo(Like) wraps a Like with id+actor+object", async () => {
   const result = await handleBuildUndo({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/likes/42/undo`,
     recipientInboxes: ["https://remote.example/users/bob/inbox"],
@@ -37,6 +38,7 @@ test("Undo(Like) wraps a Like with id+actor+object", async () => {
 
 test("Undo(EmojiReact) wraps an EmojiReact with id+actor+object", async () => {
   const result = await handleBuildUndo({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/reactions/9/undo`,
     recipientInboxes: ["https://remote.example/users/bob/inbox"],
@@ -60,6 +62,7 @@ test("Undo(Follow) wraps a Follow with id+actor+object", async () => {
   const followee = "https://remote.example/users/bob";
 
   const result = await handleBuildUndo({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/follows/7/undo`,
     recipientInboxes: [`${followee}/inbox`],
@@ -86,6 +89,7 @@ test("Undo's recipientInboxes is passed through verbatim", async () => {
   ];
 
   const result = await handleBuildUndo({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/likes/1/undo`,
     recipientInboxes: inboxes,
@@ -104,6 +108,7 @@ test("Undo(Like) of a public note keeps mirrored audience (Public + sender follo
   // a Like on a public note Undo's still go to Public + the original
   // sender's followers so the receiver can update visibility uniformly.
   const result = await handleBuildUndo({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     activityId: `${ACTOR}/likes/1/undo`,
     recipientInboxes: [],

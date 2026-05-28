@@ -455,6 +455,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
   # ── translation + fan-out ────────────────────────────────────────────────
 
   defp translate_and_fanout(object_type, payload, actor_uri, activity_id, inboxes, opts \\ []) do
+    payload = inject_signing_for(payload, actor_uri)
+
     case FedifyClient.translate(object_type, payload) do
       {:ok, translator_result} ->
         body =
@@ -519,6 +521,35 @@ defmodule SukhiDelivery.Outbox.Consumer do
   rescue
     _ -> nil
   end
+
+  # Add the RSA private JWK + keyId every translator needs so the bun
+  # builder can produce a valid RsaSignature2017 LD-sig. Without these
+  # bun would fall back to generating an in-memory Ed25519 keypair
+  # whose signature can't be verified against the actor's published
+  # publicKeyPem — that mismatch is what hackers.pub was choking on.
+  defp inject_signing_for(payload, actor_uri)
+       when is_map(payload) and is_binary(actor_uri) do
+    domain = SukhiDelivery.Config.domain!()
+    expected_prefix = "https://#{domain}/users/"
+
+    if String.starts_with?(actor_uri, expected_prefix) do
+      username = String.replace_prefix(actor_uri, expected_prefix, "")
+
+      case SukhiDelivery.Accounts.by_local_username(username) do
+        %Account{private_key_jwk: jwk} when is_map(jwk) ->
+          payload
+          |> Map.put(:privateKeyJwk, jwk)
+          |> Map.put(:keyId, "#{actor_uri}#main-key")
+
+        _ ->
+          payload
+      end
+    else
+      payload
+    end
+  end
+
+  defp inject_signing_for(payload, _), do: payload
 
   defp follower_uri_to_account(follower_uri) when is_binary(follower_uri) do
     domain = SukhiDelivery.Config.domain!()

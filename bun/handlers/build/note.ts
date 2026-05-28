@@ -1,9 +1,9 @@
 import { Create, Note } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { injectMisskey, injectQuote, signAndSerialize } from "../../fedify/utils.ts";
+import { injectMisskey, injectQuote, signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
-export interface BuildNotePayload {
+export interface BuildNotePayload extends SignedPayload {
   actor: string;
   content: string;
   recipientInboxes: string[];
@@ -40,7 +40,7 @@ export async function handleBuildNote(
     ccs: audience.ccs,
   });
 
-  const noteJson = await signAndSerialize(payload.actor, create);
+  const noteJson = await signAndSerialize(payload, create);
   injectMisskey(noteJson, payload.content);
   injectQuote(noteJson, payload.quoteUrl);
 

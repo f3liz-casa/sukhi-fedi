@@ -6,12 +6,14 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildEmojiReact } from "./emoji_react.ts";
+import { testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 const NOTE = "https://remote.example/notes/abc";
 
 test("EmojiReact carries type, actor, object and the emoji content", async () => {
   const result = await handleBuildEmojiReact({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: "🦊",
@@ -28,6 +30,7 @@ test("EmojiReact carries type, actor, object and the emoji content", async () =>
 
 test("EmojiReact accepts a :shortcode: custom emoji", async () => {
   const result = await handleBuildEmojiReact({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: ":blobcat:",
@@ -42,6 +45,7 @@ test("EmojiReact accepts a :shortcode: custom emoji", async () => {
 test("EmojiReact passes recipientInboxes through verbatim", async () => {
   const inboxes = ["https://remote.example/users/bob/inbox"];
   const result = await handleBuildEmojiReact({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: "👍",

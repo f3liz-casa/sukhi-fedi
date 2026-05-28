@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Create, Note } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { injectMisskey, signAndSerialize } from "../../fedify/utils.ts";
+import { injectMisskey, signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
-export interface BuildDmPayload {
+export interface BuildDmPayload extends SignedPayload {
   /** Local actor URI of the sender. */
   actor: string;
   /** HTML content of the message. */
@@ -50,7 +50,7 @@ export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmRes
     ccs: audience.ccs,
   });
 
-  const noteJson = await signAndSerialize(payload.actor, create);
+  const noteJson = await signAndSerialize(payload, create);
   injectMisskey(noteJson, payload.content);
 
   return {

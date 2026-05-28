@@ -1,8 +1,8 @@
 import { Like } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 
-export interface BuildLikePayload {
+export interface BuildLikePayload extends SignedPayload {
   actor: string;
   object: string;
   activityId: string;
@@ -24,7 +24,7 @@ export async function handleBuildLike(
     published: nowInstant(),
   });
 
-  const likeJson = await signAndSerialize(payload.actor, like);
+  const likeJson = await signAndSerialize(payload, like);
 
   return {
     like: likeJson,

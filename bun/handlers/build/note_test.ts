@@ -7,12 +7,13 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildNote } from "./note.ts";
-import { containsPublic, containsFollowers } from "./_test_helpers.ts";
+import { containsPublic, containsFollowers, testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 
 test("Create(Note) addresses Public on `to` and followers on `cc` — activity", async () => {
   const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     content: "hi",
     recipientInboxes: [],
@@ -27,6 +28,7 @@ test("Create(Note) addresses Public on `to` and followers on `cc` — activity",
 
 test("Create(Note) addresses Public on `to` and followers on `cc` — inner Note object", async () => {
   const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     content: "hi",
     recipientInboxes: [],
@@ -42,6 +44,7 @@ test("Create(Note) addresses Public on `to` and followers on `cc` — inner Note
 
 test("Create(Note) includes _misskey_content on the inner Note", async () => {
   const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     content: "hello <b>world</b>",
     recipientInboxes: [],
@@ -55,6 +58,7 @@ test("Create(Note) includes _misskey_content on the inner Note", async () => {
 test("Create(Note) carries quoteUrl + _misskey_quote when a quote is set", async () => {
   const QUOTED = "https://remote.example/notes/orig";
   const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     content: "quoting",
     recipientInboxes: [],
@@ -69,6 +73,7 @@ test("Create(Note) carries quoteUrl + _misskey_quote when a quote is set", async
 
 test("Create(Note) omits quote fields when there is no quote", async () => {
   const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     content: "no quote",
     recipientInboxes: [],

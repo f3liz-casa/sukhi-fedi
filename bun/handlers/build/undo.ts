@@ -1,9 +1,9 @@
 import { EmojiReact, Like, Follow, Undo } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { mirrorAudience } from "../../fedify/addressing.ts";
 
-export interface BuildUndoPayload {
+export interface BuildUndoPayload extends SignedPayload {
   actor: string;
   activityId: string;
   recipientInboxes: string[];
@@ -47,7 +47,7 @@ export async function handleBuildUndo(
     ccs: audience.ccs,
   });
 
-  const undoJson = await signAndSerialize(payload.actor, undo);
+  const undoJson = await signAndSerialize(payload, undo);
 
   return {
     undo: undoJson,

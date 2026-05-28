@@ -7,6 +7,7 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildAdd, handleBuildRemove } from "./collection_op.ts";
+import { testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 const FEATURED = `${ACTOR}/featured`;
@@ -14,6 +15,7 @@ const NOTE = `${ACTOR}/notes/123`;
 
 test("Add(featured) sets object, target, and actor", async () => {
   const result = await handleBuildAdd({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     objectUri: NOTE,
     targetUri: FEATURED,
@@ -31,6 +33,7 @@ test("Add(featured) sets object, target, and actor", async () => {
 
 test("Remove(featured) sets object, target, and actor", async () => {
   const result = await handleBuildRemove({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     objectUri: NOTE,
     targetUri: FEATURED,
@@ -49,6 +52,7 @@ test("recipientInboxes flows through both builders verbatim", async () => {
   const inboxes = ["https://a.example/inbox", "https://b.example/inbox"];
 
   const addResult = await handleBuildAdd({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     objectUri: NOTE,
     targetUri: FEATURED,
@@ -57,6 +61,7 @@ test("recipientInboxes flows through both builders verbatim", async () => {
   });
 
   const removeResult = await handleBuildRemove({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     objectUri: NOTE,
     targetUri: FEATURED,

@@ -7,12 +7,13 @@
 
 import { test, expect } from "bun:test";
 import { handleBuildAnnounce } from "./announce.ts";
-import { containsPublic, containsFollowers } from "./_test_helpers.ts";
+import { containsPublic, containsFollowers, testCreds } from "./_test_helpers.ts";
 
 const ACTOR = "https://watch.example/users/alice";
 
 test("Announce addresses Public on `to` and followers on `cc`", async () => {
   const result = await handleBuildAnnounce({
+    ...await testCreds(ACTOR),
     actor: ACTOR,
     object: "https://remote.example/notes/abc",
     activityId: `${ACTOR}/activities/announce/1`,

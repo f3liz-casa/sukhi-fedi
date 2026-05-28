@@ -1,9 +1,9 @@
 import { Announce } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { signAndSerialize } from "../../fedify/utils.ts";
+import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
-export interface BuildAnnouncePayload {
+export interface BuildAnnouncePayload extends SignedPayload {
   actor: string;
   object: string;
   activityId: string;
@@ -29,7 +29,7 @@ export async function handleBuildAnnounce(
     ccs: audience.ccs,
   });
 
-  const announceJson = await signAndSerialize(payload.actor, announce);
+  const announceJson = await signAndSerialize(payload, announce);
 
   return {
     announce: announceJson,
