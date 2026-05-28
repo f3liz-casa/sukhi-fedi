@@ -261,6 +261,45 @@ defmodule SukhiFedi.Accounts do
     end
   end
 
+  @doc """
+  Publishes a bare `sns.outbox.actor.updated` event for a local account
+  without changing any profile fields. Use this to nudge remote servers
+  that have a stale cached copy of our actor JSON — they receive
+  `Update {Person}` and refresh their cache (and, importantly, the
+  public key they verify our HTTP signatures against).
+
+  Intended for one-off use from `bin/sukhi_fedi eval`:
+
+      SukhiFedi.Accounts.broadcast_actor_update("nyanrus")
+
+  Returns `{:ok, %OutboxEvent{}}` on success, `{:error, :not_found}` if
+  the username isn't local.
+  """
+  @spec broadcast_actor_update(String.t() | integer()) ::
+          {:ok, SukhiFedi.Schema.OutboxEvent.t()} | {:error, :not_found | term()}
+  def broadcast_actor_update(username) when is_binary(username) do
+    case by_local_username(username) do
+      nil -> {:error, :not_found}
+      %Account{} = a -> emit_actor_updated(a)
+    end
+  end
+
+  def broadcast_actor_update(account_id) when is_integer(account_id) do
+    case Repo.get(Account, account_id) do
+      nil -> {:error, :not_found}
+      %Account{} = a -> emit_actor_updated(a)
+    end
+  end
+
+  defp emit_actor_updated(%Account{id: id, username: username}) do
+    Outbox.enqueue(
+      "sns.outbox.actor.updated",
+      "account",
+      to_string(id),
+      %{account_id: id, username: username}
+    )
+  end
+
   # ── admin listing ────────────────────────────────────────────────────────
 
   @doc """
