@@ -261,6 +261,13 @@ accessories:
   # Data は kamal の directories: で host に bind されるので、container を
   # 再作成しても残る。Bucket は自動では作られない ─ gateway 起動時に
   # SukhiFedi.Addons.Media.Bootstrap が ensure_bucket を実行する。
+  #
+  # 初回 boot 前のセットアップ(これを忘れると Permission denied で落ちる):
+  #   kamal accessory boot rustfs    # kamal が $PWD/sukhi-fedi-rustfs/data を作る
+  #   ssh rocky@<host> 'sudo chown -R 10001:10001 ~/sukhi-fedi-rustfs/data'
+  #   kamal accessory restart rustfs
+  # rustfs container は UID 10001 で動くので、kamal が rocky で作った
+  # bind-mount dir のままでは書けない。
   rustfs:
     image: rustfs/rustfs:1.0.0-beta.5
     host: 217.142.242.103
