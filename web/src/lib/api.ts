@@ -55,6 +55,8 @@ export type Status = {
   tags: Tag[];
   url?: string;
   reactions?: Reaction[];
+  favourited?: boolean;
+  favourites_count?: number;
 };
 
 export type Reaction = {
@@ -202,6 +204,47 @@ export async function postStatus(input: ComposeInput): Promise<Status> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error ?? `post_failed_${res.status}`);
+  }
+  return (await res.json()) as Status;
+}
+
+// ── interactions ─────────────────────────────────────────────────────
+
+async function sendNoBody(method: string, path: string): Promise<Response> {
+  return fetch(path, {
+    method,
+    headers: { accept: 'application/json', ...authHeader() }
+  });
+}
+
+export async function favourite(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/favourite`);
+}
+
+export async function unfavourite(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/unfavourite`);
+}
+
+export async function react(statusId: string, emoji: string): Promise<Status> {
+  return statusAction(
+    'PUT',
+    `/api/v1/sukhi/statuses/${encodeURIComponent(statusId)}/react/${encodeURIComponent(emoji)}`
+  );
+}
+
+export async function unreact(statusId: string, emoji: string): Promise<Status> {
+  return statusAction(
+    'DELETE',
+    `/api/v1/sukhi/statuses/${encodeURIComponent(statusId)}/react/${encodeURIComponent(emoji)}`
+  );
+}
+
+async function statusAction(method: string, path: string): Promise<Status> {
+  const res = await sendNoBody(method, path);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `action_failed_${res.status}`);
   }
   return (await res.json()) as Status;
 }
