@@ -140,18 +140,47 @@ defmodule SukhiDelivery.Delivery.Worker do
       jwk ->
         key_id = "#{actor_uri}#main-key"
 
-        case FedifyClient.sign(%{
-               actorUri: actor_uri,
-               inbox: inbox_url,
-               body: body,
-               privateKeyJwk: jwk,
-               keyId: key_id
-             }) do
+        payload =
+          %{
+            actorUri: actor_uri,
+            inbox: inbox_url,
+            body: body,
+            privateKeyJwk: jwk,
+            keyId: key_id
+          }
+          |> maybe_put_algorithm(inbox_url)
+
+        case FedifyClient.sign(payload) do
           {:ok, %{"headers" => sig_headers}} -> {:ok, sig_headers}
           _ -> :skip
         end
     end
   end
+
+  # Per-host signing-spec override. hackers.pub (Fedify 2.x) keeps
+  # returning "Failed to verify the request signature." on our valid
+  # cavage signatures — same key, same digest, self-verifies fine.
+  # Fedify accepts both cavage and rfc9421 on the verify side (picked
+  # by the presence of the `Signature-Input` header), so try rfc9421
+  # for that one origin and see if it changes the outcome.
+  # [[fedify-401-diagnostic]]
+  @rfc9421_inbox_hosts ["hackers.pub"]
+
+  defp maybe_put_algorithm(payload, inbox_url) when is_binary(inbox_url) do
+    case URI.parse(inbox_url) do
+      %URI{host: host} when is_binary(host) ->
+        if host in @rfc9421_inbox_hosts do
+          Map.put(payload, :algorithm, "rfc9421")
+        else
+          payload
+        end
+
+      _ ->
+        payload
+    end
+  end
+
+  defp maybe_put_algorithm(payload, _), do: payload
 
   defp get_private_key_jwk(actor_uri) when is_binary(actor_uri) do
     username =
