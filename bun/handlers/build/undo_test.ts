@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Locks in the Undo translator's payload shapes for the inner
-// activity types the delivery Outbox.Consumer emits: Like, EmojiReact,
-// and Follow. Bug-prevention: a previous regression dropped the inner
-// `object`'s actor, which made Mastodon reject the Undo for not
-// matching the original activity's owner.
+// activity types the delivery Outbox.Consumer emits: Like and Follow.
+// (Reactions used to ride as EmojiReact; they're plain Like now.)
+// Bug-prevention: a previous regression dropped the inner `object`'s
+// actor, which made Mastodon reject the Undo for not matching the
+// original activity's owner.
 
 import { test, expect } from "bun:test";
 import { handleBuildUndo } from "./undo.ts";
@@ -33,28 +34,6 @@ test("Undo(Like) wraps a Like with id+actor+object", async () => {
   expect(inner["type"]).toBe("Like");
   expect(inner["id"]).toBe(`${ACTOR}/likes/42`);
   // The `object` key on the inner Like is the target note URI.
-  expect(inner["object"]).toBe("https://remote.example/notes/abc");
-});
-
-test("Undo(EmojiReact) wraps an EmojiReact with id+actor+object", async () => {
-  const result = await handleBuildUndo({
-    ...await testCreds(ACTOR),
-    actor: ACTOR,
-    activityId: `${ACTOR}/reactions/9/undo`,
-    recipientInboxes: ["https://remote.example/users/bob/inbox"],
-    inner: {
-      type: "EmojiReact",
-      id: `${ACTOR}/reactions/9`,
-      object: "https://remote.example/notes/abc",
-    },
-  });
-
-  const undo = result.undo as Record<string, unknown>;
-  expect(undo["type"]).toBe("Undo");
-
-  const inner = undo["object"] as Record<string, unknown>;
-  expect(inner["type"]).toBe("EmojiReact");
-  expect(inner["id"]).toBe(`${ACTOR}/reactions/9`);
   expect(inner["object"]).toBe("https://remote.example/notes/abc");
 });
 

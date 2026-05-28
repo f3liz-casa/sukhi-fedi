@@ -289,18 +289,23 @@ defmodule SukhiDelivery.Outbox.Consumer do
         recipients = note_author_inbox(note_ap_id) ++ relay_inboxes()
         domain = SukhiDelivery.Config.domain!()
 
+        # Reactions ride as Like on the wire (Mastodon accepts it as
+        # a plain favourite, Misskey/Sharkey read the content + tag).
+        # Activity id lives under /likes/ for consistency with that.
         activity_id =
-          "https://#{domain}/reactions/#{p["reaction_id"]}#{if mode == :undo, do: "/undo", else: ""}"
+          "https://#{domain}/likes/#{p["reaction_id"]}#{if mode == :undo, do: "/undo", else: ""}"
 
         case mode do
           :create ->
-            payload = %{
-              actor: actor_uri,
-              object: note_ap_id,
-              content: p["emoji"],
-              activityId: activity_id,
-              recipientInboxes: recipients
-            }
+            payload =
+              %{
+                actor: actor_uri,
+                object: note_ap_id,
+                content: p["emoji"],
+                activityId: activity_id,
+                recipientInboxes: recipients
+              }
+              |> maybe_attach_emoji_tag(p["emoji"])
 
             translate_and_fanout("emoji_react", payload, actor_uri, activity_id, recipients)
 
@@ -310,8 +315,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
               activityId: activity_id,
               recipientInboxes: recipients,
               inner: %{
-                type: "EmojiReact",
-                id: "https://#{domain}/reactions/#{p["reaction_id"]}",
+                type: "Like",
+                id: "https://#{domain}/likes/#{p["reaction_id"]}",
                 object: note_ap_id
               }
             }
@@ -322,6 +327,20 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp handle_reaction(_, _), do: :missing_fields
+
+  # Local custom emoji only — domain IS NULL row in `custom_emojis`.
+  # Unicode reactions and remote shortcodes leave tag absent.
+  defp maybe_attach_emoji_tag(payload, emoji) when is_binary(emoji) do
+    with [_, shortcode] <- Regex.run(~r/^:([^:@]+):$/, emoji),
+         %SukhiDelivery.Schema.CustomEmoji{image_url: url, static_url: static_url} <-
+           Repo.get_by(SukhiDelivery.Schema.CustomEmoji, shortcode: shortcode, domain: nil) do
+      Map.put(payload, :tag, %{name: emoji, url: url, static_url: static_url})
+    else
+      _ -> payload
+    end
+  end
+
+  defp maybe_attach_emoji_tag(payload, _), do: payload
 
   defp handle_announce(%{"account_id" => account_id, "note_ap_id" => note_ap_id} = p, mode) do
     case actor_for(account_id) do

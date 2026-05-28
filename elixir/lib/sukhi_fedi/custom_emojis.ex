@@ -90,6 +90,19 @@ defmodule SukhiFedi.CustomEmojis do
   def upsert_from_tag(_shortcode, _tag, _domain), do: :ok
 
   @doc """
+  Local custom emoji directory, in stable shortcode order. Used by
+  `GET /api/v1/custom_emojis` and the reaction picker.
+  """
+  @spec list_local() :: [%CustomEmoji{}]
+  def list_local do
+    from(e in CustomEmoji,
+      where: is_nil(e.domain),
+      order_by: [asc: e.shortcode]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Bulk-resolve a list of reaction emoji strings to a map of
   `emoji_key => %{url, static_url}`. Unicode glyphs and unknown
   shortcodes are absent from the result map.

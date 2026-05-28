@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Locks in the EmojiReact translator's payload shape: a custom-emoji
-// reaction on a note, addressed at the note author by the delivery
-// Outbox.Consumer. The `content` field carries the emoji.
+// Locks in the emoji-reaction builder's payload shape: a Like with
+// `content` carrying the emoji, and an optional Emoji entry in `tag`
+// when the reaction is a custom shortcode.
+//
+// We send Like (not EmojiReact) so Mastodon peers downgrade to plain
+// likes instead of dropping the activity.
 
 import { test, expect } from "bun:test";
 import { handleBuildEmojiReact } from "./emoji_react.ts";
@@ -11,45 +14,53 @@ import { testCreds } from "./_test_helpers.ts";
 const ACTOR = "https://watch.example/users/alice";
 const NOTE = "https://remote.example/notes/abc";
 
-test("EmojiReact carries type, actor, object and the emoji content", async () => {
+test("emoji_react produces a Like with the emoji in content", async () => {
   const result = await handleBuildEmojiReact({
     ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: "🦊",
-    activityId: `${ACTOR}/reactions/1`,
+    activityId: `${ACTOR}/likes/1`,
     recipientInboxes: ["https://remote.example/users/bob/inbox"],
   });
 
-  const react = result.emojiReact as Record<string, unknown>;
-  expect(react["type"]).toBe("EmojiReact");
-  expect(react["actor"]).toBe(ACTOR);
-  expect(react["object"]).toBe(NOTE);
-  expect(react["content"]).toBe("🦊");
+  const like = result.emojiReact as Record<string, unknown>;
+  expect(like["type"]).toBe("Like");
+  expect(like["actor"]).toBe(ACTOR);
+  expect(like["object"]).toBe(NOTE);
+  expect(like["content"]).toBe("🦊");
 });
 
-test("EmojiReact accepts a :shortcode: custom emoji", async () => {
+test("emoji_react accepts a :shortcode: with a tag entry", async () => {
   const result = await handleBuildEmojiReact({
     ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: ":blobcat:",
-    activityId: `${ACTOR}/reactions/2`,
+    tag: {
+      name: ":blobcat:",
+      url: "https://watch.example/emoji/blobcat.png",
+    },
+    activityId: `${ACTOR}/likes/2`,
     recipientInboxes: [],
   });
 
-  const react = result.emojiReact as Record<string, unknown>;
-  expect(react["content"]).toBe(":blobcat:");
+  const like = result.emojiReact as Record<string, unknown>;
+  expect(like["type"]).toBe("Like");
+  expect(like["content"]).toBe(":blobcat:");
+
+  const tag = like["tag"];
+  expect(tag).toBeDefined();
 });
 
-test("EmojiReact passes recipientInboxes through verbatim", async () => {
+test("emoji_react passes recipientInboxes through verbatim", async () => {
   const inboxes = ["https://remote.example/users/bob/inbox"];
   const result = await handleBuildEmojiReact({
     ...await testCreds(ACTOR),
     actor: ACTOR,
     object: NOTE,
     content: "👍",
-    activityId: `${ACTOR}/reactions/3`,
+    activityId: `${ACTOR}/likes/3`,
     recipientInboxes: inboxes,
   });
 

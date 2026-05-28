@@ -1,4 +1,4 @@
-import { EmojiReact, Like, Follow, Undo } from "@fedify/fedify/vocab";
+import { Like, Follow, Undo } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
 import { signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
 import { mirrorAudience } from "../../fedify/addressing.ts";
@@ -10,7 +10,9 @@ export interface BuildUndoPayload extends SignedPayload {
   // The activity being undone. Must be one we own (we re-construct a
   // minimal stub so the receiver can match it by `id`).
   inner: {
-    type: "Like" | "EmojiReact" | "Follow";
+    // Reactions (both ⭐ and emoji) ride as `Like` on the wire now,
+    // so EmojiReact has no outbound branch anymore.
+    type: "Like" | "Follow";
     id: string;
     object: string;
   };
@@ -32,8 +34,6 @@ export async function handleBuildUndo(
 
   const inner = payload.inner.type === "Like"
     ? new Like(innerArgs)
-    : payload.inner.type === "EmojiReact"
-    ? new EmojiReact(innerArgs)
     : new Follow(innerArgs);
 
   const audience = mirrorAudience(payload.inner.object);
