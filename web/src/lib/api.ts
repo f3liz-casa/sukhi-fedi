@@ -54,6 +54,15 @@ export type Status = {
   media_attachments: MediaAttachment[];
   tags: Tag[];
   url?: string;
+  reactions?: Reaction[];
+};
+
+export type Reaction = {
+  name: string;
+  count: number;
+  me: boolean;
+  url?: string | null;
+  static_url?: string | null;
 };
 
 export type Relationship = {

@@ -1088,6 +1088,57 @@ defmodule SukhiFedi.Notes do
   end
 
   @doc """
+  Misskey-style reaction breakdown for many notes in one DB roundtrip.
+  Returns `%{note_id => [%{name, count, me}]}`, ordered by count desc
+  then emoji asc for deterministic UI.
+
+  Excludes the favourite emoji — those still flow through
+  `favourites_count`/`favourited` to stay Mastodon-compatible.
+  """
+  @spec reactions_for_notes([integer()], integer() | nil) :: %{
+          integer() => [%{name: String.t(), count: non_neg_integer(), me: boolean()}]
+        }
+  def reactions_for_notes(note_ids, viewer_id \\ nil)
+  def reactions_for_notes([], _viewer_id), do: %{}
+
+  def reactions_for_notes(note_ids, viewer_id) when is_list(note_ids) do
+    rows =
+      from(r in Reaction,
+        where: r.note_id in ^note_ids and r.emoji != ^@favourite_emoji,
+        group_by: [r.note_id, r.emoji],
+        select: {r.note_id, r.emoji, count(r.id)}
+      )
+      |> Repo.all()
+
+    mine =
+      case viewer_id do
+        nil ->
+          MapSet.new()
+
+        id when is_integer(id) ->
+          from(r in Reaction,
+            where: r.note_id in ^note_ids and r.account_id == ^id and r.emoji != ^@favourite_emoji,
+            select: {r.note_id, r.emoji}
+          )
+          |> Repo.all()
+          |> MapSet.new()
+      end
+
+    rows
+    |> Enum.group_by(fn {note_id, _emoji, _count} -> note_id end)
+    |> Map.new(fn {note_id, group} ->
+      list =
+        group
+        |> Enum.map(fn {_note_id, emoji, count} ->
+          %{name: emoji, count: count, me: MapSet.member?(mine, {note_id, emoji})}
+        end)
+        |> Enum.sort_by(fn %{count: c, name: n} -> {-c, n} end)
+
+      {note_id, list}
+    end)
+  end
+
+  @doc """
   Per-note viewer-context flags: `%{favourited, reblogged, bookmarked, pinned}`.
   """
   @spec viewer_flags(integer() | nil, integer()) :: %{

@@ -8,13 +8,14 @@ defmodule SukhiApi.Views.MastodonStatus do
 
       MastodonStatus.render(note, %{
         counts: %{replies: int, reblogs: int, favourites: int},
-        viewer: %{favourited: bool, reblogged: bool, bookmarked: bool, pinned: bool}
+        viewer: %{favourited: bool, reblogged: bool, bookmarked: bool, pinned: bool},
+        reactions: [%{name: "🦊", count: 3, me: false}, ...]
       })
 
-  Both keys are optional; missing fields default to `0` / `false`.
-  Capabilities should batch-fetch counts/viewer flags via
-  `SukhiFedi.Notes.{counts_for_notes, viewer_flags_many}` and pass
-  the per-note submap on render.
+  All keys are optional; missing fields default to `0` / `false` / `[]`.
+  Capabilities should batch-fetch via
+  `SukhiFedi.Notes.{counts_for_notes, viewer_flags_many,
+  reactions_for_notes}` and pass the per-note submap on render.
   """
 
   alias SukhiApi.Views.{Id, MastodonAccount, MastodonMedia}
@@ -63,7 +64,11 @@ defmodule SukhiApi.Views.MastodonStatus do
       bookmarked: Map.get(viewer, :bookmarked, false),
       favourited: Map.get(viewer, :favourited, false),
       reblogged: Map.get(viewer, :reblogged, false),
-      muted: false
+      muted: false,
+      # Sukhi extension. Pleroma-compatible shape: list of
+      # %{name, count, me, url, static_url}. Mastodon clients ignore
+      # the unknown key; Sukhi web reads it for reaction chips.
+      reactions: Map.get(ctx, :reactions, [])
     }
   end
 
@@ -71,12 +76,14 @@ defmodule SukhiApi.Views.MastodonStatus do
   Render a list of notes, looking up per-note counts/viewer-flags
   from the supplied maps (each keyed by note id).
   """
-  @spec render_list([map()], map(), map()) :: [map()]
-  def render_list(notes, counts_by_id \\ %{}, viewer_by_id \\ %{}) when is_list(notes) do
+  @spec render_list([map()], map(), map(), map()) :: [map()]
+  def render_list(notes, counts_by_id \\ %{}, viewer_by_id \\ %{}, reactions_by_id \\ %{})
+      when is_list(notes) do
     Enum.map(notes, fn n ->
       render(n, %{
         counts: Map.get(counts_by_id, n.id, %{}),
-        viewer: Map.get(viewer_by_id, n.id, %{})
+        viewer: Map.get(viewer_by_id, n.id, %{}),
+        reactions: Map.get(reactions_by_id, n.id, [])
       })
     end)
   end

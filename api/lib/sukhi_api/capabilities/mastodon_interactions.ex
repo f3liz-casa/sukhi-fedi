@@ -113,7 +113,13 @@ defmodule SukhiApi.Capabilities.MastodonInteractions do
                 _ -> %{}
               end
 
-            body = MastodonStatus.render_list(notes, counts, viewer_flags)
+            reactions =
+              case GatewayRpc.call(SukhiFedi.Notes, :reactions_for_notes, [note_ids, v.id]) do
+                {:ok, m} when is_map(m) -> m
+                _ -> %{}
+              end
+
+            body = MastodonStatus.render_list(notes, counts, viewer_flags, reactions)
             headers = [{"content-type", "application/json"}]
 
             headers =
@@ -149,7 +155,13 @@ defmodule SukhiApi.Capabilities.MastodonInteractions do
         _ -> %{}
       end
 
-    MastodonStatus.render(note, %{counts: counts, viewer: flags})
+    reactions =
+      case GatewayRpc.call(SukhiFedi.Notes, :reactions_for_notes, [[note.id], viewer.id]) do
+        {:ok, m} when is_map(m) -> Map.get(m, note.id, [])
+        _ -> []
+      end
+
+    MastodonStatus.render(note, %{counts: counts, viewer: flags, reactions: reactions})
   end
 
   defp ok(status, body) do

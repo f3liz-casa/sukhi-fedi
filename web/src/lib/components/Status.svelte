@@ -69,6 +69,21 @@
       </div>
     {/if}
 
+    {#if status.reactions && status.reactions.length > 0}
+      <div class="reactions" aria-label="リアクション">
+        {#each status.reactions as r (r.name)}
+          <span class="reaction-chip" class:me={r.me} title={r.name}>
+            {#if r.url}
+              <img class="emoji" src={r.url} alt={r.name} loading="lazy" />
+            {:else}
+              <span class="emoji">{r.name}</span>
+            {/if}
+            <span class="count">{r.count}</span>
+          </span>
+        {/each}
+      </div>
+    {/if}
+
     {#if canReply}
       <footer class="status-actions">
         <button type="button" class="chip" onclick={() => onreply?.(status)}>
@@ -78,3 +93,37 @@
     {/if}
   </div>
 </article>
+
+<style>
+  .reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
+  .reaction-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background: var(--reaction-bg, rgba(127, 127, 127, 0.12));
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  .reaction-chip.me {
+    background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
+  }
+  .reaction-chip .emoji {
+    font-size: 1rem;
+  }
+  .reaction-chip img.emoji {
+    width: 1.125rem;
+    height: 1.125rem;
+    vertical-align: -0.2em;
+  }
+  .reaction-chip .count {
+    font-variant-numeric: tabular-nums;
+    color: var(--muted, #666);
+  }
+</style>

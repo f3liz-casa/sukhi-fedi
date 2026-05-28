@@ -36,7 +36,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
       %{} = v ->
         case GatewayRpc.call(SukhiFedi.Timelines, :home, [v, Map.to_list(opts)]) do
           {:ok, notes} when is_list(notes) ->
-            render_page(notes, "/api/v1/timelines/home", opts)
+            render_page(notes, "/api/v1/timelines/home", opts, v)
 
           {:error, :not_connected} ->
             ok(503, %{error: "gateway_not_connected"})
@@ -99,8 +99,17 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
     end
   end
 
-  defp render_page(notes, base_url, opts) do
-    body = Enum.map(notes, &MastodonStatus.render/1)
+  defp render_page(notes, base_url, opts, viewer \\ nil) do
+    note_ids = Enum.map(notes, & &1.id)
+    viewer_id = viewer && viewer.id
+
+    reactions =
+      case GatewayRpc.call(SukhiFedi.Notes, :reactions_for_notes, [note_ids, viewer_id]) do
+        {:ok, m} when is_map(m) -> m
+        _ -> %{}
+      end
+
+    body = MastodonStatus.render_list(notes, %{}, %{}, reactions)
     headers = [{"content-type", "application/json"}]
 
     headers =
