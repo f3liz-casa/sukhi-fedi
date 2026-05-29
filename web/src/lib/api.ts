@@ -335,6 +335,21 @@ export async function getAccountStatuses(
   return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
 }
 
+export async function getStatus(id: string): Promise<Status> {
+  const res = await get(`/api/v1/statuses/${encodeURIComponent(id)}`, { auth: false });
+  if (res.status === 404) throw new Error('not_found');
+  if (!res.ok) throw new Error(`status_failed_${res.status}`);
+  return (await res.json()) as Status;
+}
+
+export type Context = { ancestors: Status[]; descendants: Status[] };
+
+export async function getContext(id: string): Promise<Context> {
+  const res = await get(`/api/v1/statuses/${encodeURIComponent(id)}/context`, { auth: false });
+  if (!res.ok) throw new Error(`context_failed_${res.status}`);
+  return (await res.json()) as Context;
+}
+
 async function fetchAccountList(
   endpoint: 'followers' | 'following',
   id: string,

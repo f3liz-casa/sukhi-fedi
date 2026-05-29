@@ -118,7 +118,7 @@
       <a class="display-name" href={`/@${status.account.acct}`}>{name}</a>
       <a href={`/@${status.account.acct}`}>@{status.account.acct}</a>
       <span>·</span>
-      <a href={status.url ?? '#'} rel="external noopener">{ts}</a>
+      <a class="timestamp" href={`/@${status.account.acct}/${status.id}`} title={status.created_at}>{ts}</a>
     </header>
 
     {#if status.spoiler_text}
