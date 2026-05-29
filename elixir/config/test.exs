@@ -14,6 +14,11 @@ config :sukhi_fedi, SukhiFedi.Repo,
   port: String.to_integer(System.get_env("DB_PORT", "15432")),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: String.to_integer(System.get_env("DB_POOL_SIZE", "10")),
+  # PGlite's socket multiplexer mishandles *named* prepared statements
+  # (reused plan + different param count → 08P01 protocol_violation), so
+  # use unnamed prepares. Harmless on real Postgres, just marginally
+  # slower — fine for the test path.
+  prepare: :unnamed,
   # The migration lock takes a second connection and holds it for the
   # whole run; on PGlite's multiplexer that deadlocks against the
   # migrating connection. A single test migrator never races, so the
@@ -27,8 +32,9 @@ config :sukhi_fedi, :nats,
   port: String.to_integer(System.get_env("NATS_PORT", "14222"))
 
 # Deterministic admin-session signing key for tests.
-config :sukhi_fedi, :secret_key_base,
-  "test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+config :sukhi_fedi,
+       :secret_key_base,
+       "test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # Point ex_aws at the rustfs container from docker-compose.test.yml.
 config :ex_aws, :s3,

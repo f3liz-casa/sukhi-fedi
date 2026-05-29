@@ -42,6 +42,10 @@ by `pglite-socket`. So:
   multiplexer, so `config/test.exs` sets `migration_lock: false`. A
   single test migrator never races, so the lock isn't needed.
 - **No SSL.** Postgrex connects with `ssl: false` (the default).
+- **Unnamed prepared statements.** PGlite's multiplexer mishandles
+  *named* prepares (a reused plan with a different param count throws
+  `08P01 protocol_violation`), so `config/test.exs` sets
+  `prepare: :unnamed`. Harmless on real Postgres.
 
 `config/test.exs` takes `DB_HOST` / `DB_PORT` / `DB_USER` /
 `DB_PASSWORD` / `DB_NAME` / `DB_POOL_SIZE` from the environment, with
