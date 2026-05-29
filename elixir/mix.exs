@@ -62,6 +62,11 @@ defmodule SukhiFedi.MixProject do
       {:hackney, "~> 1.20"},
       {:sweet_xml, "~> 0.7"},
 
+      # zstd (NIF) — compresses inbound AP originals before they land in
+      # the `inbound` bucket (Q10 archive layer). Mature, stable wire
+      # format, so an archived original stays decodable long-term.
+      {:ezstd, "~> 1.0"},
+
       # Lightweight observability: telemetry + PromEx (Prometheus).
       # Distributed tracing is intentionally omitted — use structured
       # Logger messages and Prometheus histograms instead.

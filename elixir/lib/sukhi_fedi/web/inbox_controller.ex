@@ -43,7 +43,11 @@ defmodule SukhiFedi.Web.InboxController do
         sign_as -> %{raw: raw_json, signAs: sign_as, selfDomain: self_domain}
       end
 
+    # Signature is good ⇒ a genuine original. Archive it to the `inbound`
+    # bucket off the hot path (Q10), right after verify and before the
+    # instruction parser, so a parse failure can't lose the record.
     with {:ok, _} <- FedifyClient.verify(verify_payload),
+         _ = maybe_archive_inbound(raw_body, raw_json, headers, conn),
          {:ok, instruction} <- FedifyClient.inbox(inbox_payload) do
       Instructions.execute(instruction)
       maybe_enqueue_follower_sync(raw_json, sync_header)
@@ -53,6 +57,16 @@ defmodule SukhiFedi.Web.InboxController do
         send_resp(conn, 400, Jason.encode!(%{error: inspect(reason)}))
     end
   end
+
+  defp maybe_archive_inbound("", _raw_json, _headers, _conn), do: :ok
+
+  defp maybe_archive_inbound(raw_body, raw_json, headers, conn) when is_map(raw_json) do
+    inbox_kind = if conn.path_params["name"], do: "user", else: "shared"
+    SukhiFedi.Federation.InboundArchive.enqueue(raw_body, raw_json, headers, inbox_kind)
+    :ok
+  end
+
+  defp maybe_archive_inbound(_raw_body, _raw_json, _headers, _conn), do: :ok
 
   # Reconstruct the public URL the remote signer signed against, even
   # when cloudflared (or any reverse proxy) has rewritten Host to an

@@ -144,6 +144,66 @@ domain_blocks のユーザー面はすでに `MastodonModeration` capability で
 
 ---
 
+## Q10. 連合先 inbound の原本アーカイブ — rustfs を system of record に
+
+**Goal.** 検証済みの inbound ActivityPub アクティビティ(`Follow`/`Create`/
+`Like`/`Announce`/`Undo`/`Delete`…)を**全部**、不変の原本として残し、
+原本から DB projection(shadow account / follow / note / reaction)を
+**replay/rebuild** できるようにする。いまは inbound を `AP.Instructions`
+で加工して DB に書くだけで、原本は捨てている。
+
+**決定事項(詰め済み).**
+
+- **置き場の分担.** rustfs = 不変の原本(system of record)、Postgres =
+  そこから作る加工済み projection + 時系列の索引。
+- **rustfs キー.** `inbound/<yyyy>/<mm>/<dd>/<sha256(raw_body)>.json.zst`。
+  日付前置きで lifecycle、内容ハッシュで同日再送を自然 dedup。
+- **圧縮は zstd 前提.** 異種・小さい・1 件 1 オブジェクトの AP JSON に対し、
+  成熟・wire format 安定・bindings 潤沢で、長期に必ず開ける原本向き。
+  伸ばすなら **zstd 訓練辞書**(AP JSON コーパスで `--train`)が高レバレッジ。
+  OpenZL は未 1.0(wire protocol 未確定)で原本には賭けにくい — 将来
+  「イベントのカラム的ロールアップ(分析層)」を作る日が来たら再検討。
+- **provenance.** 署名ヘッダ(key-id / date / digest)は S3 object metadata に
+  添える(検証の再現性)。sha256 は**生 body**で取り、中身は zstd バイトを置く。
+- **DB 索引 `inbound_events`.** `received_at`(index, replay 順) / `actor_uri` /
+  `activity_type` / `activity_id`(nullable) / `object_key` / `body_sha256`(unique=冪等) /
+  `inbox`(shared|user)。replay を駆動する。
+- **捕捉点.** `inbox_controller.handle_inbox/1`(`elixir/lib/sukhi_fedi/web/inbox_controller.ex:23`)、
+  `FedifyClient.verify` 成功直後。`raw_body` は `CacheBodyReader` が確保済み。
+
+**候補(ホットパスの耐久性 — ここが残る判断).**
+
+1. **Oban `:federation` queue へ非同期書き込み**(**Recommended**)。DB に
+   job として残る = クラッシュ耐性・retry あり、`raw_body` は job 完了後 prune。
+   inbox の 202 を遅らせない。
+2. **202 を返す前に同期 PUT.** 失敗時は非 2xx を返し remote に再送させる =
+   原本欠落ゼロに寄せられる。rustfs はローカルなら latency は小さめだが、
+   inbox の応答に S3 PUT が乗る。
+3. **fire-and-forget Task.** 最低 latency だが、クラッシュ時にその 1 件の
+   原本を失う。system of record としては弱い。却下寄り。
+
+**影響範囲.** migration 1 本(`inbound_events`) + 書き込みワーカー(media addon の
+ExAws + zstd を流用) + `inbox_controller` に捕捉 1 行 + replay mix task
+(`mix sukhi.replay_inbound`)。rustfs は `media` とは別 bucket(`inbound`、別 lifecycle)。
+
+**未確定(replay の前提コスト).**
+
+- **`AP.Instructions.execute/1`(`instructions.ex:32`)は projection 書き込みと
+  外向き副作用(Accept 返信の delivery job 投入・新フォロワー backfill・actor
+  update nudge — `:50`〜`:80`)が混在している。** 原本を素朴に replay すると
+  過去の Follow 全部に Accept を再送してしまう。安全な replay には
+  **project(純 DB)/ react(外向き)の分離リファクタが前提**。これが
+  「replay/rebuild 用」を選んだ本当の代金。アーカイブ層はこの分離と独立に
+  先行できるので、段階は (1) アーカイブ層 → (2) project/react 分離 →
+  (3) replay task。
+- **rustfs の冗長性は置き方次第.** erasure coding は複数ドライブ/ノードの
+  pool で初めて効く。本番が単一ノード・単一ディスクなら原本の耐久性は
+  下のディスク + バックアップ任せ。replay の真実の置き場にするなら
+  drives-per-set 複数 or 別バックアップ併用が前提(deploy 設定の確認待ち)。
+  スケールアウト時の既存データ再分散は手動(`/v3/pools/rebalance/start`)。
+
+---
+
 ## 結論を要するメタ問い
 
 - **`/goal` で言う「Misskey と通信できる」のスコープは「フォロー +
