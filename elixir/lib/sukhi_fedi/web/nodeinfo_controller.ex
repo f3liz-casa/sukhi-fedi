@@ -23,6 +23,10 @@ defmodule SukhiFedi.Web.NodeinfoController do
     body = %{
       links: [
         %{
+          rel: "http://nodeinfo.diaspora.software/ns/schema/2.0",
+          href: "https://#{domain}/nodeinfo/2.0"
+        },
+        %{
           rel: "http://nodeinfo.diaspora.software/ns/schema/2.1",
           href: "https://#{domain}/nodeinfo/2.1"
         }
@@ -46,9 +50,14 @@ defmodule SukhiFedi.Web.NodeinfoController do
     end
   end
 
-  def v2_1(conn, _opts) do
+  def v2_0(conn, _opts), do: send_document(conn, "2.0")
+  def v2_1(conn, _opts), do: send_document(conn, "2.1")
+
+  # NodeInfo 2.0 and 2.1 share these fields; 2.1's extra software keys
+  # (repository/homepage) are optional, so one body serves both.
+  defp send_document(conn, version) do
     body = %{
-      version: "2.1",
+      version: version,
       software: %{
         name: "sukhi-fedi",
         version: software_version()

@@ -114,6 +114,10 @@ defmodule SukhiFedi.Web.Router do
     NodeinfoController.discovery(conn, [])
   end
 
+  get "/nodeinfo/2.0" do
+    NodeinfoController.v2_0(conn, [])
+  end
+
   get "/nodeinfo/2.1" do
     NodeinfoController.v2_1(conn, [])
   end

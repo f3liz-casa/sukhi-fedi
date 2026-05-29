@@ -39,7 +39,10 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
       description: "ActivityPub server (sukhi-fedi)",
       email: "",
       version: "4.0.0 (compatible; sukhi-fedi #{sukhi_version()})",
-      urls: %{streaming_api: "wss://#{domain}"},
+      # No streaming WebSocket yet, so don't advertise one — otherwise
+      # clients (Elk, Phanpy) open it, get 404, and sit in a perpetual
+      # "reconnecting" error instead of falling back to REST polling.
+      urls: %{},
       languages: ["en", "ja"],
       registrations: true,
       approval_required: false,
@@ -69,7 +72,7 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
       thumbnail: %{url: "https://#{domain}/favicon.png"},
       languages: ["en", "ja"],
       configuration: %{
-        urls: %{streaming: "wss://#{domain}"},
+        # streaming intentionally omitted — see instance_v1/1.
         accounts: %{max_featured_tags: 10, max_pinned_statuses: 5},
         statuses: %{
           max_characters: 500,
