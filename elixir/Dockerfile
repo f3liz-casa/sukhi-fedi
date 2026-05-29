@@ -19,7 +19,11 @@ FROM elixir:1.16-alpine AS build
 
 WORKDIR /app
 
-RUN apk add --no-cache build-base git
+# bash: ezstd's build_deps.sh (compiles the bundled zstd for the NIF) has
+# a bash shebang; Alpine ships only busybox sh, so without it the dep
+# fails with `env: can't execute 'bash'`. zstd builds with make here
+# (build-base) — cmake is optional and intentionally absent.
+RUN apk add --no-cache build-base git bash
 
 # VERSION lives at the repo root and is read at compile time by
 # elixir/mix.exs and api/mix.exs. The gateway image only needs the
