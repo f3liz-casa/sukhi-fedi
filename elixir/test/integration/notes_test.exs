@@ -314,6 +314,19 @@ defmodule SukhiFedi.Integration.NotesTest do
     end
   end
 
+  describe "snowflake note ids" do
+    test "new notes get a non-sequential, time-sortable id" do
+      a = create_account!("snow_a")
+      {:ok, n1} = Notes.create_status(a, %{"status" => "first"})
+      {:ok, n2} = Notes.create_status(a, %{"status" => "second"})
+
+      # Snowflake = (ms since 2024) << 16 — far above the old sequential
+      # range, and increasing for later notes so id-based paging holds.
+      assert n1.id > 1_000_000_000_000
+      assert n2.id > n1.id
+    end
+  end
+
   defp note!(account, ap_id, content, extra \\ []) do
     %Note{content: content, visibility: "public", account_id: account.id, ap_id: ap_id}
     |> struct(Map.new(extra))
