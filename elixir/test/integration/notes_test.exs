@@ -23,7 +23,8 @@ defmodule SukhiFedi.Integration.NotesTest do
     test "creates a Note + emits sns.outbox.note.created" do
       a = create_account!("alice_cs")
 
-      assert {:ok, note} = Notes.create_status(a, %{"status" => "hello", "visibility" => "public"})
+      assert {:ok, note} =
+               Notes.create_status(a, %{"status" => "hello", "visibility" => "public"})
 
       assert note.content == "hello"
       assert note.visibility == "public"
@@ -31,8 +32,10 @@ defmodule SukhiFedi.Integration.NotesTest do
 
       ev =
         Repo.one!(
-          from e in OutboxEvent,
-            where: e.subject == "sns.outbox.note.created" and e.aggregate_id == ^to_string(note.id)
+          from(e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.note.created" and e.aggregate_id == ^to_string(note.id)
+          )
         )
 
       assert ev.payload["note_id"] == note.id
@@ -61,7 +64,10 @@ defmodule SukhiFedi.Integration.NotesTest do
       a = create_account!("alice_dm")
 
       assert {:error, :dm_no_recipients} =
-               Notes.create_status(a, %{"status" => "secret, nobody home", "visibility" => "direct"})
+               Notes.create_status(a, %{
+                 "status" => "secret, nobody home",
+                 "visibility" => "direct"
+               })
     end
 
     test "direct status to a mentioned user → Note(direct) + sns.outbox.dm.created" do
@@ -78,16 +84,18 @@ defmodule SukhiFedi.Integration.NotesTest do
 
       ev =
         Repo.one!(
-          from e in OutboxEvent,
+          from(e in OutboxEvent,
             where:
               e.subject == "sns.outbox.dm.created" and
                 e.aggregate_id == ^to_string(note.id)
+          )
         )
 
       assert ev.payload["content"] == "@bob_dm_recv psst"
 
-      assert "https://#{SukhiFedi.Config.domain!()}/users/bob_dm_recv" in
-               ev.payload["recipient_actor_uris"]
+      assert "https://#{SukhiFedi.Config.domain!()}/users/bob_dm_recv" in ev.payload[
+               "recipient_actor_uris"
+             ]
     end
 
     test "media_ids[] not owned by user → :media_not_owned" do
@@ -135,10 +143,11 @@ defmodule SukhiFedi.Integration.NotesTest do
 
       ev =
         Repo.one!(
-          from e in OutboxEvent,
+          from(e in OutboxEvent,
             where:
               e.subject == "sns.outbox.note.created" and
                 e.aggregate_id == ^to_string(note.id)
+          )
         )
 
       assert ev.payload["quote_of_ap_id"] == expected
@@ -170,8 +179,10 @@ defmodule SukhiFedi.Integration.NotesTest do
 
       ev =
         Repo.one!(
-          from e in OutboxEvent,
-            where: e.subject == "sns.outbox.note.deleted" and e.aggregate_id == ^to_string(note.id)
+          from(e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.note.deleted" and e.aggregate_id == ^to_string(note.id)
+          )
         )
 
       assert ev.payload["note_id"] == note.id
@@ -224,7 +235,10 @@ defmodule SukhiFedi.Integration.NotesTest do
       a = create_account!("alice_tl_pub")
 
       {:ok, n1} = Notes.create_status(a, %{"status" => "public 1", "visibility" => "public"})
-      {:ok, _f} = Notes.create_status(a, %{"status" => "followers only", "visibility" => "followers"})
+
+      {:ok, _f} =
+        Notes.create_status(a, %{"status" => "followers only", "visibility" => "followers"})
+
       {:ok, n2} = Notes.create_status(a, %{"status" => "public 2", "visibility" => "public"})
 
       result = Timelines.public(limit: 50)
@@ -257,6 +271,53 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert alice_note.id in ids
       assert bob_note.id in ids
     end
+  end
+
+  describe "with_refs/1" do
+    test "resolves in_reply_to and quote to local rows + preloads quoted account" do
+      author = create_account!("wr_author")
+      replier = create_account!("wr_replier")
+
+      parent = note!(author, "https://x.example/notes/p1", "parent")
+
+      reply =
+        note!(replier, "https://x.example/notes/r1", "reply", in_reply_to_ap_id: parent.ap_id)
+
+      quoted = note!(author, "https://x.example/notes/q1", "quoted")
+
+      quoting =
+        note!(replier, "https://x.example/notes/qt1", "quoting", quote_of_ap_id: quoted.ap_id)
+
+      [er, eq] = Notes.with_refs([reply, quoting])
+
+      assert er.in_reply_to_id == parent.id
+      assert er.in_reply_to_account_id == author.id
+      assert er.quoted_note == nil
+
+      assert eq.quoted_note.id == quoted.id
+      # account is preloaded for the nested-Status render
+      assert eq.quoted_note.account.username == "wr_author"
+      assert eq.in_reply_to_id == nil
+    end
+
+    test "leaves refs nil when the referenced note isn't held locally" do
+      replier = create_account!("wr_dangling")
+
+      reply =
+        note!(replier, "https://x.example/notes/d1", "orphan reply",
+          in_reply_to_ap_id: "https://gone.example/notes/x"
+        )
+
+      [er] = Notes.with_refs([reply])
+      assert er.in_reply_to_id == nil
+      assert er.in_reply_to_account_id == nil
+    end
+  end
+
+  defp note!(account, ap_id, content, extra \\ []) do
+    %Note{content: content, visibility: "public", account_id: account.id, ap_id: ap_id}
+    |> struct(Map.new(extra))
+    |> Repo.insert!()
   end
 
   defp create_account!(username) do

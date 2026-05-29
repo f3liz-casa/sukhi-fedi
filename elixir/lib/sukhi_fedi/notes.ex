@@ -117,7 +117,7 @@ defmodule SukhiFedi.Notes do
       |> Repo.transaction()
       |> case do
         {:ok, %{note: note}} ->
-          {:ok, Repo.preload(note, [:account, :media])}
+          {:ok, Repo.preload(note, [:account, :media]) |> with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
           {:error, {:validation, changeset_errors(cs)}}
@@ -175,7 +175,7 @@ defmodule SukhiFedi.Notes do
       |> Repo.transaction()
       |> case do
         {:ok, %{note: note}} ->
-          {:ok, Repo.preload(note, [:account, :media])}
+          {:ok, Repo.preload(note, [:account, :media]) |> with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
           {:error, {:validation, changeset_errors(cs)}}
@@ -342,13 +342,13 @@ defmodule SukhiFedi.Notes do
       true ->
         case parse_int(id) do
           nil -> nil
-          int_id -> Repo.one(from n in Note, where: n.id == ^int_id, select: n.ap_id)
+          int_id -> Repo.one(from(n in Note, where: n.id == ^int_id, select: n.ap_id))
         end
     end
   end
 
   defp resolve_in_reply_to_ap_id(id) when is_integer(id) do
-    Repo.one(from n in Note, where: n.id == ^id, select: n.ap_id)
+    Repo.one(from(n in Note, where: n.id == ^id, select: n.ap_id))
   end
 
   defp resolve_in_reply_to_ap_id(_), do: nil
@@ -393,10 +393,11 @@ defmodule SukhiFedi.Notes do
 
   defp note_ap_id(note_id) do
     query =
-      from n in Note,
+      from(n in Note,
         join: a in assoc(n, :account),
         where: n.id == ^note_id,
         select: {n.ap_id, a.domain, a.username}
+      )
 
     case Repo.one(query) do
       {ap_id, _domain, _username} when is_binary(ap_id) ->
@@ -469,10 +470,56 @@ defmodule SukhiFedi.Notes do
       n ->
         case Repo.get(Note, n) do
           nil -> {:error, :not_found}
-          note -> {:ok, Repo.preload(note, [:account, :media, :poll, :reactions])}
+          note -> {:ok, Repo.preload(note, [:account, :media, :poll, :reactions]) |> with_refs()}
         end
     end
   end
+
+  @doc """
+  Enrich notes with the reply/quote reference fields the Mastodon view
+  needs, resolving the stored AP ids to local rows in one batch query
+  (no N+1):
+
+    * `in_reply_to_id` / `in_reply_to_account_id` — the reply parent,
+      when we hold it locally (else left nil; the reply still renders).
+    * `quoted_note` — the quoted note with its account preloaded, for a
+      nested-Status `quote` render.
+
+  Accepts a list or a single note; anything else passes through.
+  """
+  @spec with_refs([Note.t()] | Note.t() | any()) :: [Note.t()] | Note.t() | any()
+  def with_refs(notes) when is_list(notes) do
+    refs =
+      notes
+      |> Enum.flat_map(fn n -> [n.in_reply_to_ap_id, n.quote_of_ap_id] end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    by_ap =
+      if refs == [] do
+        %{}
+      else
+        from(n in Note, where: n.ap_id in ^refs)
+        |> Repo.all()
+        |> Repo.preload(:account)
+        |> Map.new(fn n -> {n.ap_id, n} end)
+      end
+
+    Enum.map(notes, fn n ->
+      parent = n.in_reply_to_ap_id && Map.get(by_ap, n.in_reply_to_ap_id)
+      quoted = n.quote_of_ap_id && Map.get(by_ap, n.quote_of_ap_id)
+
+      %{
+        n
+        | in_reply_to_id: parent && parent.id,
+          in_reply_to_account_id: parent && parent.account_id,
+          quoted_note: quoted
+      }
+    end)
+  end
+
+  def with_refs(%Note{} = note), do: note |> List.wrap() |> with_refs() |> hd()
+  def with_refs(other), do: other
 
   # ── delete ───────────────────────────────────────────────────────────────
 
@@ -547,8 +594,15 @@ defmodule SukhiFedi.Notes do
 
       n ->
         case Repo.get(Note, n) do
-          nil -> {:error, :not_found}
-          note -> {:ok, %{ancestors: ancestors_of(note), descendants: descendants_of(note)}}
+          nil ->
+            {:error, :not_found}
+
+          note ->
+            {:ok,
+             %{
+               ancestors: with_refs(ancestors_of(note)),
+               descendants: with_refs(descendants_of(note))
+             }}
         end
     end
   end
@@ -564,7 +618,7 @@ defmodule SukhiFedi.Notes do
   defp walk_ancestors(nil, acc, _depth), do: Enum.reverse(acc)
 
   defp walk_ancestors(ap_id, acc, depth) do
-    case Repo.one(from n in Note, where: n.ap_id == ^ap_id, preload: [:account, :media]) do
+    case Repo.one(from(n in Note, where: n.ap_id == ^ap_id, preload: [:account, :media])) do
       nil -> Enum.reverse(acc)
       note -> walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1)
     end
@@ -616,7 +670,11 @@ defmodule SukhiFedi.Notes do
 
   def favourite(account_id, note_id) when is_integer(account_id) do
     with_loaded_note(note_id, fn note ->
-      case Repo.get_by(Reaction, account_id: account_id, note_id: note.id, emoji: @favourite_emoji) do
+      case Repo.get_by(Reaction,
+             account_id: account_id,
+             note_id: note.id,
+             emoji: @favourite_emoji
+           ) do
         %Reaction{} ->
           {:ok, note}
 
@@ -671,7 +729,11 @@ defmodule SukhiFedi.Notes do
 
   def unfavourite(account_id, note_id) when is_integer(account_id) do
     with_loaded_note(note_id, fn note ->
-      case Repo.get_by(Reaction, account_id: account_id, note_id: note.id, emoji: @favourite_emoji) do
+      case Repo.get_by(Reaction,
+             account_id: account_id,
+             note_id: note.id,
+             emoji: @favourite_emoji
+           ) do
         nil ->
           {:ok, note}
 
@@ -684,7 +746,12 @@ defmodule SukhiFedi.Notes do
             "reaction",
             fn _ -> r.id end,
             fn _ ->
-              %{reaction_id: r.id, account_id: r.account_id, note_id: r.note_id, note_ap_id: note.ap_id}
+              %{
+                reaction_id: r.id,
+                account_id: r.account_id,
+                note_id: r.note_id,
+                note_ap_id: note.ap_id
+              }
             end
           )
           |> Repo.transaction()
@@ -871,7 +938,12 @@ defmodule SukhiFedi.Notes do
             "boost",
             fn _ -> b.id end,
             fn _ ->
-              %{boost_id: b.id, account_id: b.account_id, note_id: b.note_id, note_ap_id: note.ap_id}
+              %{
+                boost_id: b.id,
+                account_id: b.account_id,
+                note_id: b.note_id,
+                note_ap_id: note.ap_id
+              }
             end
           )
           |> Repo.transaction()
@@ -906,7 +978,7 @@ defmodule SukhiFedi.Notes do
     with_loaded_note(note_id, fn note ->
       _ =
         Repo.delete_all(
-          from b in Bookmark, where: b.account_id == ^account_id and b.note_id == ^note.id
+          from(b in Bookmark, where: b.account_id == ^account_id and b.note_id == ^note.id)
         )
 
       {:ok, note}
@@ -984,7 +1056,12 @@ defmodule SukhiFedi.Notes do
               "pinned_note",
               fn _ -> p.id end,
               fn _ ->
-                %{pinned_id: p.id, account_id: p.account_id, note_id: p.note_id, note_ap_id: note.ap_id}
+                %{
+                  pinned_id: p.id,
+                  account_id: p.account_id,
+                  note_id: p.note_id,
+                  note_ap_id: note.ap_id
+                }
               end
             )
             |> Repo.transaction()
@@ -1004,7 +1081,11 @@ defmodule SukhiFedi.Notes do
   Returns `%{replies: int, reblogs: int, favourites: int}` for a
   single note in three cheap counts.
   """
-  @spec counts_for_note(integer()) :: %{replies: integer(), reblogs: integer(), favourites: integer()}
+  @spec counts_for_note(integer()) :: %{
+          replies: integer(),
+          reblogs: integer(),
+          favourites: integer()
+        }
   def counts_for_note(note_id) when is_integer(note_id) do
     note = Repo.get(Note, note_id)
     ap_id = note && note.ap_id
@@ -1117,7 +1198,8 @@ defmodule SukhiFedi.Notes do
 
         id when is_integer(id) ->
           from(r in Reaction,
-            where: r.note_id in ^note_ids and r.account_id == ^id and r.emoji != ^@favourite_emoji,
+            where:
+              r.note_id in ^note_ids and r.account_id == ^id and r.emoji != ^@favourite_emoji,
             select: {r.note_id, r.emoji}
           )
           |> Repo.all()
@@ -1165,16 +1247,23 @@ defmodule SukhiFedi.Notes do
     %{
       favourited:
         Repo.exists?(
-          from r in Reaction,
-            where: r.account_id == ^account_id and r.note_id == ^note_id and r.emoji == ^@favourite_emoji
+          from(r in Reaction,
+            where:
+              r.account_id == ^account_id and r.note_id == ^note_id and
+                r.emoji == ^@favourite_emoji
+          )
         ),
       reblogged:
-        Repo.exists?(from b in Boost, where: b.account_id == ^account_id and b.note_id == ^note_id),
+        Repo.exists?(
+          from(b in Boost, where: b.account_id == ^account_id and b.note_id == ^note_id)
+        ),
       bookmarked:
-        Repo.exists?(from b in Bookmark, where: b.account_id == ^account_id and b.note_id == ^note_id),
+        Repo.exists?(
+          from(b in Bookmark, where: b.account_id == ^account_id and b.note_id == ^note_id)
+        ),
       pinned:
         Repo.exists?(
-          from p in PinnedNote, where: p.account_id == ^account_id and p.note_id == ^note_id
+          from(p in PinnedNote, where: p.account_id == ^account_id and p.note_id == ^note_id)
         )
     }
   end
@@ -1263,6 +1352,7 @@ defmodule SukhiFedi.Notes do
     )
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+    |> with_refs()
   end
 
   @doc "Same as list_bookmarks but for favourites (Reactions with the favourite emoji)."
@@ -1283,6 +1373,7 @@ defmodule SukhiFedi.Notes do
     )
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+    |> with_refs()
   end
 
   defp with_loaded_note(note_id, fun) do

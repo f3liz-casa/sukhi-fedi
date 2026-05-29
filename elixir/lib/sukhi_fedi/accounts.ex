@@ -28,7 +28,7 @@ defmodule SukhiFedi.Accounts do
   def by_local_username(nil), do: nil
 
   def by_local_username(username) when is_binary(username) do
-    Repo.one(from a in Account, where: a.username == ^username and is_nil(a.domain), limit: 1)
+    Repo.one(from(a in Account, where: a.username == ^username and is_nil(a.domain), limit: 1))
   end
 
   @doc """
@@ -45,10 +45,11 @@ defmodule SukhiFedi.Accounts do
           %{keyId: String.t(), privateJwk: map(), publicJwk: map() | nil} | nil
   def signing_identity do
     query =
-      from a in Account,
+      from(a in Account,
         where: is_nil(a.domain) and not is_nil(a.private_key_jwk),
         order_by: [asc: a.id],
         limit: 1
+      )
 
     case Repo.one(query) do
       %Account{username: u, private_key_jwk: priv, public_key_jwk: pub} ->
@@ -70,13 +71,17 @@ defmodule SukhiFedi.Accounts do
   def get_account(id) do
     id =
       cond do
-        is_integer(id) -> id
+        is_integer(id) ->
+          id
+
         is_binary(id) ->
           case Integer.parse(id) do
             {n, ""} -> n
             _ -> nil
           end
-        true -> nil
+
+        true ->
+          nil
       end
 
     case id && Repo.get(Account, id) do
@@ -174,7 +179,11 @@ defmodule SukhiFedi.Accounts do
   Counters table or trigger-maintained aggregate becomes worth the
   complexity.
   """
-  @spec counts_for(integer()) :: %{followers: integer(), following: integer(), statuses: integer()}
+  @spec counts_for(integer()) :: %{
+          followers: integer(),
+          following: integer(),
+          statuses: integer()
+        }
   def counts_for(account_id) when is_integer(account_id) do
     case cache_get({:counts, account_id}) do
       {:ok, value} ->
@@ -335,14 +344,24 @@ defmodule SukhiFedi.Accounts do
 
   defp filter_accounts(query, filter) do
     Enum.reduce(filter, query, fn
-      {:suspended, true}, q -> from(a in q, where: not is_nil(a.suspended_at))
-      {:suspended, false}, q -> from(a in q, where: is_nil(a.suspended_at))
-      {:is_admin, true}, q -> from(a in q, where: a.is_admin == true)
-      {:is_admin, false}, q -> from(a in q, where: a.is_admin == false)
+      {:suspended, true}, q ->
+        from(a in q, where: not is_nil(a.suspended_at))
+
+      {:suspended, false}, q ->
+        from(a in q, where: is_nil(a.suspended_at))
+
+      {:is_admin, true}, q ->
+        from(a in q, where: a.is_admin == true)
+
+      {:is_admin, false}, q ->
+        from(a in q, where: a.is_admin == false)
+
       {:username, <<_, _::binary>> = prefix}, q ->
         like = String.downcase(prefix) <> "%"
         from(a in q, where: like(fragment("lower(?)", a.username), ^like))
-      _, q -> q
+
+      _, q ->
+        q
     end)
   end
 
@@ -419,6 +438,7 @@ defmodule SukhiFedi.Accounts do
       |> limit(^limit)
       |> Repo.all()
       |> Repo.preload([:account, :media, :tags])
+      |> SukhiFedi.Notes.with_refs()
 
     if Map.get(opts, :only_media, false) do
       Enum.filter(notes, fn n -> length(n.media || []) > 0 end)
@@ -491,5 +511,4 @@ defmodule SukhiFedi.Accounts do
       end)
     end)
   end
-
 end

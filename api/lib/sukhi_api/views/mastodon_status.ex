@@ -38,8 +38,8 @@ defmodule SukhiApi.Views.MastodonStatus do
     %{
       id: Id.encode(note.id),
       created_at: format_dt(Map.get(note, :created_at)),
-      in_reply_to_id: nil,
-      in_reply_to_account_id: nil,
+      in_reply_to_id: encode_id(Map.get(note, :in_reply_to_id)),
+      in_reply_to_account_id: encode_id(Map.get(note, :in_reply_to_account_id)),
       sensitive: !!(Map.get(note, :cw) && Map.get(note, :cw) != ""),
       spoiler_text: Map.get(note, :cw) || "",
       visibility: Map.get(note, :visibility) || "public",
@@ -52,6 +52,10 @@ defmodule SukhiApi.Views.MastodonStatus do
       edited_at: nil,
       content: render_content(note),
       reblog: nil,
+      # Quote post (Fedibird-compatible): the quoted status nested one
+      # level deep. nil when there's no quote or we don't hold the quoted
+      # note locally yet.
+      quote: render_quote(note),
       application: nil,
       account: render_account(note),
       media_attachments: render_media(note),
@@ -86,6 +90,19 @@ defmodule SukhiApi.Views.MastodonStatus do
         reactions: Map.get(reactions_by_id, n.id, [])
       })
     end)
+  end
+
+  defp encode_id(nil), do: nil
+  defp encode_id(id), do: Id.encode(id)
+
+  # The quoted status, rendered one level deep. The quoted note carries
+  # no `:quoted_note` of its own (gateway only enriches the top level),
+  # so the nested render's own `quote` resolves to nil — no recursion.
+  defp render_quote(note) do
+    case Map.get(note, :quoted_note) do
+      %{} = quoted -> if Map.get(quoted, :id), do: render(quoted, %{}), else: nil
+      _ -> nil
+    end
   end
 
   defp render_content(note) do

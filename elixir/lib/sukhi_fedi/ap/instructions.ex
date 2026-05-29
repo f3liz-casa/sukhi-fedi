@@ -43,7 +43,12 @@ defmodule SukhiFedi.AP.Instructions do
     :ok
   end
 
-  def execute(%{"action" => "save_and_reply", "save" => save_data, "reply" => reply, "inbox" => inbox_url}) do
+  def execute(%{
+        "action" => "save_and_reply",
+        "save" => save_data,
+        "reply" => reply,
+        "inbox" => inbox_url
+      }) do
     insert_follow(save_data)
     maybe_notify_follow(save_data)
 
@@ -215,7 +220,8 @@ defmodule SukhiFedi.AP.Instructions do
 
   # Detect incoming DMs: Create activity wrapping a Note whose `to` doesn't
   # include the AS#Public URI. Record conversation participants for inbox queries.
-  defp maybe_handle_dm(%{"type" => "Create", "object" => object, "actor" => actor_uri}) when is_map(object) do
+  defp maybe_handle_dm(%{"type" => "Create", "object" => object, "actor" => actor_uri})
+       when is_map(object) do
     to_list = normalize_collection(object["to"] || [])
 
     is_direct =
@@ -249,7 +255,11 @@ defmodule SukhiFedi.AP.Instructions do
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
+
+    account =
+      if String.contains?(actor_uri, domain),
+        do: SukhiFedi.Accounts.by_local_username(username),
+        else: nil
 
     if account do
       %ConversationParticipant{}
@@ -265,7 +275,9 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_save_dm_note(recipient_uri, domain, object, _actor_uri, conversation_ap_id) do
     if String.contains?(recipient_uri, domain) do
-      username = recipient_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+      username =
+        recipient_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+
       account = SukhiFedi.Accounts.by_local_username(username)
 
       if account do
@@ -285,7 +297,8 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   # When we receive Accept(Follow) where the actor is a known relay, mark it accepted.
-  defp maybe_handle_relay_accept(%{"type" => "Accept", "actor" => actor_uri}) when is_binary(actor_uri) do
+  defp maybe_handle_relay_accept(%{"type" => "Accept", "actor" => actor_uri})
+       when is_binary(actor_uri) do
     Relays.accept(actor_uri)
     :ok
   end
@@ -324,7 +337,9 @@ defmodule SukhiFedi.AP.Instructions do
   # Timelines.public can see it. DMs (no AS#Public in `to`/`cc`) are
   # routed by `maybe_handle_dm`, which writes its own Note row scoped
   # to the local recipient; we skip them here to avoid double-insert.
-  defp maybe_mirror_create_note(%{"type" => "Create", "object" => %{"type" => type} = note} = activity)
+  defp maybe_mirror_create_note(
+         %{"type" => "Create", "object" => %{"type" => type} = note} = activity
+       )
        when type in ["Note", "Article", "Question"] do
     if dm_addressing?(note) do
       :ok
@@ -351,6 +366,7 @@ defmodule SukhiFedi.AP.Instructions do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])
             notify_mentions(note, nid, account_id)
+            fetch_referenced_notes(attrs)
             :ok
 
           _ ->
@@ -363,6 +379,23 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   defp maybe_mirror_create_note(_), do: :ok
+
+  # Best-effort: pull the reply parent and the quoted note so threading
+  # (`in_reply_to_id`) and quote rendering resolve to local rows.
+  # NoteFetcher checks the DB first, so this only hits the network on a
+  # genuine miss; one level only (the fetched note stores its own
+  # in_reply_to_ap_id but we don't recurse). Failures are ignored — the
+  # reply/quote is already stored, it just won't link until we see the
+  # referenced note another way.
+  defp fetch_referenced_notes(attrs) do
+    for key <- ["in_reply_to_ap_id", "quote_of_ap_id"],
+        uri = attrs[key],
+        is_binary(uri) do
+      SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(uri)
+    end
+
+    :ok
+  end
 
   # A mirrored note can name local users in its AP `tag` array. Notify
   # each — this is the `mention` notification type. DM-addressed notes
@@ -398,7 +431,9 @@ defmodule SukhiFedi.AP.Instructions do
   # row and notify the note's author. The reaction already happened on
   # the remote side, so the row is inserted directly: no outbox event,
   # because re-broadcasting someone else's reaction would be wrong.
-  defp maybe_handle_reaction(%{"type" => type, "actor" => actor_uri, "object" => object} = activity)
+  defp maybe_handle_reaction(
+         %{"type" => type, "actor" => actor_uri, "object" => object} = activity
+       )
        when type in ["Like", "EmojiReact"] and is_binary(actor_uri) do
     with %Note{id: note_id, account_id: author_id} <- resolve_target_note(object),
          {:ok, %Account{id: reactor_id}} <- resolve_or_ingest_actor(actor_uri) do
@@ -487,7 +522,11 @@ defmodule SukhiFedi.AP.Instructions do
   defp find_emoji_tag(_, _), do: nil
 
   # Inbound `Announce` of a local note → reblog notification.
-  defp maybe_notify_announce(%{"type" => "Announce", "actor" => actor_uri, "object" => object_uri}) do
+  defp maybe_notify_announce(%{
+         "type" => "Announce",
+         "actor" => actor_uri,
+         "object" => object_uri
+       }) do
     with %Note{id: note_id, account_id: recipient_id} <- resolve_target_note(object_uri),
          {:ok, %Account{id: from_id}} <- resolve_or_ingest_actor(actor_uri) do
       Notifications.create(%{
@@ -570,7 +609,8 @@ defmodule SukhiFedi.AP.Instructions do
 
     cond do
       String.contains?(actor_uri, domain) ->
-        username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+        username =
+          actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
 
         case SukhiFedi.Accounts.by_local_username(username) do
           %Account{} = a -> {:ok, a}
@@ -584,7 +624,8 @@ defmodule SukhiFedi.AP.Instructions do
 
           nil ->
             with {:ok, json} <- SukhiFedi.Federation.ActorFetcher.fetch(actor_uri),
-                 {:ok, %Account{} = a} <- SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(json) do
+                 {:ok, %Account{} = a} <-
+                   SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(json) do
               {:ok, a}
             else
               _ -> {:error, :ingest_failed}
@@ -594,11 +635,20 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   # Handle Add/Remove targeting a featured collection (pinned/unpinned posts).
-  defp maybe_handle_pin_unpin(%{"type" => "Add", "actor" => actor_uri, "object" => note_uri, "target" => target_uri})
+  defp maybe_handle_pin_unpin(%{
+         "type" => "Add",
+         "actor" => actor_uri,
+         "object" => note_uri,
+         "target" => target_uri
+       })
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
+
+    account =
+      if String.contains?(actor_uri, domain),
+        do: SukhiFedi.Accounts.by_local_username(username),
+        else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -606,11 +656,20 @@ defmodule SukhiFedi.AP.Instructions do
     end
   end
 
-  defp maybe_handle_pin_unpin(%{"type" => "Remove", "actor" => actor_uri, "object" => note_uri, "target" => target_uri})
+  defp maybe_handle_pin_unpin(%{
+         "type" => "Remove",
+         "actor" => actor_uri,
+         "object" => note_uri,
+         "target" => target_uri
+       })
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
     username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
-    account = if String.contains?(actor_uri, domain), do: SukhiFedi.Accounts.by_local_username(username), else: nil
+
+    account =
+      if String.contains?(actor_uri, domain),
+        do: SukhiFedi.Accounts.by_local_username(username),
+        else: nil
 
     if account && String.ends_with?(target_uri, "/featured") do
       note = Repo.get_by(SukhiFedi.Schema.Note, ap_id: note_uri)
@@ -715,6 +774,7 @@ defmodule SukhiFedi.AP.Instructions do
 
     if String.contains?(uri, domain) do
       username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+
       case SukhiFedi.Accounts.by_local_username(username) do
         nil -> nil
         account -> account.id

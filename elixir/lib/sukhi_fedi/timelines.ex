@@ -40,6 +40,7 @@ defmodule SukhiFedi.Timelines do
     |> apply_paging(opts)
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+    |> SukhiFedi.Notes.with_refs()
   end
 
   @doc """
@@ -62,6 +63,7 @@ defmodule SukhiFedi.Timelines do
     |> maybe_only_media(opts[:only_media])
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+    |> SukhiFedi.Notes.with_refs()
   end
 
   defp maybe_local_only(query, true) do
@@ -87,18 +89,20 @@ defmodule SukhiFedi.Timelines do
     name = hashtag |> String.trim_leading("#") |> String.downcase()
 
     base =
-      from n in Note,
+      from(n in Note,
         join: nt in "note_tags",
         on: nt.note_id == n.id,
         join: t in Tag,
         on: t.id == nt.tag_id,
         where: t.name == ^name and n.visibility == "public"
+      )
 
     base
     |> maybe_local_only(local?)
     |> apply_paging(opts)
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+    |> SukhiFedi.Notes.with_refs()
   end
 
   # ── paging ───────────────────────────────────────────────────────────────
@@ -126,7 +130,9 @@ defmodule SukhiFedi.Timelines do
   defp maybe_min_id(q, nil), do: q
   defp maybe_min_id(q, v) when is_integer(v), do: where(q, [n], n.id > ^v)
 
-  defp maybe_only_media(q, true), do: where(q, [n], fragment("EXISTS (SELECT 1 FROM note_media nm WHERE nm.note_id = ?)", n.id))
+  defp maybe_only_media(q, true),
+    do: where(q, [n], fragment("EXISTS (SELECT 1 FROM note_media nm WHERE nm.note_id = ?)", n.id))
+
   defp maybe_only_media(q, _), do: q
 
   defp clamp_limit(n) when is_integer(n) and n > 0 and n <= @max_limit, do: n
