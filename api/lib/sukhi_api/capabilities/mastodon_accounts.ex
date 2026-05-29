@@ -354,9 +354,9 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     id = req[:path_params]["id"]
 
     with {:ok, int_id} <- parse_int(id),
-         {:ok, uris} when is_list(uris) <-
+         {:ok, items} when is_list(items) <-
            GatewayRpc.call(SukhiFedi.Social, :list_followers, [int_id]) do
-      ok(200, Enum.map(uris, &uri_only_account/1))
+      ok(200, Enum.map(items, &render_follower/1))
     else
       {:error, :bad_int} -> ok(400, %{error: "invalid_id"})
       {:error, :not_connected} -> ok(503, %{error: "gateway_not_connected"})
@@ -391,6 +391,13 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
       {:error, e} -> {:error, e}
     end
   end
+
+  # The gateway resolves each follower URI to a real account row where it
+  # can; those arrive as projection maps carrying `:id`. A URI it couldn't
+  # resolve (remote actor not yet ingested, or a deleted local row) arrives
+  # as `%{actor_uri: uri}` and gets the minimal shape below.
+  defp render_follower(%{id: _} = account), do: MastodonAccount.render(account, %{})
+  defp render_follower(%{actor_uri: uri}), do: uri_only_account(uri)
 
   defp uri_only_account(uri) do
     # Followers list returns AP URIs (some of which may be remote and

@@ -13,13 +13,66 @@ defmodule SukhiFedi.Social do
 
   # ── reads ─────────────────────────────────────────────────────────────────
 
+  @doc """
+  Followers of `account_id`, resolved to account projections.
+
+  `follows` stores the follower side as a bare `follower_uri` — it may
+  point at a remote actor (or a local user) and never carried a FK. We
+  resolve each URI back to its `accounts` row so the Mastodon view can
+  render a real profile (correct `acct`, avatar, …) instead of leaking
+  the raw URI: local rows by username, remote shadow rows by
+  `actor_uri`. A URI with no matching row falls through as
+  `%{actor_uri: uri}` for the caller to render minimally.
+  """
   def list_followers(account_id, _opts \\ []) do
     from(f in Follow,
       where: f.followee_id == ^account_id and f.state == "accepted",
       select: f.follower_uri
     )
     |> Repo.all()
+    |> resolve_follower_uris()
   end
+
+  defp resolve_follower_uris([]), do: []
+
+  defp resolve_follower_uris(uris) do
+    local_prefix = "https://#{SukhiFedi.Config.domain!()}/users/"
+
+    {local_uris, remote_uris} =
+      Enum.split_with(uris, &String.starts_with?(&1, local_prefix))
+
+    local_usernames = Enum.map(local_uris, &String.replace_prefix(&1, local_prefix, ""))
+
+    by_uri =
+      from(a in Account,
+        where:
+          (is_nil(a.domain) and a.username in ^local_usernames) or
+            a.actor_uri in ^remote_uris,
+        select: %{
+          id: a.id,
+          username: a.username,
+          domain: a.domain,
+          display_name: a.display_name,
+          summary: a.summary,
+          actor_uri: a.actor_uri,
+          avatar_url: a.avatar_url,
+          banner_url: a.banner_url,
+          locked: a.locked,
+          is_bot: a.is_bot,
+          is_admin: a.is_admin,
+          created_at: a.created_at
+        }
+      )
+      |> Repo.all()
+      |> Map.new(fn a -> {canonical_actor_uri(a, local_prefix), a} end)
+
+    Enum.map(uris, fn uri -> Map.get(by_uri, uri, %{actor_uri: uri}) end)
+  end
+
+  defp canonical_actor_uri(%{domain: nil, username: username}, local_prefix),
+    do: local_prefix <> username
+
+  defp canonical_actor_uri(%{actor_uri: actor_uri}, _local_prefix), do: actor_uri
 
   @doc """
   Returns a compact projection of the accounts the caller follows — one

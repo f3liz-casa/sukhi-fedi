@@ -94,6 +94,39 @@ defmodule SukhiFedi.Integration.SocialTest do
     end
   end
 
+  describe "list_followers/1" do
+    test "resolves local + remote follower URIs to account projections" do
+      potato = create_account!("potato_lf")
+      nyanrus = create_account!("nyanrus_lf")
+      bob_remote = create_remote_account!("bob_lf", "social.example")
+
+      local_uri = "https://#{SukhiFedi.Config.domain!()}/users/nyanrus_lf"
+      Repo.insert!(%Follow{follower_uri: local_uri, followee_id: potato.id, state: "accepted"})
+
+      Repo.insert!(%Follow{
+        follower_uri: bob_remote.actor_uri,
+        followee_id: potato.id,
+        state: "accepted"
+      })
+
+      by_id = Social.list_followers(potato.id) |> Map.new(fn f -> {f[:id], f} end)
+
+      assert by_id[nyanrus.id].username == "nyanrus_lf"
+      assert by_id[nyanrus.id].domain == nil
+      assert by_id[bob_remote.id].domain == "social.example"
+      assert by_id[bob_remote.id].actor_uri == bob_remote.actor_uri
+    end
+
+    test "an unresolved follower URI falls through as %{actor_uri: uri}" do
+      potato = create_account!("potato_unres")
+      ghost = "https://gone.example/users/ghost"
+      Repo.insert!(%Follow{follower_uri: ghost, followee_id: potato.id, state: "accepted"})
+
+      assert [%{actor_uri: ^ghost} = item] = Social.list_followers(potato.id)
+      refute Map.has_key?(item, :id)
+    end
+  end
+
   describe "unfollow/2" do
     test "deletes the Follow row + emits sns.outbox.follow.undone (remote target)" do
       alice = create_account!("alice_unf")
