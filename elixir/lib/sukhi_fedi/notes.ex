@@ -577,14 +577,23 @@ defmodule SukhiFedi.Notes do
 
   @max_depth 60
 
+  # How many missing ancestors to backfill from the origin per context
+  # view. The walk is bounded by @max_depth; this separately caps the
+  # number of synchronous remote fetches so opening one note can't fan
+  # out into dozens of round-trips.
+  @ancestor_backfill 20
+
   @doc """
   Build a Mastodon Context for a note: ancestors (parents up the
   reply chain) and descendants (replies down the tree). Capped at
   depth #{@max_depth} like Mastodon.
 
-  Implementation: recursive CTEs over `notes.in_reply_to_ap_id` ↔
-  `notes.ap_id`. Locally-known nodes only — remote ancestors require
-  fetching, which is deferred.
+  Ancestors are backfilled on demand: walking up `in_reply_to_ap_id`,
+  a parent we don't hold locally is fetched + mirrored via
+  `Federation.NoteFetcher` (best-effort, up to #{@ancestor_backfill}
+  fetches) so a reply opened in isolation still shows its thread.
+  Descendants stay local-only — pulling a remote `replies` collection
+  is a separate piece.
   """
   @spec context(integer() | binary()) ::
           {:ok, %{ancestors: [Note.t()], descendants: [Note.t()]}} | {:error, :not_found}
@@ -611,17 +620,44 @@ defmodule SukhiFedi.Notes do
   defp ancestors_of(%Note{in_reply_to_ap_id: nil}), do: []
 
   defp ancestors_of(%Note{in_reply_to_ap_id: parent_ap_id}) do
-    walk_ancestors(parent_ap_id, [], 0)
+    walk_ancestors(parent_ap_id, [], 0, @ancestor_backfill)
   end
 
-  defp walk_ancestors(_ap_id, acc, depth) when depth >= @max_depth, do: Enum.reverse(acc)
+  defp walk_ancestors(_ap_id, acc, depth, _budget) when depth >= @max_depth,
+    do: Enum.reverse(acc)
 
-  defp walk_ancestors(nil, acc, _depth), do: Enum.reverse(acc)
+  defp walk_ancestors(nil, acc, _depth, _budget), do: Enum.reverse(acc)
 
-  defp walk_ancestors(ap_id, acc, depth) do
+  defp walk_ancestors(ap_id, acc, depth, budget) do
     case Repo.one(from(n in Note, where: n.ap_id == ^ap_id, preload: [:account, :media])) do
-      nil -> Enum.reverse(acc)
-      note -> walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1)
+      %Note{} = note ->
+        walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget)
+
+      nil when budget > 0 ->
+        # Parent isn't mirrored yet — pull it from the origin so the thread
+        # has its chain. A fetch miss just ends the walk.
+        case fetch_ancestor(ap_id) do
+          %Note{} = note -> walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget - 1)
+          nil -> Enum.reverse(acc)
+        end
+
+      nil ->
+        Enum.reverse(acc)
+    end
+  end
+
+  # Best-effort backfill of one ancestor. The fetch goes over NATS to Bun;
+  # a down peer / disconnected NATS must never crash the context read.
+  defp fetch_ancestor(ap_id) do
+    try do
+      case SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(ap_id) do
+        {:ok, %Note{} = n} -> Repo.preload(n, [:account, :media])
+        _ -> nil
+      end
+    rescue
+      _ -> nil
+    catch
+      _kind, _reason -> nil
     end
   end
 
