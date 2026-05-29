@@ -38,6 +38,14 @@ defmodule SukhiFedi.Addon.Registry do
     Enum.uniq(app_mods ++ loaded)
   end
 
+  @doc """
+  Whether the addon with the given id is active under the current
+  enable/disable config. Lets request-time route gating (e.g. the
+  streaming WS endpoint) mirror what actually booted.
+  """
+  @spec enabled?(SukhiFedi.Addon.id()) :: boolean()
+  def enabled?(id), do: Enum.any?(all(), &(&1.id() == id))
+
   @spec children() :: [Supervisor.child_spec() | module() | {module(), term()}]
   def children, do: Enum.flat_map(all(), & &1.supervision_children())
 

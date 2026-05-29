@@ -11,6 +11,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.NoteController
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
+  alias SukhiFedi.Web.StreamingController
   alias SukhiFedi.Web.Auth.LoginController
 
   plug(Plug.Logger)
@@ -228,6 +229,17 @@ defmodule SukhiFedi.Web.Router do
   # plugin node runs the `:sukhi_api` application (see the top-level
   # `api/` directory) and exposes capabilities via `:rpc`. If no plugin
   # node is reachable the client gets a 503.
+
+  # Streaming WebSocket lives in the gateway (Bandit upgrade), not on a
+  # plugin node: the `:streaming` addon already holds the NATS listener
+  # and the broadcaster Registry here, so the socket just verifies the
+  # bearer and subscribes. Must precede the `/api/v1/*_` forwarder below,
+  # which would otherwise ship the upgrade to a plugin that can't speak WS.
+  get "/api/v1/streaming" do
+    if SukhiFedi.Addon.Registry.enabled?(:streaming),
+      do: StreamingController.connect(conn, []),
+      else: send_resp(conn, 404, "")
+  end
 
   match "/api/v1/*_" do
     SukhiFedi.Web.PluginPlug.call(conn, SukhiFedi.Web.PluginPlug.init([]))

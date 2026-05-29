@@ -24,6 +24,11 @@ defmodule SukhiFedi.Addons.Streaming.Registry do
   defp stream_key(:home, account_id), do: {:home, account_id}
   defp stream_key(:local, _), do: :local
 
+  # Mastodon stream identifier carried in the broadcast so a socket
+  # subscribed to several feeds can label each frame's `"stream"` array.
+  defp stream_label({:home, _}), do: "user"
+  defp stream_label(:local), do: "public:local"
+
   @impl true
   def init(_), do: {:ok, %{}}
 
@@ -42,8 +47,9 @@ defmodule SukhiFedi.Addons.Streaming.Registry do
 
   @impl true
   def handle_cast({:broadcast, key, event}, state) do
+    label = stream_label(key)
     subscribers = Map.get(state, key, MapSet.new())
-    Enum.each(subscribers, fn pid -> send(pid, {:stream_event, event}) end)
+    Enum.each(subscribers, fn pid -> send(pid, {:stream_event, label, event}) end)
     {:noreply, state}
   end
 

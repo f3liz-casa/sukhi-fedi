@@ -55,7 +55,9 @@ files are complementary: TODO is "do this", OPEN_QUESTIONS is
 
 ## Mastodon API surface — open
 
-- [ ] **Streaming WebSocket** — see [OPEN_QUESTIONS Q2](OPEN_QUESTIONS.md#q2-streaming-websocket--どこに置くか).
+- [x] **Streaming WebSocket** — `/api/v1/streaming` in the gateway (Q2 option 1).
+      `user` + `public:local` live; `hashtag` / `list` / federated `public`
+      wait on a `stream.new_post` producer (nothing publishes it yet).
 - [ ] **Search (`/api/v2/search`)** — see [OPEN_QUESTIONS Q1](OPEN_QUESTIONS.md#q1-search-戦略--full-text-どうやるか).
 - [ ] **Push delivery side.** `Addons.WebPush.send_notification/2`
       is still a stub; subscribe/get/put/delete REST is live, but

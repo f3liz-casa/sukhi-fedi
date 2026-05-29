@@ -136,7 +136,7 @@ so the supervision tree is ready when those capabilities land.
 | `:moderation`    | block / mute / report / domain blocks                        |
 | `:bookmarks`     | `/api/v1/bookmarks`                                          |
 | `:pinned_notes`  | featured collection + pin endpoints                          |
-| `:streaming`     | `/api/v1/streaming` WebSocket (handler pending)              |
+| `:streaming`     | `/api/v1/streaming` WebSocket (`user` + `public:local`)      |
 | `:web_push`      | push subscriptions (VAPID flow pending)                      |
 
 Deliberately **not** included:
