@@ -110,7 +110,8 @@ defmodule SukhiFedi.Notes do
             visibility: n.visibility,
             content: n.content,
             media_ids: media_ids,
-            quote_of_ap_id: n.quote_of_ap_id
+            quote_of_ap_id: n.quote_of_ap_id,
+            in_reply_to_ap_id: n.in_reply_to_ap_id
           }
         end
       )

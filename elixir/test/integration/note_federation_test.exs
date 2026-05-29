@@ -120,6 +120,40 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
       assert %Note{quote_of_ap_id: ^original} = Repo.get_by(Note, ap_id: quote_note)
     end
 
+    test "Create(Note) with a FEP-e232 tag Link mirrors quote_of_ap_id" do
+      quoter = create_remote_account!("quoter_fep", "remote.example")
+      original = "https://remote.example/notes/fep-original"
+      quote_note = "https://remote.example/notes/q2"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => quoter.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => quote_note,
+                     "attributedTo" => quoter.actor_uri,
+                     "content" => "quoting via FEP-e232",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "tag" => [
+                       %{"type" => "Mention", "href" => "https://remote.example/users/someone"},
+                       %{
+                         "type" => "Link",
+                         "mediaType" =>
+                           "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"",
+                         "href" => original,
+                         "rel" => "https://misskey-hub.net/ns#_misskey_quote"
+                       }
+                     ]
+                   }
+                 }
+               })
+
+      assert %Note{quote_of_ap_id: ^original} = Repo.get_by(Note, ap_id: quote_note)
+    end
+
     test "Create(Note) with _misskey_content mirrors the MFM source" do
       author = create_remote_account!("mfm_author", "remote.example")
       note_uri = "https://remote.example/notes/mfm1"

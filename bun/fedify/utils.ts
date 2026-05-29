@@ -58,10 +58,10 @@ export function injectMisskey(activityJson: unknown, content: string): void {
   }
 }
 
-// Tag a Create(Note)'s inner object as a quote-note. Misskey reads
-// `_misskey_quote`; `quoteUrl` is the field honoured across Misskey
-// forks. (FEP-e232 `tag` Link form is not emitted.) No-op when there
-// is no quote.
+// Tag a Create(Note)'s inner object as a quote-note. We emit all three
+// shapes so the widest set of peers picks it up: Misskey's
+// `_misskey_quote`, the cross-fork `quoteUrl`, and the FEP-e232 `tag`
+// Link (Mastodon's quote-post path). No-op when there is no quote.
 export function injectQuote(
   activityJson: unknown,
   quoteUri: string | null | undefined,
@@ -73,10 +73,23 @@ export function injectQuote(
   ) {
     const obj = (activityJson as Record<string, unknown>).object;
     if (obj && typeof obj === "object") {
-      injectDefined(obj as Record<string, unknown>, {
+      const o = obj as Record<string, unknown>;
+      injectDefined(o, {
         quoteUrl: quoteUri,
         _misskey_quote: quoteUri,
       });
+
+      // FEP-e232: append a quote Link to `tag`, preserving any existing
+      // tags (mentions, hashtags, emoji).
+      const tags = Array.isArray(o.tag) ? o.tag : o.tag ? [o.tag] : [];
+      tags.push({
+        type: "Link",
+        mediaType: 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+        href: quoteUri,
+        name: `RE: ${quoteUri}`,
+        rel: "https://misskey-hub.net/ns#_misskey_quote",
+      });
+      o.tag = tags;
     }
   }
 }

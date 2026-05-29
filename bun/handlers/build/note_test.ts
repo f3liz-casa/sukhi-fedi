@@ -83,3 +83,36 @@ test("Create(Note) omits quote fields when there is no quote", async () => {
   const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
   expect(inner["quoteUrl"]).toBeUndefined();
 });
+
+test("Create(Note) emits a FEP-e232 quote tag Link alongside the legacy fields", async () => {
+  const QUOTED = "https://remote.example/notes/orig";
+  const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
+    actor: ACTOR,
+    content: "quoting",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/6`,
+    activityId: `${ACTOR}/activities/create/6`,
+    quoteUrl: QUOTED,
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  const tags = (Array.isArray(inner["tag"]) ? inner["tag"] : [inner["tag"]]) as Record<string, unknown>[];
+  const link = tags.find((t) => t && t["type"] === "Link" && t["href"] === QUOTED);
+  expect(link).toBeDefined();
+  expect(String(link!["rel"])).toContain("_misskey_quote");
+});
+
+test("Create(Note) carries inReplyTo on the inner Note when replying", async () => {
+  const PARENT = "https://remote.example/notes/parent";
+  const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
+    actor: ACTOR,
+    content: "a reply",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/7`,
+    activityId: `${ACTOR}/activities/create/7`,
+    inReplyToId: PARENT,
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  expect(inner["inReplyTo"]).toBe(PARENT);
+});

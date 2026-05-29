@@ -11,6 +11,8 @@ export interface BuildNotePayload extends SignedPayload {
   activityId: string;
   // AP id of a quoted note, when this note is a 引用ノート. Optional.
   quoteUrl?: string;
+  // AP id of the note this replies to, so remote servers can thread it.
+  inReplyToId?: string;
 }
 
 export interface BuildNoteResult {
@@ -30,6 +32,7 @@ export async function handleBuildNote(
     published: nowInstant(),
     tos: audience.tos,
     ccs: audience.ccs,
+    ...(payload.inReplyToId ? { replyTarget: new URL(payload.inReplyToId) } : {}),
   });
 
   const create = new Create({

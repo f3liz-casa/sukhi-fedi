@@ -124,15 +124,41 @@ defmodule SukhiFedi.AP.Instructions do
   defp extract_uri(_), do: nil
 
   # Misskey and its forks signal a quote-note with one of several
-  # top-level fields on the Object. Accept the common ones; the
-  # FEP-e232 `tag` Link form is not parsed yet.
+  # top-level fields on the Object; FEP-e232 servers instead put it in a
+  # `tag` Link. Accept all of them.
   defp extract_quote_uri(note) when is_map(note) do
     extract_uri(note["quoteUrl"]) ||
       extract_uri(note["quoteUri"]) ||
-      extract_uri(note["_misskey_quote"])
+      extract_uri(note["_misskey_quote"]) ||
+      quote_uri_from_tag(note["tag"])
   end
 
   defp extract_quote_uri(_), do: nil
+
+  # FEP-e232: the quote travels as a `tag` entry of type `Link` whose
+  # `rel` marks it a quote (Misskey's `_misskey_quote` rel or the
+  # FEP-e232 rel). Return the first matching `href`.
+  defp quote_uri_from_tag(tags) when is_list(tags) do
+    Enum.find_value(tags, fn
+      %{"type" => "Link"} = link ->
+        if quote_rel?(link["rel"]), do: extract_uri(link["href"]), else: nil
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp quote_uri_from_tag(_), do: nil
+
+  defp quote_rel?(rel) when is_binary(rel), do: quote_rel_match?(rel)
+  defp quote_rel?(rels) when is_list(rels), do: Enum.any?(rels, &quote_rel_match?/1)
+  defp quote_rel?(_), do: false
+
+  defp quote_rel_match?(rel) when is_binary(rel) do
+    String.contains?(rel, "_misskey_quote") or String.contains?(rel, "e232")
+  end
+
+  defp quote_rel_match?(_), do: false
 
   # MFM (Misskey Flavored Markdown) source travels out of band of the
   # rendered `content` — as `_misskey_content` or a `source` object.
@@ -193,7 +219,12 @@ defmodule SukhiFedi.AP.Instructions do
           where: n.account_id == ^account_id and n.visibility == "public",
           order_by: [desc: n.created_at],
           limit: ^@backfill_limit,
-          select: %{id: n.id, content: n.content, quote_of_ap_id: n.quote_of_ap_id}
+          select: %{
+            id: n.id,
+            content: n.content,
+            quote_of_ap_id: n.quote_of_ap_id,
+            in_reply_to_ap_id: n.in_reply_to_ap_id
+          }
         )
         |> Repo.all()
         |> Enum.each(fn n ->
@@ -206,6 +237,7 @@ defmodule SukhiFedi.AP.Instructions do
               note_id: n.id,
               content: n.content,
               quote_of_ap_id: n.quote_of_ap_id,
+              in_reply_to_ap_id: n.in_reply_to_ap_id,
               follower_inbox: follower_inbox
             }
           )
@@ -391,7 +423,16 @@ defmodule SukhiFedi.AP.Instructions do
     for key <- ["in_reply_to_ap_id", "quote_of_ap_id"],
         uri = attrs[key],
         is_binary(uri) do
-      SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(uri)
+      # Truly best-effort: the fetch goes over NATS to Bun, so a down /
+      # unreachable peer must never fail the inbox write. Swallow both
+      # errors and exits (e.g. NATS not connected).
+      try do
+        SukhiFedi.Federation.NoteFetcher.fetch_and_mirror(uri)
+      rescue
+        _ -> :error
+      catch
+        _kind, _reason -> :error
+      end
     end
 
     :ok

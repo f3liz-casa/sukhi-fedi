@@ -76,11 +76,42 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp extract(%{"id" => id}) when is_binary(id), do: id
   defp extract(_), do: nil
 
-  # Misskey/forks signal a quote-note with one of these top-level
-  # fields; mirror it so the link survives the fetch.
+  # Misskey/forks signal a quote-note with a top-level field; FEP-e232
+  # servers use a `tag` Link. Mirror whichever is present so the link
+  # survives the fetch.
   defp quote_uri(note) do
-    extract(note["quoteUrl"]) || extract(note["quoteUri"]) || extract(note["_misskey_quote"])
+    extract(note["quoteUrl"]) || extract(note["quoteUri"]) ||
+      extract(note["_misskey_quote"]) || quote_uri_from_tag(note["tag"])
   end
+
+  defp quote_uri_from_tag(tags) when is_list(tags) do
+    Enum.find_value(tags, fn
+      %{"type" => "Link"} = link ->
+        rel = link["rel"]
+
+        cond do
+          is_binary(rel) and
+              (String.contains?(rel, "_misskey_quote") or String.contains?(rel, "e232")) ->
+            extract(link["href"])
+
+          is_list(rel) and
+              Enum.any?(
+                rel,
+                &(is_binary(&1) and
+                      (String.contains?(&1, "_misskey_quote") or String.contains?(&1, "e232")))
+              ) ->
+            extract(link["href"])
+
+          true ->
+            nil
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp quote_uri_from_tag(_), do: nil
 
   # MFM source travels as `_misskey_content` or a `source` object;
   # mirror it so the Misskey markup survives the fetch.
@@ -119,6 +150,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp visibility_from(note) do
     to = list(note["to"])
     cc = list(note["cc"])
+
     cond do
       Enum.any?(to, &public?/1) -> "public"
       Enum.any?(cc, &public?/1) -> "unlisted"

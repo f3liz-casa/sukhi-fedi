@@ -126,7 +126,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
             content: p["content"] || "",
             recipientInboxes: recipients,
             noteId: ap_id,
-            activityId: activity_id
+            activityId: activity_id,
+            inReplyToId: p["in_reply_to_ap_id"]
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
 
@@ -348,7 +349,9 @@ defmodule SukhiDelivery.Outbox.Consumer do
         :no_actor
 
       %{actor_uri: actor_uri} ->
-        recipients = followers_inboxes(actor_uri) ++ note_author_inbox(note_ap_id) ++ relay_inboxes()
+        recipients =
+          followers_inboxes(actor_uri) ++ note_author_inbox(note_ap_id) ++ relay_inboxes()
+
         recipients = Enum.uniq(recipients)
         domain = SukhiDelivery.Config.domain!()
 
@@ -433,7 +436,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
             content: p["content"] || "",
             recipientInboxes: recipients,
             noteId: ap_id,
-            activityId: activity_id
+            activityId: activity_id,
+            inReplyToId: p["in_reply_to_ap_id"]
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
 
@@ -484,9 +488,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
         enqueue_jobs(body, actor_uri, activity_id, inboxes)
 
       {:error, reason} ->
-        Logger.warning(
-          "Outbox.Consumer: translate(#{object_type}) failed: #{inspect(reason)}"
-        )
+        Logger.warning("Outbox.Consumer: translate(#{object_type}) failed: #{inspect(reason)}")
 
         :translate_failed
     end
