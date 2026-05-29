@@ -12,6 +12,8 @@
         "nats": "npm:@nats-io/transport-node@^3",
       },
       "devDependencies": {
+        "@electric-sql/pglite": "^0.4.6",
+        "@electric-sql/pglite-socket": "^0.1.6",
         "@types/bun": "latest",
         "typescript": "^6.0.3",
       },
@@ -21,6 +23,10 @@
     "@cfworker/json-schema": ["@cfworker/json-schema@4.1.1", "", {}, "sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og=="],
 
     "@digitalbazaar/http-client": ["@digitalbazaar/http-client@4.3.0", "", { "dependencies": { "ky": "^1.14.2", "undici": "^6.23.0" } }, "sha512-6lMpxpt9BOmqHKGs9Xm6DP4LlZTBFer/ZjHvP3FcW3IaUWYIWC7dw5RFZnvw4fP57kAVcm1dp3IF+Y50qhBvAw=="],
+
+    "@electric-sql/pglite": ["@electric-sql/pglite@0.4.6", "", {}, "sha512-qmlmfN8UyKCee35qkV0r/MBp+Znl8FjBz7OpoglNvww3GJpw0/DLP0o1ZymvLNmcD5DTLOQdzKPtF8Hd3mdl1w=="],
+
+    "@electric-sql/pglite-socket": ["@electric-sql/pglite-socket@0.1.6", "", { "peerDependencies": { "@electric-sql/pglite": "0.4.6" }, "bin": { "pglite-server": "dist/scripts/server.js" } }, "sha512-QAPUOwUdFnv3grJoLQbtkN8MywMK92kPfCeQ9QIJlB9DfPlExvU19cI2djxyffRF2WJL89eiZ1GAyfBDVH2xGQ=="],
 
     "@fedify/fedify": ["@fedify/fedify@2.2.3", "", { "dependencies": { "@fedify/vocab": "2.2.3", "@fedify/vocab-runtime": "2.2.3", "@fedify/webfinger": "2.2.3", "@js-temporal/polyfill": "^0.5.1", "@logtape/logtape": "^2.0.5", "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^2.5.0", "@opentelemetry/sdk-trace-base": "^2.5.0", "@opentelemetry/semantic-conventions": "^1.39.0", "byte-encodings": "^1.0.11", "es-toolkit": "1.43.0", "json-canon": "^1.0.1", "jsonld": "^9.0.0", "structured-field-values": "^2.0.4", "uri-template-router": "^1.0.0", "url-template": "^3.1.1", "urlpattern-polyfill": "^10.1.0" } }, "sha512-mEczGCZVZsgQQj8gCKZizOJsOuV3kOBpMVPJrhmOkE+RKh8XjnZwtzPwN2UWp4Yt2E9YsKg3fSxNJmJW/o4uDQ=="],
 

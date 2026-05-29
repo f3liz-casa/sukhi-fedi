@@ -1,4 +1,11 @@
-.PHONY: preflight check push-static push-styles
+.PHONY: preflight check push-static push-styles test-pglite
+
+# Run the DB-only integration tests against an embedded PGlite Postgres —
+# no Docker. Extra args pass through to `mix test`:
+#   make test-pglite
+#   make test-pglite ARGS="test/integration/social_test.exs:97"
+test-pglite:
+	@bash scripts/test-pglite.sh $(ARGS)
 
 DEPLOY_HOST ?= 217.142.242.103
 DEPLOY_USER ?= rocky

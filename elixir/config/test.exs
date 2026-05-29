@@ -1,11 +1,24 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import Config
 
+# Connection is env-overridable so the same test suite runs against the
+# docker-compose Postgres (default) or the PGlite embedded DB (no Docker;
+# `make test-pglite` / `bun run services/test_db.ts`). PGlite serves a
+# single connection multiplexed, so the pglite path sets DB_POOL_SIZE=1.
+# Defaults (postgres/postgres) match both the docker image and PGlite.
 config :sukhi_fedi, SukhiFedi.Repo,
-  database: "sukhi_fedi_test",
+  database: System.get_env("DB_NAME", "sukhi_fedi_test"),
+  username: System.get_env("DB_USER", "postgres"),
+  password: System.get_env("DB_PASSWORD", "postgres"),
+  hostname: System.get_env("DB_HOST", "127.0.0.1"),
   port: String.to_integer(System.get_env("DB_PORT", "15432")),
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: 10
+  pool_size: String.to_integer(System.get_env("DB_POOL_SIZE", "10")),
+  # The migration lock takes a second connection and holds it for the
+  # whole run; on PGlite's multiplexer that deadlocks against the
+  # migrating connection. A single test migrator never races, so the
+  # lock is unnecessary here.
+  migration_lock: false
 
 config :sukhi_fedi, Oban, testing: :inline
 
@@ -29,4 +42,4 @@ config :ex_aws,
   secret_access_key: "testsecret",
   json_codec: Jason
 
-config :sukhi_fedi, :s3, bucket: "media-test", enabled: true
+config :sukhi_fedi, :s3, bucket: "media-test", inbound_bucket: "inbound-test", enabled: true
