@@ -15,6 +15,10 @@ defmodule SukhiFedi.Web.Router do
 
   plug(Plug.Logger)
   plug(SukhiFedi.Web.AccessLogPlug)
+  # CORS before the rate limiter and routing: browser clients' preflight
+  # OPTIONS must be answered (204) without counting against the limit or
+  # falling through to a 404. Attaches Access-Control-* to every response.
+  plug(SukhiFedi.Web.CorsPlug)
   # Global per-peer rate limit. Conservative ceiling; internal probes
   # like /up from k8s LBs still fit easily. Tighten per-endpoint via
   # dedicated forwarders when needed.
