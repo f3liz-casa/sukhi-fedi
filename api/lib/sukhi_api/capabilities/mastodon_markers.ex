@@ -70,10 +70,22 @@ defmodule SukhiApi.Capabilities.MastodonMarkers do
        %{
          last_read_id: m.last_read_id,
          version: m.version,
-         updated_at: DateTime.to_iso8601(m.updated_at)
+         updated_at: format_dt(m.updated_at)
        }}
     end)
   end
+
+  # The `markers` table is the one schema still on Ecto's default
+  # `timestamps()` (naive_datetime), so `updated_at` arrives as a
+  # NaiveDateTime — passing it straight to `DateTime.to_iso8601/1`
+  # crashed the endpoint. Treat the naive value as UTC (it was written
+  # with NaiveDateTime.utc_now/0) and emit a proper `…Z` timestamp.
+  defp format_dt(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+
+  defp format_dt(%NaiveDateTime{} = dt),
+    do: dt |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_iso8601()
+
+  defp format_dt(_), do: nil
 
   # ── inputs ───────────────────────────────────────────────────────────────
 
