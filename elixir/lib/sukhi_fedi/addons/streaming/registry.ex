@@ -21,6 +21,16 @@ defmodule SukhiFedi.Addons.Streaming.Registry do
     GenServer.cast(__MODULE__, {:broadcast, key, event})
   end
 
+  @doc """
+  Whether anyone is currently subscribed to a stream. Lets a producer
+  skip the cost of building a payload (e.g. an api-render RPC) when no
+  client is listening.
+  """
+  def has_subscribers?(stream_type, account_id \\ nil) do
+    key = stream_key(stream_type, account_id)
+    GenServer.call(__MODULE__, {:has_subscribers?, key})
+  end
+
   defp stream_key(:home, account_id), do: {:home, account_id}
   defp stream_key(:local, _), do: :local
   defp stream_key(:direct, account_id), do: {:direct, account_id}
@@ -39,6 +49,11 @@ defmodule SukhiFedi.Addons.Streaming.Registry do
     Process.monitor(pid)
     subscribers = Map.get(state, key, MapSet.new())
     {:reply, :ok, Map.put(state, key, MapSet.put(subscribers, pid))}
+  end
+
+  @impl true
+  def handle_call({:has_subscribers?, key}, _from, state) do
+    {:reply, MapSet.size(Map.get(state, key, MapSet.new())) > 0, state}
   end
 
   @impl true

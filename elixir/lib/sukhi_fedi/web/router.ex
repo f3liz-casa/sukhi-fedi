@@ -12,6 +12,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
   alias SukhiFedi.Web.StreamingController
+  alias SukhiFedi.Web.StreamingSseController
   alias SukhiFedi.Web.Auth.LoginController
 
   plug(Plug.Logger)
@@ -238,6 +239,21 @@ defmodule SukhiFedi.Web.Router do
   get "/api/v1/streaming" do
     if SukhiFedi.Addon.Registry.enabled?(:streaming),
       do: StreamingController.connect(conn, []),
+      else: send_resp(conn, 404, "")
+  end
+
+  # SSE counterparts (Mastodon's EventSource transport). Same `:home`
+  # broadcaster feed as the WebSocket `user` stream; deliver Mastodon
+  # `notification` events (follow / favourite / mention / reaction).
+  get "/api/v1/streaming/user" do
+    if SukhiFedi.Addon.Registry.enabled?(:streaming),
+      do: StreamingSseController.user(conn, []),
+      else: send_resp(conn, 404, "")
+  end
+
+  get "/api/v1/streaming/user/notification" do
+    if SukhiFedi.Addon.Registry.enabled?(:streaming),
+      do: StreamingSseController.user_notification(conn, []),
       else: send_resp(conn, 404, "")
   end
 

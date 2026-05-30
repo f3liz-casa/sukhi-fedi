@@ -15,6 +15,8 @@ defmodule SukhiFedi.Streaming do
   """
 
   alias SukhiFedi.Addons.Streaming.Registry
+  alias SukhiFedi.Repo
+  alias SukhiFedi.Schema.Notification
 
   @doc """
   Push a freshly-created DM to each local participant's `direct` stream.
@@ -31,6 +33,57 @@ defmodule SukhiFedi.Streaming do
 
     :ok
   end
+
+  @doc """
+  Push a notification to the recipient's `user` stream as a Mastodon
+  `notification` event. Rendering lives on the api node (it owns the
+  views), so we render over `:rpc` and fan out here where the sockets
+  are — mirroring `publish_direct/1`, but the producer is server-side
+  (a notification has no api request in flight), so the gateway drives
+  the render.
+
+  Fully best-effort and off the caller's path: it only fires when a
+  client is actually streaming (otherwise the render RPC is wasted), runs
+  in a Task, and swallows every failure. A dropped notification frame
+  must never disturb the write that created the notification.
+  """
+  @spec publish_notification(integer(), Notification.t()) :: :ok
+  def publish_notification(account_id, %Notification{} = notif) when is_integer(account_id) do
+    if registry_running?() and Registry.has_subscribers?(:home, account_id) do
+      Task.start(fn -> render_and_push(account_id, notif) end)
+    end
+
+    :ok
+  end
+
+  defp render_and_push(account_id, notif) do
+    notif = Repo.preload(notif, [:from_account, note: [:account, :media, :tags]])
+
+    case render_notification(notif) do
+      {:ok, json} ->
+        Registry.broadcast(:home, %{event: "notification", payload: json}, account_id)
+
+      :error ->
+        :ok
+    end
+  end
+
+  # The Mastodon Notification view is pure and built to survive the RPC
+  # hop (associations arrive as plain maps). Render it on the api node.
+  defp render_notification(notif) do
+    case plugin_node() do
+      nil ->
+        :error
+
+      node ->
+        case :rpc.call(node, SukhiApi.Views.MastodonNotification, :render, [notif], 5_000) do
+          %{} = json -> {:ok, json}
+          _ -> :error
+        end
+    end
+  end
+
+  defp plugin_node, do: Application.get_env(:sukhi_fedi, :plugin_nodes, []) |> List.first()
 
   defp registry_running?, do: is_pid(Process.whereis(Registry))
 end

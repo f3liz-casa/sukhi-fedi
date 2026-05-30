@@ -38,6 +38,26 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
       Registry.broadcast(:direct, %{event: "conversation", payload: %{"id" => "c2"}}, 8)
       refute_receive {:stream_event, "direct", %{payload: %{"id" => "c2"}}}
     end
+
+    test "notifications ride the home/user feed" do
+      Registry.subscribe(:home, 5)
+      Registry.broadcast(:home, %{event: "notification", payload: %{"type" => "follow"}}, 5)
+      assert_receive {:stream_event, "user", %{event: "notification"}}
+    end
+  end
+
+  describe "has_subscribers?/2" do
+    test "true only while someone is subscribed, keyed per account" do
+      refute Registry.has_subscribers?(:home, 11)
+
+      Registry.subscribe(:home, 11)
+      assert Registry.has_subscribers?(:home, 11)
+      # a different account is unaffected
+      refute Registry.has_subscribers?(:home, 12)
+
+      Registry.unsubscribe(:home, 11)
+      refute Registry.has_subscribers?(:home, 11)
+    end
   end
 
   describe "init/1" do

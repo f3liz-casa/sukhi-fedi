@@ -46,7 +46,18 @@ defmodule SukhiFedi.Notifications do
       on_conflict: :nothing,
       conflict_target: [:account_id, :from_account_id, :type, :note_id]
     )
+    |> tap_stream()
   end
+
+  # Push to the recipient's `user` stream — but only on a genuinely new
+  # row. `on_conflict: :nothing` returns `id: nil` when the insert hit the
+  # idempotency index, so a re-delivered favourite/follow doesn't re-fire.
+  defp tap_stream({:ok, %Notification{id: id} = notif} = res) when not is_nil(id) do
+    SukhiFedi.Streaming.publish_notification(notif.account_id, notif)
+    res
+  end
+
+  defp tap_stream(res), do: res
 
   @doc """
   Paged list. Returns notifications newest-first scoped to `viewer`,
