@@ -17,8 +17,8 @@ defmodule SukhiApi.Capabilities.MastodonLists do
 
   use SukhiApi.Capability, addon: :mastodon_api
 
-  alias SukhiApi.{GatewayRpc, Pagination}
-  alias SukhiApi.Views.{MastodonAccount, MastodonList, MastodonStatus}
+  alias SukhiApi.{GatewayRpc, Pagination, StatusHydration}
+  alias SukhiApi.Views.{MastodonAccount, MastodonList}
 
   @impl true
   def routes do
@@ -137,7 +137,7 @@ defmodule SukhiApi.Capabilities.MastodonLists do
 
       case GatewayRpc.call(SukhiFedi.Lists, :timeline, [v.id, id, Map.to_list(opts)]) do
         {:ok, {:ok, notes}} when is_list(notes) ->
-          body = Enum.map(notes, &MastodonStatus.render/1)
+          body = StatusHydration.many(notes, v)
           headers = [{"content-type", "application/json"}]
 
           headers =

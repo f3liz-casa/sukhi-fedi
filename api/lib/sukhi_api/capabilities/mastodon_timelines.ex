@@ -13,8 +13,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
 
   use SukhiApi.Capability, addon: :mastodon_api
 
-  alias SukhiApi.{GatewayRpc, Pagination}
-  alias SukhiApi.Views.MastodonStatus
+  alias SukhiApi.{GatewayRpc, Pagination, StatusHydration}
 
   @impl true
   def routes do
@@ -100,16 +99,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
   end
 
   defp render_page(notes, base_url, opts, viewer \\ nil) do
-    note_ids = Enum.map(notes, & &1.id)
-    viewer_id = viewer && viewer.id
-
-    reactions =
-      case GatewayRpc.call(SukhiFedi.Notes, :reactions_for_notes, [note_ids, viewer_id]) do
-        {:ok, m} when is_map(m) -> m
-        _ -> %{}
-      end
-
-    body = MastodonStatus.render_list(notes, %{}, %{}, reactions)
+    body = StatusHydration.many(notes, viewer)
     headers = [{"content-type", "application/json"}]
 
     headers =

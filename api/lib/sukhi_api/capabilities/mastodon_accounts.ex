@@ -9,8 +9,8 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
   use SukhiApi.Capability, addon: :mastodon_api
 
-  alias SukhiApi.{GatewayRpc, Multipart, Pagination}
-  alias SukhiApi.Views.{MastodonAccount, MastodonRelationship, MastodonStatus}
+  alias SukhiApi.{GatewayRpc, Multipart, Pagination, StatusHydration}
+  alias SukhiApi.Views.{MastodonAccount, MastodonRelationship}
 
   # avatar/header の inline 上限。/api/v1/media と揃える。
   @max_upload_bytes 8 * 1024 * 1024
@@ -303,12 +303,13 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
   def statuses(req) do
     id = req[:path_params]["id"]
+    viewer = req[:assigns][:current_account]
 
     with {:ok, int_id} <- parse_int(id),
          opts = parse_status_opts(req[:query]),
          {:ok, notes} when is_list(notes) <-
            GatewayRpc.call(SukhiFedi.Accounts, :list_statuses, [int_id, Map.to_list(opts)]) do
-      body = Enum.map(notes, &MastodonStatus.render/1)
+      body = StatusHydration.many(notes, viewer)
       headers = [{"content-type", "application/json"}]
 
       headers =
