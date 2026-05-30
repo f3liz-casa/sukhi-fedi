@@ -117,10 +117,17 @@ defmodule SukhiFedi.Schema.Account do
   end
 
   defp normalize_credentials_attrs(attrs) when is_map(attrs) do
-    # Accept Mastodon's `note` as an alias for `summary`.
-    case Map.get(attrs, "note") || Map.get(attrs, :note) do
+    attrs
+    |> normalize_alias("note", "summary")
+    |> normalize_alias("bot", "is_bot")
+  end
+
+  defp normalize_alias(attrs, from, to) do
+    case Map.get(attrs, from) || Map.get(attrs, String.to_existing_atom(from)) do
       nil -> attrs
-      v -> attrs |> Map.put("summary", v) |> Map.delete("note") |> Map.delete(:note)
+      v -> attrs |> Map.put(to, v) |> Map.delete(from) |> Map.delete(String.to_existing_atom(from))
     end
+  rescue
+    ArgumentError -> attrs
   end
 end

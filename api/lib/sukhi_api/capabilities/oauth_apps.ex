@@ -3,8 +3,8 @@ defmodule SukhiApi.Capabilities.OAuthApps do
   @moduledoc """
   Mastodon-compatible OAuth client app endpoints.
 
-      POST /api/v1/apps                       (public)        register a client
-      POST /api/v1/apps/verify_credentials    scope read      look up the app behind a token
+      POST /api/v1/apps                      (public)        register a client
+      GET  /api/v1/apps/verify_credentials   scope read      look up the app behind a token
   """
 
   use SukhiApi.Capability, addon: :mastodon_api
@@ -17,7 +17,7 @@ defmodule SukhiApi.Capabilities.OAuthApps do
   def routes do
     [
       {:post, "/api/v1/apps", &create/1},
-      {:post, "/api/v1/apps/verify_credentials", &verify_credentials/1, scope: "read"}
+      {:get, "/api/v1/apps/verify_credentials", &verify_credentials/1, scope: "read"}
     ]
   end
 
@@ -77,13 +77,30 @@ defmodule SukhiApi.Capabilities.OAuthApps do
   end
 
   defp decode_body(req) do
+    headers = req[:headers] || []
+    ct = Enum.find_value(headers, "", fn {k, v} ->
+      if String.downcase(to_string(k)) == "content-type", do: to_string(v), else: nil
+    end)
+
     case req[:body] do
       nil -> {:ok, %{}}
       "" -> {:ok, %{}}
       body when is_binary(body) ->
-        case Jason.decode(body) do
-          {:ok, %{} = m} -> {:ok, m}
-          _ -> {:error, :bad_json}
+        cond do
+          String.contains?(ct, "application/json") ->
+            case Jason.decode(body) do
+              {:ok, %{} = m} -> {:ok, m}
+              _ -> {:error, :bad_json}
+            end
+
+          String.contains?(ct, "application/x-www-form-urlencoded") ->
+            {:ok, URI.decode_query(body)}
+
+          true ->
+            case Jason.decode(body) do
+              {:ok, %{} = m} -> {:ok, m}
+              _ -> {:ok, URI.decode_query(body)}
+            end
         end
     end
   end
