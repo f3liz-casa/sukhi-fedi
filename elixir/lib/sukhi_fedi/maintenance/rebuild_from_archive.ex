@@ -15,10 +15,10 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   The `inbound_events` index keys on the *activity* id, not the inner
   note's id, so we walk every archived `Create` / `Update`, decompress
   the body, pull the embedded note, and match it to a local row by
-  `ap_id`. We only ever set `cw` and `created_at`, and only when the
-  archive has a value that differs — content and everything else were
-  captured correctly at ingest and are left untouched. The numeric id
-  stays put, so reactions / boosts / threading are unaffected.
+  `ap_id`. We only ever set `cw`, `created_at`, and `emojis`, and only
+  when the archive has a value that differs — content and everything else
+  were captured correctly at ingest and are left untouched. The numeric
+  id stays put, so reactions / boosts / threading are unaffected.
 
   Run on the live gateway (needs its Repo + rustfs credentials):
 
@@ -29,7 +29,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   import Ecto.Query
   require Logger
 
-  alias SukhiFedi.AP.Published
+  alias SukhiFedi.AP.{Emojis, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{InboundEvent, Note}
 
@@ -126,11 +126,13 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     %{}
     |> put_new_value(:cw, content_warning(note), existing.cw)
     |> put_new_value(:created_at, Published.at(note), existing.created_at)
+    |> put_new_value(:emojis, Emojis.from_tag(note["tag"]), existing.emojis)
   end
 
-  # Only a non-nil archive value that differs is a change — we never clear
-  # a field the archive happens to omit.
+  # Only a non-empty archive value that differs is a change — we never
+  # clear a field the archive happens to omit.
   defp put_new_value(changes, _key, nil, _old), do: changes
+  defp put_new_value(changes, _key, [], _old), do: changes
   defp put_new_value(changes, _key, value, value), do: changes
   defp put_new_value(changes, key, value, _old), do: Map.put(changes, key, value)
 

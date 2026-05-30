@@ -65,6 +65,37 @@ defmodule SukhiFedi.Integration.RebuildFromArchiveTest do
       assert :no_local_note =
                RebuildFromArchive.rebuild_note(%{"id" => "https://remote.example/notes/ghost"}, :execute)
     end
+
+    test "backfills emojis from the archived note's tag" do
+      ap_id = "https://remote.example/notes/arch-emoji"
+      note = insert_remote_note(ap_id, created_at: ~U[2021-01-02 03:04:05Z])
+
+      obj = %{
+        "id" => ap_id,
+        "published" => "2021-01-02T03:04:05Z",
+        "tag" => [
+          %{
+            "type" => "Emoji",
+            "name" => ":blobcat:",
+            "icon" => %{"url" => "https://remote.example/e/blobcat.png"}
+          }
+        ]
+      }
+
+      assert :updated = RebuildFromArchive.rebuild_note(obj, :execute)
+      assert [%{"shortcode" => "blobcat"}] = Repo.get!(Note, note.id).emojis
+    end
+
+    test "never clears existing emojis the archive omits" do
+      ap_id = "https://remote.example/notes/arch-keep-emoji"
+      kept = [%{"shortcode" => "kept", "url" => "https://remote.example/e/kept.png"}]
+      note = insert_remote_note(ap_id, created_at: ~U[2021-01-02 03:04:05Z], emojis: kept)
+
+      assert :unchanged =
+               RebuildFromArchive.rebuild_note(%{"id" => ap_id, "published" => "2021-01-02T03:04:05Z"}, :execute)
+
+      assert Repo.get!(Note, note.id).emojis == kept
+    end
   end
 
   defp insert_remote_note(ap_id, opts) do
@@ -83,6 +114,7 @@ defmodule SukhiFedi.Integration.RebuildFromArchiveTest do
       visibility: "public",
       ap_id: ap_id,
       cw: opts[:cw],
+      emojis: opts[:emojis] || [],
       created_at: opts[:created_at]
     })
   end
