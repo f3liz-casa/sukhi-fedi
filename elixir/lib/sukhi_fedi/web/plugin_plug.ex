@@ -98,6 +98,10 @@ defmodule SukhiFedi.Web.PluginPlug do
         end
 
       %{} = m ->
+        # Plug.Parsers consumed the original body (JSON or form-urlencoded).
+        # Re-encode as JSON and normalise the Content-Type header so that
+        # api-node capabilities always see consistent application/json here.
+        conn = Plug.Conn.put_req_header(conn, "content-type", "application/json")
         {:ok, request_map(conn, Jason.encode!(m)), conn}
 
       other ->
