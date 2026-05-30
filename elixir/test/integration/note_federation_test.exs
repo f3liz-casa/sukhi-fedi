@@ -13,9 +13,11 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
 
   @moduletag :integration
 
-  alias SukhiFedi.{Config, Notes}
+  import Ecto.Query
+
+  alias SukhiFedi.{Config, Conversations, Notes}
   alias SukhiFedi.AP.Instructions
-  alias SukhiFedi.Schema.{Account, Note, Notification, Reaction}
+  alias SukhiFedi.Schema.{Account, ConversationParticipant, Note, Notification, Reaction}
 
   describe "stage-0 smoke" do
     test "mock remote bypass is openable", %{mock_remote: bypass} do
@@ -214,6 +216,88 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
                type: "mention"
              )
     end
+  end
+
+  describe "inbound DMs" do
+    test "a received DM is stored under the remote sender, not the recipient" do
+      bob = create_account!("bob_dm_in")
+      alice = create_remote_account!("alice_remote", "remote.example")
+      note_uri = "https://remote.example/notes/dm1"
+      bob_uri = "https://#{Config.domain!()}/users/#{bob.username}"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => alice.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => alice.actor_uri,
+                     "content" => "psst, just you",
+                     "to" => [bob_uri],
+                     "context" => note_uri
+                   }
+                 }
+               })
+
+      note = Repo.get_by(Note, ap_id: note_uri)
+      assert note.visibility == "direct"
+      # Authored by the remote sender — not the local recipient.
+      assert note.account_id == alice.id
+      assert note.conversation_ap_id == note_uri
+
+      # Both join the conversation; the recipient is unread, sender is not.
+      assert %{unread: true} = participant(note_uri, bob.id)
+      assert %{unread: false} = participant(note_uri, alice.id)
+
+      # The recipient's conversation shows the DM, authored by the sender,
+      # with the sender as the other account.
+      [convo] = Conversations.list(bob.id)
+      assert convo.unread == true
+      assert convo.last_status.id == note.id
+      assert convo.last_status.account_id == alice.id
+      assert [%{id: alice_id}] = convo.accounts
+      assert alice_id == alice.id
+    end
+
+    test "re-delivery of the same DM is idempotent" do
+      bob = create_account!("bob_dm_dup")
+      alice = create_remote_account!("alice_dup", "remote.example")
+      note_uri = "https://remote.example/notes/dmdup"
+      bob_uri = "https://#{Config.domain!()}/users/#{bob.username}"
+
+      activity = %{
+        "action" => "save",
+        "object" => %{
+          "type" => "Create",
+          "actor" => alice.actor_uri,
+          "object" => %{
+            "type" => "Note",
+            "id" => note_uri,
+            "attributedTo" => alice.actor_uri,
+            "content" => "twice",
+            "to" => [bob_uri],
+            "context" => note_uri
+          }
+        }
+      }
+
+      assert :ok = Instructions.execute(activity)
+      assert :ok = Instructions.execute(activity)
+
+      assert 1 = Repo.aggregate(from(n in Note, where: n.ap_id == ^note_uri), :count)
+    end
+  end
+
+  defp participant(conversation_ap_id, account_id) do
+    Repo.one(
+      from(cp in ConversationParticipant,
+        where: cp.conversation_ap_id == ^conversation_ap_id and cp.account_id == ^account_id,
+        select: %{unread: cp.unread}
+      )
+    )
   end
 
   # A local note carries no `ap_id`; its AP id is synthesized the same

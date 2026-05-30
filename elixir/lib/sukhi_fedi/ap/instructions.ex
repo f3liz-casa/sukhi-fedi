@@ -263,22 +263,25 @@ defmodule SukhiFedi.AP.Instructions do
 
     if is_direct do
       conversation_ap_id =
-        object["context"] ||
-          object["conversation"] ||
-          object["id"]
+        object["context"] || object["conversation"] || object["id"]
 
-      # Record the sender as a participant
-      record_participant(conversation_ap_id, actor_uri)
-
-      # Record each local recipient as a participant
       domain = SukhiFedi.Config.domain!()
+      local_recipients = Enum.filter(to_list, &String.contains?(&1, domain))
 
-      Enum.each(to_list, fn recipient_uri ->
-        record_participant(conversation_ap_id, recipient_uri)
+      # The note belongs to the sender, not the recipient. Resolve (and,
+      # on first contact, ingest) the sender's account once: it authors
+      # the stored note and joins the conversation so the recipient sees
+      # who the DM is from.
+      sender = resolve_dm_sender(object, actor_uri)
 
-        # Save note locally if the recipient is a local account
-        maybe_save_dm_note(recipient_uri, domain, object, actor_uri, conversation_ap_id)
-      end)
+      record_sender_participant(conversation_ap_id, sender)
+      Enum.each(local_recipients, &record_participant(conversation_ap_id, &1))
+
+      # Persist only when a local account is actually addressed. Idempotent
+      # on the note's AP id, so re-delivery doesn't duplicate.
+      if local_recipients != [] do
+        save_inbound_dm_note(object, sender, conversation_ap_id)
+      end
     end
   end
 
@@ -312,28 +315,56 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp record_participant(_, _), do: :ok
 
-  defp maybe_save_dm_note(recipient_uri, domain, object, _actor_uri, conversation_ap_id) do
-    if String.contains?(recipient_uri, domain) do
-      username =
-        recipient_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+  # The sender authors the DM. `attributedTo` is the canonical author;
+  # fall back to the Create's actor. Returns nil if we can't resolve or
+  # ingest them — then the note and participant are skipped rather than
+  # mis-attributed to the recipient.
+  defp resolve_dm_sender(object, actor_uri) do
+    uri = extract_uri(object["attributedTo"]) || actor_uri
 
-      account = SukhiFedi.Accounts.by_local_username(username)
-
-      if account do
-        attrs = %{
-          "account_id" => account.id,
-          "content" => object["content"] || "",
-          "visibility" => "direct",
-          "conversation_ap_id" => conversation_ap_id,
-          "in_reply_to_ap_id" => object["inReplyTo"]
-        }
-
-        %SukhiFedi.Schema.Note{}
-        |> SukhiFedi.Schema.Note.changeset(attrs)
-        |> Repo.insert(on_conflict: :nothing)
-      end
+    case uri && resolve_or_ingest_actor(uri) do
+      {:ok, %Account{} = account} -> account
+      _ -> nil
     end
   end
+
+  # The sender joins the conversation so it shows in the recipient's
+  # `accounts` ("who is this from"). Their unread flag is irrelevant —
+  # they don't read here — so it stays false.
+  defp record_sender_participant(conversation_ap_id, %Account{id: account_id})
+       when is_binary(conversation_ap_id) do
+    %ConversationParticipant{}
+    |> ConversationParticipant.changeset(%{
+      conversation_ap_id: conversation_ap_id,
+      account_id: account_id,
+      unread: false
+    })
+    |> Repo.insert(
+      on_conflict: [set: [unread: false]],
+      conflict_target: [:conversation_ap_id, :account_id]
+    )
+  end
+
+  defp record_sender_participant(_, _), do: :ok
+
+  # Mirror the inbound DM into `notes`, authored by the sender. Keyed on
+  # the note's AP id so threading resolves and re-delivery is a no-op.
+  defp save_inbound_dm_note(object, %Account{id: account_id}, conversation_ap_id) do
+    attrs = %{
+      "account_id" => account_id,
+      "content" => object["content"] || "",
+      "ap_id" => object["id"],
+      "visibility" => "direct",
+      "conversation_ap_id" => conversation_ap_id,
+      "in_reply_to_ap_id" => extract_uri(object["inReplyTo"])
+    }
+
+    %Note{}
+    |> Note.changeset(attrs)
+    |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id)
+  end
+
+  defp save_inbound_dm_note(_, _, _), do: :ok
 
   # When we receive Accept(Follow) where the actor is a known relay, mark it accepted.
   defp maybe_handle_relay_accept(%{"type" => "Accept", "actor" => actor_uri})
