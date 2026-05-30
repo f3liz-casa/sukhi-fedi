@@ -92,6 +92,12 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
         URI.decode_query(req[:body] || "")
         |> normalize_form_arrays()
 
+      String.contains?(ct, "multipart/form-data") ->
+        case SukhiApi.Multipart.parse_multifile(req[:body] || "", ct, max_file_bytes: 0) do
+          {:ok, %{fields: fields}} -> normalize_form_arrays(fields)
+          _ -> %{}
+        end
+
       true ->
         %{}
     end
