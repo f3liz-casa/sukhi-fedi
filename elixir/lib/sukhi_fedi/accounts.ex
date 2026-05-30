@@ -262,7 +262,7 @@ defmodule SukhiFedi.Accounts do
         {:ok, a}
 
       {:error, :account, %Ecto.Changeset{} = cs, _} ->
-        {:error, {:validation, changeset_errors(cs)}}
+        {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
 
       {:error, _step, reason, _} ->
         {:error, reason}
@@ -503,12 +503,4 @@ defmodule SukhiFedi.Accounts do
 
   defp normalize_opts(opts) when is_list(opts), do: Map.new(opts)
   defp normalize_opts(opts) when is_map(opts), do: opts
-
-  defp changeset_errors(%Ecto.Changeset{} = cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, options} ->
-      Enum.reduce(options, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
-      end)
-    end)
-  end
 end

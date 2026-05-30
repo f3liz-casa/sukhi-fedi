@@ -66,7 +66,7 @@ defmodule SukhiFedi.LocalAccounts do
       |> Repo.transaction()
       |> case do
         {:ok, %{account: a}} -> {:ok, a}
-        {:error, :account, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, errors(cs)}}
+        {:error, :account, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
         {:error, :invite, reason, _} -> {:error, reason}
         {:error, _step, reason, _} -> {:error, reason}
       end
@@ -112,14 +112,6 @@ defmodule SukhiFedi.LocalAccounts do
   end
 
   defp hash_password(_), do: {:error, :password_too_short}
-
-  defp errors(%Ecto.Changeset{} = cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, options} ->
-      Enum.reduce(options, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
-      end)
-    end)
-  end
 
   @doc """
   Verify a username + password against a local account, returning the

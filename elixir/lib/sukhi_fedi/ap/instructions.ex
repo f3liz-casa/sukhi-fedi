@@ -289,7 +289,7 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
     domain = SukhiFedi.Config.domain!()
-    username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+    username = actor_username(actor_uri)
 
     account =
       if String.contains?(actor_uri, domain),
@@ -640,7 +640,7 @@ defmodule SukhiFedi.AP.Instructions do
   defp maybe_notify_follow(_), do: :ok
 
   defp local_followee(%{"followeeUri" => uri}) when is_binary(uri) do
-    username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+    username = actor_username(uri)
     SukhiFedi.Accounts.by_local_username(username)
   end
 
@@ -680,6 +680,13 @@ defmodule SukhiFedi.AP.Instructions do
   defp public?(uri) when is_binary(uri), do: uri == @public_ns or uri == @as_public
   defp public?(_), do: false
 
+  # The trailing path segment of a local actor URI is its username
+  # (`https://host/users/<name>`). Raises on a path-less URI, which a
+  # well-formed actor URI never is.
+  defp actor_username(uri) do
+    uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+  end
+
   # Look up an existing shadow Account by actor_uri, otherwise fetch +
   # upsert via the federation client. Local actor URIs (host == ours)
   # are matched by username.
@@ -689,7 +696,7 @@ defmodule SukhiFedi.AP.Instructions do
     cond do
       String.contains?(actor_uri, domain) ->
         username =
-          actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+          actor_username(actor_uri)
 
         case SukhiFedi.Accounts.by_local_username(username) do
           %Account{} = a -> {:ok, a}
@@ -722,7 +729,7 @@ defmodule SukhiFedi.AP.Instructions do
        })
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
-    username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+    username = actor_username(actor_uri)
 
     account =
       if String.contains?(actor_uri, domain),
@@ -743,7 +750,7 @@ defmodule SukhiFedi.AP.Instructions do
        })
        when is_binary(actor_uri) and is_binary(note_uri) and is_binary(target_uri) do
     domain = SukhiFedi.Config.domain!()
-    username = actor_uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+    username = actor_username(actor_uri)
 
     account =
       if String.contains?(actor_uri, domain),
@@ -852,7 +859,7 @@ defmodule SukhiFedi.AP.Instructions do
     domain = SukhiFedi.Config.domain!()
 
     if String.contains?(uri, domain) do
-      username = uri |> URI.parse() |> Map.get(:path, "") |> String.split("/") |> List.last()
+      username = actor_username(uri)
 
       case SukhiFedi.Accounts.by_local_username(username) do
         nil -> nil

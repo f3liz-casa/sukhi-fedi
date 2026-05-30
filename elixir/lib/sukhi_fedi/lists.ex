@@ -28,7 +28,7 @@ defmodule SukhiFedi.Lists do
 
   @spec get(integer(), integer() | String.t()) :: {:ok, List.t()} | {:error, :not_found}
   def get(viewer_id, id) do
-    case parse_id(id) do
+    case SukhiFedi.Coercion.parse_id(id) do
       nil ->
         {:error, :not_found}
 
@@ -107,7 +107,7 @@ defmodule SukhiFedi.Lists do
           :ok | {:error, :not_found}
   def add_accounts(viewer_id, id, account_ids) do
     with {:ok, %List{id: lid}} <- get(viewer_id, id) do
-      ids = Enum.map(account_ids, &parse_id/1) |> Enum.reject(&is_nil/1)
+      ids = Enum.map(account_ids, &SukhiFedi.Coercion.parse_id/1) |> Enum.reject(&is_nil/1)
       viewer_uri = viewer_actor_uri(viewer_id)
       followed = followed_ids(viewer_uri, ids)
 
@@ -126,7 +126,7 @@ defmodule SukhiFedi.Lists do
           :ok | {:error, :not_found}
   def remove_accounts(viewer_id, id, account_ids) do
     with {:ok, %List{id: lid}} <- get(viewer_id, id) do
-      ids = Enum.map(account_ids, &parse_id/1) |> Enum.reject(&is_nil/1)
+      ids = Enum.map(account_ids, &SukhiFedi.Coercion.parse_id/1) |> Enum.reject(&is_nil/1)
 
       Repo.delete_all(
         from la in "list_accounts",
@@ -194,17 +194,6 @@ defmodule SukhiFedi.Lists do
     end
   end
 
-  defp parse_id(id) when is_integer(id), do: id
-
-  defp parse_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_id(_), do: nil
-
   defp stringify(attrs) when is_map(attrs) do
     Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
   end
@@ -221,6 +210,5 @@ defmodule SukhiFedi.Lists do
   defp maybe_min_id(q, nil), do: q
   defp maybe_min_id(q, v), do: where(q, [n], n.id > ^to_int(v))
 
-  defp to_int(v) when is_integer(v), do: v
-  defp to_int(v) when is_binary(v), do: String.to_integer(v)
+  defp to_int(v), do: SukhiFedi.Coercion.to_int!(v)
 end

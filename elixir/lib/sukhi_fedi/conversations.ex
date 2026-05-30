@@ -224,8 +224,7 @@ defmodule SukhiFedi.Conversations do
   defp maybe_since_id(q, nil), do: q
   defp maybe_since_id(q, v), do: where(q, [n], n.id > ^to_int(v))
 
-  defp to_int(v) when is_integer(v), do: v
-  defp to_int(v) when is_binary(v), do: String.to_integer(v)
+  defp to_int(v), do: SukhiFedi.Coercion.to_int!(v)
 
   defp clamp(n) when is_integer(n) and n > 0 and n <= @max_limit, do: n
   defp clamp(_), do: @default_limit

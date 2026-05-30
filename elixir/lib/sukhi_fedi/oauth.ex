@@ -63,17 +63,9 @@ defmodule SukhiFedi.OAuth do
     |> Repo.transaction()
     |> case do
       {:ok, %{app: app}} -> {:ok, %{app: app, client_secret: client_secret}}
-      {:error, :app, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, changeset_errors(cs)}}
+      {:error, :app, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
       {:error, _step, reason, _} -> {:error, reason}
     end
-  end
-
-  defp changeset_errors(%Ecto.Changeset{} = cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
-      end)
-    end)
   end
 
   @spec find_app_by_client_id(String.t()) :: {:ok, OauthApp.t()} | {:error, :not_found}

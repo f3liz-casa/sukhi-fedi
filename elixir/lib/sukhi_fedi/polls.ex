@@ -21,7 +21,7 @@ defmodule SukhiFedi.Polls do
   @spec get_with_results(integer() | String.t(), integer() | nil) ::
           {:ok, map()} | {:error, :not_found}
   def get_with_results(poll_id, viewer_id \\ nil) do
-    case parse_id(poll_id) do
+    case SukhiFedi.Coercion.parse_id(poll_id) do
       nil ->
         {:error, :not_found}
 
@@ -67,7 +67,7 @@ defmodule SukhiFedi.Polls do
   @spec vote(integer(), integer() | String.t(), [integer() | String.t()]) ::
           :ok | {:error, :not_found | :expired | :too_many_choices}
   def vote(account_id, poll_id, choices) when is_integer(account_id) do
-    with pid when not is_nil(pid) <- parse_id(poll_id),
+    with pid when not is_nil(pid) <- SukhiFedi.Coercion.parse_id(poll_id),
          %Poll{} = poll <- Repo.get(Poll, pid),
          :ok <- check_not_expired(poll),
          option_ids when is_list(option_ids) <- normalize_choices(poll, choices) do
@@ -125,7 +125,7 @@ defmodule SukhiFedi.Polls do
   end
 
   defp normalize_choices(%Poll{multiple: multiple, id: pid}, choices) do
-    ids = choices |> List.wrap() |> Enum.map(&parse_id/1) |> Enum.reject(&is_nil/1)
+    ids = choices |> List.wrap() |> Enum.map(&SukhiFedi.Coercion.parse_id/1) |> Enum.reject(&is_nil/1)
 
     cond do
       ids == [] -> []
@@ -159,15 +159,4 @@ defmodule SukhiFedi.Polls do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
-
-  defp parse_id(id) when is_integer(id), do: id
-
-  defp parse_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_id(_), do: nil
 end

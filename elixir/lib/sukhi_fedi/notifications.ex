@@ -92,7 +92,7 @@ defmodule SukhiFedi.Notifications do
   def get(%Account{id: id}, notif_id), do: get(id, notif_id)
 
   def get(account_id, notif_id) when is_integer(account_id) do
-    nid = parse_id(notif_id)
+    nid = SukhiFedi.Coercion.parse_id(notif_id)
 
     if is_nil(nid) do
       nil
@@ -126,7 +126,7 @@ defmodule SukhiFedi.Notifications do
   def dismiss(%Account{id: id}, notif_id), do: dismiss(id, notif_id)
 
   def dismiss(account_id, notif_id) when is_integer(account_id) do
-    nid = parse_id(notif_id)
+    nid = SukhiFedi.Coercion.parse_id(notif_id)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     if nid do
@@ -162,19 +162,7 @@ defmodule SukhiFedi.Notifications do
   defp clamp(n) when is_integer(n) and n > 0 and n <= @max_limit, do: n
   defp clamp(_), do: @default_limit
 
-  defp parse_id(id) when is_integer(id), do: id
-
-  defp parse_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_id(_), do: nil
-
-  defp to_int(v) when is_integer(v), do: v
-  defp to_int(v) when is_binary(v), do: String.to_integer(v)
+  defp to_int(v), do: SukhiFedi.Coercion.to_int!(v)
 
   defp normalize(opts) when is_list(opts), do: Map.new(opts)
   defp normalize(opts) when is_map(opts), do: opts

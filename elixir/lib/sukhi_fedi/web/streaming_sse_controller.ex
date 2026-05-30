@@ -27,6 +27,7 @@ defmodule SukhiFedi.Web.StreamingSseController do
 
   alias SukhiFedi.Addons.Streaming.Registry
   alias SukhiFedi.OAuth
+  alias SukhiFedi.Web.BearerToken
 
   @heartbeat_ms 30_000
 
@@ -96,25 +97,11 @@ defmodule SukhiFedi.Web.StreamingSseController do
   end
 
   defp authenticate(conn) do
-    with token when is_binary(token) <- extract_token(conn),
+    with token when is_binary(token) <- BearerToken.extract(conn),
          {:ok, %{account: %{id: account_id}}} <- OAuth.verify_bearer(token) do
       {:ok, account_id}
     else
       _ -> :error
-    end
-  end
-
-  defp extract_token(conn) do
-    case conn.query_params["access_token"] do
-      token when is_binary(token) and token != "" -> token
-      _ -> bearer_header(conn)
-    end
-  end
-
-  defp bearer_header(conn) do
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token | _] -> token
-      _ -> nil
     end
   end
 

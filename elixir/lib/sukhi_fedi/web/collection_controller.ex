@@ -34,7 +34,7 @@ defmodule SukhiFedi.Web.CollectionController do
       |> put_resp_content_type("application/activity+json")
       |> send_resp(200, Jason.encode!(collection))
     else
-      send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
+      not_found(conn)
     end
   end
 
@@ -66,7 +66,7 @@ defmodule SukhiFedi.Web.CollectionController do
       |> put_resp_content_type("application/activity+json")
       |> send_resp(200, Jason.encode!(collection))
     else
-      send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
+      not_found(conn)
     end
   end
 
@@ -121,7 +121,9 @@ defmodule SukhiFedi.Web.CollectionController do
       |> put_resp_content_type("application/activity+json")
       |> send_resp(200, Jason.encode!(collection))
     else
-      send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
+      not_found(conn)
     end
   end
+
+  defp not_found(conn), do: send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
 end

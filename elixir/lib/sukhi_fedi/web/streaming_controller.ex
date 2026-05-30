@@ -16,6 +16,7 @@ defmodule SukhiFedi.Web.StreamingController do
   import Plug.Conn
 
   alias SukhiFedi.OAuth
+  alias SukhiFedi.Web.BearerToken
   alias SukhiFedi.Web.StreamingSocket
 
   # > 2× the socket's heartbeat interval, so a live connection answering
@@ -31,7 +32,7 @@ defmodule SukhiFedi.Web.StreamingController do
   end
 
   defp authenticate_and_upgrade(conn) do
-    with token when is_binary(token) <- extract_token(conn),
+    with token when is_binary(token) <- BearerToken.extract(conn),
          {:ok, %{account: account}} <- OAuth.verify_bearer(token) do
       state = %{
         account_id: account && account.id,
@@ -44,20 +45,6 @@ defmodule SukhiFedi.Web.StreamingController do
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(401, Jason.encode!(%{error: "This method requires an authenticated user"}))
-    end
-  end
-
-  defp extract_token(conn) do
-    case conn.query_params["access_token"] do
-      token when is_binary(token) and token != "" -> token
-      _ -> bearer_header(conn)
-    end
-  end
-
-  defp bearer_header(conn) do
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token | _] -> token
-      _ -> nil
     end
   end
 

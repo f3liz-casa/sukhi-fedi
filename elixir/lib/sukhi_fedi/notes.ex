@@ -51,7 +51,7 @@ defmodule SukhiFedi.Notes do
     |> Repo.transaction()
     |> case do
       {:ok, %{note: note}} -> {:ok, Repo.preload(note, [:account, :media])}
-      {:error, :note, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, changeset_errors(cs)}}
+      {:error, :note, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
       {:error, _step, reason, _} -> {:error, reason}
     end
   end
@@ -130,7 +130,7 @@ defmodule SukhiFedi.Notes do
           {:ok, Repo.preload(note, [:account, :media]) |> with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
-          {:error, {:validation, changeset_errors(cs)}}
+          {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
 
         {:error, :media_check, :not_owned, _} ->
           {:error, :media_not_owned}
@@ -197,7 +197,7 @@ defmodule SukhiFedi.Notes do
           {:ok, Repo.preload(note, [:account, :media]) |> with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
-          {:error, {:validation, changeset_errors(cs)}}
+          {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
 
         {:error, :media_check, :not_owned, _} ->
           {:error, :media_not_owned}
@@ -1569,12 +1569,4 @@ defmodule SukhiFedi.Notes do
   end
 
   defp parse_int(_), do: nil
-
-  defp changeset_errors(%Ecto.Changeset{} = cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
-      end)
-    end)
-  end
 end

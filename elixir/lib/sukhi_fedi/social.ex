@@ -247,7 +247,7 @@ defmodule SukhiFedi.Social do
   """
   @spec list_relationships(Account.t(), [integer()]) :: [map()]
   def list_relationships(%Account{} = viewer, target_ids) when is_list(target_ids) do
-    target_ids = target_ids |> Enum.map(&parse_id/1) |> Enum.reject(&is_nil/1)
+    target_ids = target_ids |> Enum.map(&SukhiFedi.Coercion.parse_id/1) |> Enum.reject(&is_nil/1)
 
     if target_ids == [] do
       []
@@ -330,15 +330,4 @@ defmodule SukhiFedi.Social do
     domain = SukhiFedi.Config.domain!()
     "https://#{domain}/users/#{u}"
   end
-
-  defp parse_id(id) when is_integer(id), do: id
-
-  defp parse_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_id(_), do: nil
 end

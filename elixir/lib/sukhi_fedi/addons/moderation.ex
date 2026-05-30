@@ -328,14 +328,5 @@ defmodule SukhiFedi.Addons.Moderation do
 
   # ── helpers ──────────────────────────────────────────────────────────────
 
-  defp coerce_id(id) when is_integer(id), do: id
-
-  defp coerce_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp coerce_id(_), do: nil
+  defp coerce_id(id), do: SukhiFedi.Coercion.parse_id(id)
 end

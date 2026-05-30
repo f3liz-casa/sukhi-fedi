@@ -91,7 +91,7 @@ defmodule SukhiFedi.Addons.Media do
         |> Repo.insert()
         |> case do
           {:ok, media} -> {:ok, media}
-          {:error, %Ecto.Changeset{} = cs} -> {:error, {:validation, changeset_errors(cs)}}
+          {:error, %Ecto.Changeset{} = cs} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
         end
 
       {:error, reason} ->
@@ -182,7 +182,7 @@ defmodule SukhiFedi.Addons.Media do
         |> Repo.update()
         |> case do
           {:ok, updated} -> {:ok, updated}
-          {:error, %Ecto.Changeset{} = cs} -> {:error, {:validation, changeset_errors(cs)}}
+          {:error, %Ecto.Changeset{} = cs} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
         end
     end
   end
@@ -293,12 +293,4 @@ defmodule SukhiFedi.Addons.Media do
   end
 
   defp parse_int(_), do: nil
-
-  defp changeset_errors(%Ecto.Changeset{} = cs) do
-    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
-      end)
-    end)
-  end
 end
