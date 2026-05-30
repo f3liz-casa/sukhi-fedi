@@ -197,6 +197,70 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
     end
   end
 
+  describe "inbound custom emoji" do
+    test "Create(Note) with Emoji tags stores them in note.emojis" do
+      author = create_remote_account!("emoji_author", "remote.example")
+      note_uri = "https://remote.example/notes/emoji1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "hi :blobcat:",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "tag" => [
+                       %{
+                         "type" => "Emoji",
+                         "name" => ":blobcat:",
+                         "icon" => %{"url" => "https://remote.example/e/blobcat.png"}
+                       }
+                     ]
+                   }
+                 }
+               })
+
+      note = Repo.get_by(Note, ap_id: note_uri)
+
+      assert [%{"shortcode" => "blobcat", "url" => "https://remote.example/e/blobcat.png"}] =
+               note.emojis
+    end
+
+    test "upsert_from_actor_json captures name/bio emoji onto the account" do
+      actor_uri = "https://remote.example/users/emoji_actor"
+
+      assert {:ok, account} =
+               SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(%{
+                 "id" => actor_uri,
+                 "preferredUsername" => "emoji_actor",
+                 "name" => "Nyaa :heart:",
+                 "summary" => "bio with :blobcat:",
+                 "inbox" => "https://remote.example/users/emoji_actor/inbox",
+                 "tag" => [
+                   %{
+                     "type" => "Emoji",
+                     "name" => ":heart:",
+                     "icon" => %{"url" => "https://remote.example/e/heart.png"}
+                   },
+                   %{
+                     "type" => "Emoji",
+                     "name" => ":blobcat:",
+                     "icon" => %{"url" => "https://remote.example/e/blobcat.png"}
+                   }
+                 ]
+               })
+
+      shortcodes = Enum.map(account.emojis, & &1["shortcode"])
+      assert "heart" in shortcodes
+      assert "blobcat" in shortcodes
+    end
+  end
+
   describe "inbound quote notes" do
     test "Create(Note) with quoteUrl mirrors quote_of_ap_id" do
       quoter = create_remote_account!("quoter", "remote.example")

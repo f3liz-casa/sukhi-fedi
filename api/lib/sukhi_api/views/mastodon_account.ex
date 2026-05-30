@@ -83,7 +83,7 @@ defmodule SukhiApi.Views.MastodonAccount do
       following_count: Map.get(counts, :following, 0),
       statuses_count: Map.get(counts, :statuses, 0),
       last_status_at: nil,
-      emojis: [],
+      emojis: Map.get(account, :emojis) || [],
       fields: []
     }
   end

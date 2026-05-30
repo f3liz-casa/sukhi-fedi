@@ -61,7 +61,7 @@ defmodule SukhiApi.Views.MastodonStatus do
       media_attachments: render_media(note),
       mentions: [],
       tags: render_tags(note),
-      emojis: [],
+      emojis: Map.get(note, :emojis) || [],
       card: nil,
       poll: nil,
       pinned: Map.get(viewer, :pinned, false),

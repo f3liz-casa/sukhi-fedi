@@ -17,7 +17,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
   require Logger
 
-  alias SukhiFedi.AP.Published
+  alias SukhiFedi.AP.{Emojis, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
   alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
@@ -133,6 +133,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
       "cw" => content_warning(note_json),
+      "emojis" => Emojis.from_tag(note_json["tag"]),
       "in_reply_to_ap_id" => extract(note_json["inReplyTo"]),
       "quote_of_ap_id" => quote_uri(note_json),
       "mfm" => mfm_source(note_json)

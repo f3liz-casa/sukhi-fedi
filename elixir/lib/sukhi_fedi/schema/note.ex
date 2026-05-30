@@ -12,6 +12,7 @@ defmodule SukhiFedi.Schema.Note do
     field(:conversation_ap_id, :string)
     field(:quote_of_ap_id, :string)
     field(:mfm, :string)
+    field(:emojis, {:array, :map}, default: [])
 
     # Virtual, populated by `Notes.with_refs/1` for the Mastodon view:
     # the reply parent resolved to a local row, and the quoted note (with
@@ -40,7 +41,8 @@ defmodule SukhiFedi.Schema.Note do
       :in_reply_to_ap_id,
       :conversation_ap_id,
       :quote_of_ap_id,
-      :mfm
+      :mfm,
+      :emojis
     ])
     |> validate_required([:content, :account_id])
     |> validate_inclusion(:visibility, ["public", "followers", "direct"])

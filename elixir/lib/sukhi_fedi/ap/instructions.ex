@@ -8,7 +8,7 @@ defmodule SukhiFedi.AP.Instructions do
   import Ecto.Query
 
   alias SukhiFedi.{Notes, Notifications, Outbox, Repo}
-  alias SukhiFedi.AP.Published
+  alias SukhiFedi.AP.{Emojis, Published}
   alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note, Reaction}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
@@ -363,6 +363,7 @@ defmodule SukhiFedi.AP.Instructions do
       "ap_id" => object["id"],
       "visibility" => "direct",
       "cw" => content_warning(object),
+      "emojis" => Emojis.from_tag(object["tag"]),
       "conversation_ap_id" => conversation_ap_id,
       "in_reply_to_ap_id" => extract_uri(object["inReplyTo"])
     }
@@ -435,6 +436,7 @@ defmodule SukhiFedi.AP.Instructions do
           "ap_id" => ap_id,
           "visibility" => visibility_from(note),
           "cw" => content_warning(note),
+          "emojis" => Emojis.from_tag(note["tag"]),
           "in_reply_to_ap_id" => extract_uri(note["inReplyTo"]),
           "quote_of_ap_id" => extract_quote_uri(note),
           "mfm" => extract_mfm(note)

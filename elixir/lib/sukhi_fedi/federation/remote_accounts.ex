@@ -11,6 +11,7 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
   signature verifier, not the outbound signer.
   """
 
+  alias SukhiFedi.AP.Emojis
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.Account
 
@@ -31,6 +32,7 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
         domain: domain,
         display_name: actor_json["name"] || username,
         summary: actor_json["summary"] || "",
+        emojis: Emojis.from_tag(actor_json["tag"]),
         inbox_url: actor_json["inbox"],
         shared_inbox_url: shared_inbox(actor_json),
         public_key_id: get_in(actor_json, ["publicKey", "id"]),
