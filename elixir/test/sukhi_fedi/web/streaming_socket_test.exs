@@ -29,6 +29,15 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
       Registry.broadcast(:home, %{event: "update", payload: %{"id" => "3"}}, 99)
       refute_receive {:stream_event, "user", %{payload: %{"id" => "3"}}}
     end
+
+    test "direct feed is labelled direct and is keyed per account" do
+      Registry.subscribe(:direct, 7)
+      Registry.broadcast(:direct, %{event: "conversation", payload: %{"id" => "c1"}}, 7)
+      assert_receive {:stream_event, "direct", %{event: "conversation"}}
+
+      Registry.broadcast(:direct, %{event: "conversation", payload: %{"id" => "c2"}}, 8)
+      refute_receive {:stream_event, "direct", %{payload: %{"id" => "c2"}}}
+    end
   end
 
   describe "init/1" do
@@ -40,6 +49,16 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
     test "drops the user stream for an app-only token (no account)" do
       {:ok, state} = StreamingSocket.init(%{account_id: nil, initial_stream: "user"})
       refute MapSet.member?(state.streams, "user")
+    end
+
+    test "subscribes to the direct stream for a user-bound token" do
+      {:ok, state} = StreamingSocket.init(%{account_id: 7, initial_stream: "direct"})
+      assert MapSet.member?(state.streams, "direct")
+    end
+
+    test "drops the direct stream for an app-only token (no account)" do
+      {:ok, state} = StreamingSocket.init(%{account_id: nil, initial_stream: "direct"})
+      refute MapSet.member?(state.streams, "direct")
     end
 
     test "without an initial stream, subscribes to nothing" do
@@ -75,6 +94,18 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
 
       assert {:push, {:text, json}, _} = StreamingSocket.handle_info({:stream_event, "public:local", event}, state)
       assert Jason.decode!(json)["payload"] == "12345"
+    end
+
+    test "pushes a conversation frame on the direct stream" do
+      {:ok, state} = StreamingSocket.init(%{account_id: 7, initial_stream: "direct"})
+
+      event = %{event: "conversation", payload: %{"id" => "42", "unread" => true}}
+      assert {:push, {:text, json}, ^state} = StreamingSocket.handle_info({:stream_event, "direct", event}, state)
+
+      decoded = Jason.decode!(json)
+      assert decoded["stream"] == ["direct"]
+      assert decoded["event"] == "conversation"
+      assert Jason.decode!(decoded["payload"]) == %{"id" => "42", "unread" => true}
     end
 
     test "heartbeat pings the client" do

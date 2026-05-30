@@ -23,11 +23,13 @@ defmodule SukhiFedi.Addons.Streaming.Registry do
 
   defp stream_key(:home, account_id), do: {:home, account_id}
   defp stream_key(:local, _), do: :local
+  defp stream_key(:direct, account_id), do: {:direct, account_id}
 
   # Mastodon stream identifier carried in the broadcast so a socket
   # subscribed to several feeds can label each frame's `"stream"` array.
   defp stream_label({:home, _}), do: "user"
   defp stream_label(:local), do: "public:local"
+  defp stream_label({:direct, _}), do: "direct"
 
   @impl true
   def init(_), do: {:ok, %{}}

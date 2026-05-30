@@ -42,6 +42,7 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
 
         case GatewayRpc.call(SukhiFedi.Notes, :create_status, [v, attrs]) do
           {:ok, {:ok, note}} ->
+            maybe_stream_dm(note)
             ok(200, MastodonStatus.render(note))
 
           {:ok, {:error, {:validation, errors}}} ->
@@ -64,6 +65,16 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
         end
     end
   end
+
+  # DMs push a `conversation` event to each local participant's `direct`
+  # stream. Off the response path and best-effort: streaming must never
+  # delay or fail a post.
+  defp maybe_stream_dm(%{visibility: "direct", conversation_ap_id: cid}) when is_binary(cid) do
+    Task.start(fn -> SukhiApi.Capabilities.MastodonConversations.stream_new_dm(cid) end)
+    :ok
+  end
+
+  defp maybe_stream_dm(_), do: :ok
 
   defp decode_status_attrs(req) do
     headers = req[:headers] || []

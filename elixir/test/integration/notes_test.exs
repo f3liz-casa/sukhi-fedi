@@ -17,7 +17,7 @@ defmodule SukhiFedi.Integration.NotesTest do
   import Ecto.Query
 
   alias SukhiFedi.{Notes, Timelines}
-  alias SukhiFedi.Schema.{Account, Follow, Media, Note, OutboxEvent}
+  alias SukhiFedi.Schema.{Account, ConversationParticipant, Follow, Media, Note, OutboxEvent}
 
   describe "create_status/2" do
     test "creates a Note + emits sns.outbox.note.created" do
@@ -70,9 +70,9 @@ defmodule SukhiFedi.Integration.NotesTest do
                })
     end
 
-    test "direct status to a mentioned user → Note(direct) + sns.outbox.dm.created" do
+    test "direct status to a local user → Note(direct) + participants, no federation" do
       alice = create_account!("alice_dm_send")
-      _bob = create_account!("bob_dm_recv")
+      bob = create_account!("bob_dm_recv")
 
       assert {:ok, note} =
                Notes.create_status(alice, %{
@@ -81,6 +81,34 @@ defmodule SukhiFedi.Integration.NotesTest do
                })
 
       assert note.visibility == "direct"
+
+      # New thread → conversation_ap_id is the note's own synthesized AP id.
+      expected_cid = "https://#{SukhiFedi.Config.domain!()}/users/alice_dm_send/notes/#{note.id}"
+      assert note.conversation_ap_id == expected_cid
+
+      # Both are participants; the sender is read, the recipient unread.
+      assert %{unread: false} = participant(note.conversation_ap_id, alice.id)
+      assert %{unread: true} = participant(note.conversation_ap_id, bob.id)
+
+      # A purely local DM has nobody to federate to.
+      refute Repo.exists?(
+               from(e in OutboxEvent,
+                 where:
+                   e.subject == "sns.outbox.dm.created" and
+                     e.aggregate_id == ^to_string(note.id)
+               )
+             )
+    end
+
+    test "direct status to a remote user → federates with conversation context" do
+      alice = create_account!("alice_dm_fed")
+      _bob = create_remote_account!("bob", "remote.example")
+
+      assert {:ok, note} =
+               Notes.create_status(alice, %{
+                 "status" => "@bob@remote.example hi",
+                 "visibility" => "direct"
+               })
 
       ev =
         Repo.one!(
@@ -91,11 +119,27 @@ defmodule SukhiFedi.Integration.NotesTest do
           )
         )
 
-      assert ev.payload["content"] == "@bob_dm_recv psst"
+      assert "https://remote.example/users/bob" in ev.payload["recipient_actor_uris"]
+      # The federated event carries the thread so the other side can thread.
+      assert ev.payload["conversation_ap_id"] == note.conversation_ap_id
+      assert is_binary(note.conversation_ap_id)
+    end
 
-      assert "https://#{SukhiFedi.Config.domain!()}/users/bob_dm_recv" in ev.payload[
-               "recipient_actor_uris"
-             ]
+    test "direct reply inherits the parent's conversation" do
+      alice = create_account!("alice_dm_thread")
+      _bob = create_account!("bob_dm_thread")
+
+      {:ok, root} =
+        Notes.create_status(alice, %{"status" => "@bob_dm_thread one", "visibility" => "direct"})
+
+      {:ok, reply} =
+        Notes.create_status(alice, %{
+          "status" => "@bob_dm_thread two",
+          "visibility" => "direct",
+          "in_reply_to_id" => to_string(root.id)
+        })
+
+      assert reply.conversation_ap_id == root.conversation_ap_id
     end
 
     test "media_ids[] not owned by user → :media_not_owned" do
@@ -336,6 +380,26 @@ defmodule SukhiFedi.Integration.NotesTest do
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()
+  end
+
+  defp create_remote_account!(username, domain) do
+    %Account{
+      username: username,
+      domain: domain,
+      display_name: username,
+      summary: "",
+      actor_uri: "https://#{domain}/users/#{username}"
+    }
+    |> Repo.insert!()
+  end
+
+  defp participant(conversation_ap_id, account_id) do
+    Repo.one(
+      from(cp in ConversationParticipant,
+        where: cp.conversation_ap_id == ^conversation_ap_id and cp.account_id == ^account_id,
+        select: %{unread: cp.unread}
+      )
+    )
   end
 
   defp create_media!(account) do

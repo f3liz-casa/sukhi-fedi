@@ -13,6 +13,7 @@ defmodule SukhiFedi.Web.StreamingSocket do
 
     * `user`         — the authenticated account's home timeline
     * `public:local` — the local public timeline
+    * `direct`       — the authenticated account's DM conversations
 
   A client either names one stream up front via `?stream=` or multiplexes
   over a single socket with `{"type":"subscribe","stream":"..."}` /
@@ -103,6 +104,10 @@ defmodule SukhiFedi.Web.StreamingSocket do
     do: {:home, account_id, "user"}
 
   defp stream_spec("public:local", _account_id), do: {:local, nil, "public:local"}
+
+  defp stream_spec("direct", account_id) when is_integer(account_id),
+    do: {:direct, account_id, "direct"}
+
   defp stream_spec(_other, _account_id), do: :ignore
 
   defp frame(label, %{event: event, payload: payload}) do

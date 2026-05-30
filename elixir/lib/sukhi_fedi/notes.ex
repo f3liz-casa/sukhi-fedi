@@ -9,7 +9,16 @@ defmodule SukhiFedi.Notes do
 
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
-  alias SukhiFedi.Schema.{Account, Bookmark, Boost, Media, Note, PinnedNote, Reaction}
+  alias SukhiFedi.Schema.{
+    Account,
+    Bookmark,
+    Boost,
+    ConversationParticipant,
+    Media,
+    Note,
+    PinnedNote,
+    Reaction
+  }
 
   @favourite_emoji "⭐"
 
@@ -133,17 +142,22 @@ defmodule SukhiFedi.Notes do
   end
 
   # `visibility: "direct"` path of `create_status/2`. Mentions are
-  # extracted and resolved to recipient actors, then the note federates
-  # via `sns.outbox.dm.created`. Hashtags are not indexed and polls are
-  # not attached — a DM is private and point-to-point.
+  # resolved to recipients, split into local vs remote: local recipients
+  # are delivered in-process (a `conversation_participants` row — they
+  # read the sender's single note through the conversation), remote ones
+  # federate via `sns.outbox.dm.created`. The note carries a
+  # `conversation_ap_id` (its own AP id for a new thread, the parent's
+  # for a reply) so the federated `context` threads on the other side and
+  # the DM shows up in everyone's `/api/v1/conversations`. Hashtags and
+  # polls are skipped — a DM is private and point-to-point.
   defp create_direct_status(account_id, params) do
     content = params[:status] || params["status"] || ""
-    recipients = extract_mention_recipients(content)
 
-    if recipients == [] do
-      {:error, :dm_no_recipients}
-    else
-      attrs =
+    with {:ok, sender} <- SukhiFedi.Accounts.get_account(account_id),
+         recipients when recipients != [] <- resolve_mention_recipients(content) do
+      remote_uris = for r <- recipients, not r.local?, do: r.actor_uri
+
+      base_attrs =
         %{
           account_id: account_id,
           content: content,
@@ -152,30 +166,34 @@ defmodule SukhiFedi.Notes do
         }
         |> resolve_in_reply_to(params)
 
+      inherited_cid = reply_parent_conversation(params)
       media_ids = list_media_ids(params)
 
       Multi.new()
-      |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
+      |> Multi.insert(:note, Note.changeset(%Note{}, base_attrs))
       |> attach_media(media_ids, account_id)
-      |> Outbox.enqueue_multi(
-        :outbox_event,
-        "sns.outbox.dm.created",
-        "note",
-        & &1.note.id,
-        fn %{note: n} ->
-          %{
-            note_id: n.id,
-            account_id: n.account_id,
-            content: n.content,
-            recipient_actor_uris: recipients,
-            in_reply_to_ap_id: n.in_reply_to_ap_id,
-            conversation_ap_id: n.conversation_ap_id
-          }
-        end
-      )
+      |> Multi.run(:dm, fn repo, %{note: note} ->
+        cid = inherited_cid || dm_conversation_ap_id(sender.username, note.id)
+
+        {:ok, note} =
+          note
+          |> Ecto.Changeset.change(conversation_ap_id: cid)
+          |> repo.update()
+
+        # Record every participant so the conversation's `accounts` is
+        # complete (remote recipients have shadow accounts too). The
+        # sender's own row stays read; a local recipient is unread;
+        # remote rows just exist for the `accounts` list (their unread
+        # flag is never read here).
+        upsert_participant(repo, cid, account_id, false)
+        Enum.each(recipients, fn r -> upsert_participant(repo, cid, r.account_id, r.local?) end)
+
+        {:ok, note}
+      end)
+      |> maybe_enqueue_dm(remote_uris)
       |> Repo.transaction()
       |> case do
-        {:ok, %{note: note}} ->
+        {:ok, %{dm: note}} ->
           {:ok, Repo.preload(note, [:account, :media]) |> with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
@@ -187,15 +205,94 @@ defmodule SukhiFedi.Notes do
         {:error, _step, reason, _} ->
           {:error, reason}
       end
+    else
+      {:error, :not_found} -> {:error, :account_not_found}
+      [] -> {:error, :dm_no_recipients}
     end
   end
 
+  # Only federate when there's a remote recipient. A purely local DM has
+  # no inbox to POST to — its delivery is the participant rows above.
+  defp maybe_enqueue_dm(multi, []), do: multi
+
+  defp maybe_enqueue_dm(multi, remote_uris) do
+    Outbox.enqueue_multi(
+      multi,
+      :outbox_event,
+      "sns.outbox.dm.created",
+      "note",
+      & &1.dm.id,
+      fn %{dm: n} ->
+        %{
+          note_id: n.id,
+          account_id: n.account_id,
+          content: n.content,
+          recipient_actor_uris: remote_uris,
+          in_reply_to_ap_id: n.in_reply_to_ap_id,
+          conversation_ap_id: n.conversation_ap_id
+        }
+      end
+    )
+  end
+
+  defp upsert_participant(repo, conversation_ap_id, account_id, unread) do
+    %ConversationParticipant{}
+    |> ConversationParticipant.changeset(%{
+      conversation_ap_id: conversation_ap_id,
+      account_id: account_id,
+      unread: unread
+    })
+    |> repo.insert(
+      on_conflict: [set: [unread: unread]],
+      conflict_target: [:conversation_ap_id, :account_id]
+    )
+  end
+
+  # A new DM thread is identified by the root note's own synthesized AP
+  # id (local notes don't persist `ap_id`; it's derived on demand, same
+  # convention the delivery node and AP controllers use).
+  defp dm_conversation_ap_id(username, note_id),
+    do: "https://#{SukhiFedi.Config.domain!()}/users/#{username}/notes/#{note_id}"
+
+  # A DM reply inherits the parent's conversation so the whole thread
+  # shares one `conversation_ap_id`. Resolved straight from the reply
+  # target (a local note id or a remote note's AP URI) rather than via
+  # `in_reply_to_ap_id`, which is null for local parents (local notes
+  # don't persist an `ap_id`). Falls back to a new thread on a miss.
+  defp reply_parent_conversation(params) do
+    case params[:in_reply_to_id] || params["in_reply_to_id"] do
+      nil -> nil
+      id -> parent_note_conversation(id)
+    end
+  end
+
+  defp parent_note_conversation(id) when is_integer(id),
+    do: parent_note_conversation(to_string(id))
+
+  defp parent_note_conversation(id) when is_binary(id) do
+    query =
+      if String.starts_with?(id, "http") do
+        from(n in Note, where: n.ap_id == ^id, select: n.conversation_ap_id)
+      else
+        case parse_int(id) do
+          nil -> nil
+          int -> from(n in Note, where: n.id == ^int, select: n.conversation_ap_id)
+        end
+      end
+
+    query && Repo.one(query)
+  end
+
+  defp parent_note_conversation(_), do: nil
+
   # Pull `@user` / `@user@host` handles from the note text and resolve
-  # each to a recipient actor URI. The negative lookbehind keeps email
-  # addresses from matching. Unresolvable handles are dropped.
+  # each to a recipient. The negative lookbehind keeps email addresses
+  # from matching. Unresolvable handles are dropped. Each entry carries
+  # whether the account is local, so the caller can split in-process
+  # delivery from federation.
   @mention_re ~r/(?<![\w])@([\w]+)(?:@([\w.\-]+))?/
 
-  defp extract_mention_recipients(content) when is_binary(content) do
+  defp resolve_mention_recipients(content) when is_binary(content) do
     domain = SukhiFedi.Config.domain!()
 
     @mention_re
@@ -207,14 +304,23 @@ defmodule SukhiFedi.Notes do
     |> Enum.uniq()
     |> Enum.flat_map(fn handle ->
       case SukhiFedi.Accounts.lookup_by_acct(handle, resolve: true) do
-        {:ok, account} -> [recipient_actor_uri(account, domain)]
-        _ -> []
+        {:ok, %Account{} = account} ->
+          [
+            %{
+              actor_uri: recipient_actor_uri(account, domain),
+              account_id: account.id,
+              local?: is_nil(account.domain)
+            }
+          ]
+
+        _ ->
+          []
       end
     end)
-    |> Enum.uniq()
+    |> Enum.uniq_by(& &1.actor_uri)
   end
 
-  defp extract_mention_recipients(_), do: []
+  defp resolve_mention_recipients(_), do: []
 
   defp recipient_actor_uri(%Account{actor_uri: uri}, _domain) when is_binary(uri), do: uri
   defp recipient_actor_uri(%Account{username: u}, domain), do: "https://#{domain}/users/#{u}"

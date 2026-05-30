@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Conversations do
   @moduledoc """
-  Mastodon conversations (DM thread) reads.
+  Mastodon conversations (DM threads).
 
-  A conversation here is a `conversation_ap_id` — every DM Note row
-  carries one, and every participant has a row in
-  `conversation_participants`. We don't track unread state yet
-  (`unread` always `false`); when the writer side of DMs lands, that
-  column should join here.
+  A conversation is a `conversation_ap_id`: every DM Note carries one and
+  every participant has a `conversation_participants` row. The Mastodon
+  `id` of a conversation is per-account — here it's the viewer's own
+  participant row id, so `POST /api/v1/conversations/:id/read` is a plain
+  numeric id (no slashes from the AP URI) and maps straight to the row to
+  clear.
 
-  `list/2` returns the most-recent note per conversation the viewer
-  participates in, plus the *other* participants' accounts. The
-  viewer is excluded from the `accounts` list to match Mastodon's
-  semantics ("who else is in this thread").
+  `list/2` returns the most-recent note per conversation the viewer is in,
+  the *other* participants' accounts (the viewer excluded, Mastodon's
+  "who else is in this thread"), and the viewer's `unread` flag.
+  `fanout_entries/1` builds the same per-participant entry for every local
+  participant of one conversation — the streaming `direct` producer.
   """
 
   import Ecto.Query
@@ -28,31 +30,105 @@ defmodule SukhiFedi.Conversations do
     opts = normalize(opts)
     limit = clamp(opts[:limit])
 
-    convo_ids =
-      Repo.all(
-        from cp in ConversationParticipant,
-          where: cp.account_id == ^viewer_id,
-          select: cp.conversation_ap_id
-      )
+    rows = viewer_rows(viewer_id)
 
-    if convo_ids == [] do
+    if rows == %{} do
       []
     else
+      convo_ids = Map.keys(rows)
       last_notes = last_note_per_conversation(convo_ids, limit, opts)
-
       other_accounts = other_participants(convo_ids, viewer_id)
 
       Enum.map(last_notes, fn note ->
         cid = note.conversation_ap_id
+        meta = Map.fetch!(rows, cid)
 
         %{
-          id: cid,
-          unread: false,
+          id: meta.id,
+          unread: meta.unread,
           accounts: Map.get(other_accounts, cid, []),
           last_status: note
         }
       end)
     end
+  end
+
+  @doc """
+  Clear the unread flag on the viewer's conversation. `conversation_id`
+  is the participant row id from `list/2`. Scoped to `viewer_id` so a
+  client can't mark someone else's row read. Returns the refreshed entry
+  (for the `200` body), or `{:error, :not_found}`.
+  """
+  @spec mark_read(integer(), integer() | String.t()) :: {:ok, map()} | {:error, :not_found}
+  def mark_read(viewer_id, conversation_id) when is_integer(viewer_id) do
+    id = to_int(conversation_id)
+
+    {n, _} =
+      from(cp in ConversationParticipant,
+        where: cp.id == ^id and cp.account_id == ^viewer_id
+      )
+      |> Repo.update_all(set: [unread: false])
+
+    case n do
+      0 -> {:error, :not_found}
+      _ -> {:ok, entry_for_row(viewer_id, id)}
+    end
+  end
+
+  @doc """
+  Per-participant conversation entries for one conversation — one for each
+  *local* participant, from their own perspective (their row id + unread,
+  the other participants as `accounts`). Used to fan a freshly-created DM
+  out to each local participant's `direct` stream.
+  """
+  @spec fanout_entries(String.t()) :: [%{account_id: integer(), entry: map()}]
+  def fanout_entries(conversation_ap_id) when is_binary(conversation_ap_id) do
+    case latest_note(conversation_ap_id) do
+      nil ->
+        []
+
+      note ->
+        participants = participants_with_accounts(conversation_ap_id)
+
+        participants
+        |> Enum.filter(& &1.local?)
+        |> Enum.map(fn me ->
+          others =
+            participants
+            |> Enum.reject(&(&1.account_id == me.account_id))
+            |> Enum.map(& &1.account)
+
+          %{
+            account_id: me.account_id,
+            entry: %{id: me.id, unread: me.unread, accounts: others, last_status: note}
+          }
+        end)
+    end
+  end
+
+  # ── internals ──────────────────────────────────────────────────────────
+
+  # The viewer's participant rows keyed by conversation: `%{cid => %{id, unread}}`.
+  defp viewer_rows(viewer_id) do
+    Repo.all(
+      from cp in ConversationParticipant,
+        where: cp.account_id == ^viewer_id,
+        select: {cp.conversation_ap_id, %{id: cp.id, unread: cp.unread}}
+    )
+    |> Map.new()
+  end
+
+  defp entry_for_row(viewer_id, cp_id) do
+    cp = Repo.get!(ConversationParticipant, cp_id)
+    note = latest_note(cp.conversation_ap_id)
+
+    others =
+      cp.conversation_ap_id
+      |> participants_with_accounts()
+      |> Enum.reject(&(&1.account_id == viewer_id))
+      |> Enum.map(& &1.account)
+
+    %{id: cp.id, unread: cp.unread, accounts: others, last_status: note}
   end
 
   defp last_note_per_conversation(convo_ids, limit, opts) do
@@ -75,6 +151,19 @@ defmodule SukhiFedi.Conversations do
     |> limit(^limit)
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
+  end
+
+  defp latest_note(conversation_ap_id) do
+    from(n in Note,
+      where: n.conversation_ap_id == ^conversation_ap_id,
+      order_by: [desc: n.id],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      note -> Repo.preload(note, [:account, :media, :tags])
+    end
   end
 
   defp other_participants(convo_ids, viewer_id) do
@@ -100,6 +189,33 @@ defmodule SukhiFedi.Conversations do
       )
 
     Enum.group_by(rows, & &1.cid, & &1.account)
+  end
+
+  # Every participant of one conversation, with account info and a
+  # local? flag. Drives `fanout_entries/1` and the per-row `accounts`.
+  defp participants_with_accounts(conversation_ap_id) do
+    Repo.all(
+      from cp in ConversationParticipant,
+        join: a in Account,
+        on: a.id == cp.account_id,
+        where: cp.conversation_ap_id == ^conversation_ap_id,
+        select: %{
+          id: cp.id,
+          account_id: cp.account_id,
+          unread: cp.unread,
+          local?: is_nil(a.domain),
+          account: %{
+            id: a.id,
+            username: a.username,
+            display_name: a.display_name,
+            summary: a.summary,
+            domain: a.domain,
+            actor_uri: a.actor_uri,
+            avatar_url: a.avatar_url,
+            banner_url: a.banner_url
+          }
+        }
+    )
   end
 
   defp maybe_max_id(q, nil), do: q

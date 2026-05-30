@@ -294,12 +294,19 @@ defmodule SukhiFedi.AP.Instructions do
         else: nil
 
     if account do
+      # A received DM marks the local participant unread. Only local
+      # accounts get a row (a remote sender has none); this path is the
+      # remote→local receive, so the row being written is the recipient's.
       %ConversationParticipant{}
       |> ConversationParticipant.changeset(%{
         conversation_ap_id: conversation_ap_id,
-        account_id: account.id
+        account_id: account.id,
+        unread: true
       })
-      |> Repo.insert(on_conflict: :nothing)
+      |> Repo.insert(
+        on_conflict: [set: [unread: true]],
+        conflict_target: [:conversation_ap_id, :account_id]
+      )
     end
   end
 

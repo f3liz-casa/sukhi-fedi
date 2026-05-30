@@ -4,7 +4,7 @@ defmodule SukhiFedi.Integration.ConversationsTest do
 
   @moduletag :integration
 
-  alias SukhiFedi.Conversations
+  alias SukhiFedi.{Conversations, Notes}
   alias SukhiFedi.Schema.{Account, ConversationParticipant, Note}
 
   describe "list/2" do
@@ -29,18 +29,21 @@ defmodule SukhiFedi.Integration.ConversationsTest do
       result = Conversations.list(alice.id)
       assert length(result) == 2
 
-      ids_in_order = Enum.map(result, & &1.id)
+      # The conversation `id` is now the viewer's participant row (a
+      # number), so identify each thread by its last status instead.
+      [first, second] = result
       # Newest note's conversation comes first (n3 was inserted after n2 → carol).
-      assert hd(ids_in_order) == cid_ac
-      assert Enum.at(ids_in_order, 1) == cid_ab
+      assert first.last_status.id == n3.id
+      assert second.last_status.id == n2.id
 
-      ab = Enum.find(result, &(&1.id == cid_ab))
+      ab = Enum.find(result, &(&1.last_status.conversation_ap_id == cid_ab))
       assert ab.last_status.id == n2.id
+      assert is_integer(ab.id)
       # Alice is the viewer — she should NOT be in the accounts list.
       assert [%{id: bob_id}] = ab.accounts
       assert bob_id == bob.id
 
-      ac = Enum.find(result, &(&1.id == cid_ac))
+      ac = Enum.find(result, &(&1.last_status.conversation_ap_id == cid_ac))
       assert ac.last_status.id == n3.id
       assert [%{id: carol_id}] = ac.accounts
       assert carol_id == carol.id
@@ -49,6 +52,80 @@ defmodule SukhiFedi.Integration.ConversationsTest do
     test "empty when the viewer participates in nothing" do
       alice = create_account!("alice_empty_conv")
       assert Conversations.list(alice.id) == []
+    end
+
+    test "a sent DM is read for the sender and unread for the recipient" do
+      alice = create_account!("alice_cv_a")
+      bob = create_account!("bob_cv_a")
+
+      {:ok, note} =
+        Notes.create_status(alice, %{"status" => "@bob_cv_a hey", "visibility" => "direct"})
+
+      [a_convo] = Conversations.list(alice.id)
+      assert a_convo.unread == false
+      assert a_convo.last_status.id == note.id
+      assert [%{username: "bob_cv_a"}] = a_convo.accounts
+
+      [b_convo] = Conversations.list(bob.id)
+      assert b_convo.unread == true
+      assert [%{username: "alice_cv_a"}] = b_convo.accounts
+
+      # Per-account id: each side sees a different id for the same thread.
+      assert a_convo.id != b_convo.id
+    end
+  end
+
+  describe "mark_read/2" do
+    test "clears the viewer's unread flag" do
+      alice = create_account!("alice_cv_r")
+      bob = create_account!("bob_cv_r")
+
+      {:ok, _} =
+        Notes.create_status(alice, %{"status" => "@bob_cv_r ping", "visibility" => "direct"})
+
+      [b_convo] = Conversations.list(bob.id)
+      assert b_convo.unread == true
+
+      assert {:ok, cleared} = Conversations.mark_read(bob.id, b_convo.id)
+      assert cleared.unread == false
+      assert [%{unread: false}] = Conversations.list(bob.id)
+    end
+
+    test "won't clear another account's conversation" do
+      alice = create_account!("alice_cv_x")
+      bob = create_account!("bob_cv_x")
+
+      {:ok, _} =
+        Notes.create_status(alice, %{"status" => "@bob_cv_x yo", "visibility" => "direct"})
+
+      [b_convo] = Conversations.list(bob.id)
+
+      assert {:error, :not_found} = Conversations.mark_read(alice.id, b_convo.id)
+      assert [%{unread: true}] = Conversations.list(bob.id)
+    end
+  end
+
+  describe "fanout_entries/1" do
+    test "one viewer-relative entry per local participant" do
+      alice = create_account!("alice_cv_f")
+      bob = create_account!("bob_cv_f")
+
+      {:ok, note} =
+        Notes.create_status(alice, %{"status" => "@bob_cv_f stream me", "visibility" => "direct"})
+
+      entries = Conversations.fanout_entries(note.conversation_ap_id)
+      assert length(entries) == 2
+
+      by_account = Map.new(entries, &{&1.account_id, &1.entry})
+
+      alice_entry = by_account[alice.id]
+      assert alice_entry.unread == false
+      assert [%{username: "bob_cv_f"}] = alice_entry.accounts
+      assert alice_entry.last_status.id == note.id
+
+      bob_entry = by_account[bob.id]
+      assert bob_entry.unread == true
+      assert [%{username: "alice_cv_f"}] = bob_entry.accounts
     end
   end
 
