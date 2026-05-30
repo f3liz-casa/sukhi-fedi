@@ -120,12 +120,19 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp mfm_source(%{"source" => %{"content" => s}}) when is_binary(s) and s != "", do: s
   defp mfm_source(_), do: nil
 
+  # The content warning rides the AP `summary`. Mirror it so the Mastodon
+  # view can hide the body behind a spoiler (cw drives `spoiler_text` and
+  # `sensitive`).
+  defp content_warning(%{"summary" => s}) when is_binary(s) and s != "", do: s
+  defp content_warning(_), do: nil
+
   defp insert_note(note_json, account_id, uri) do
     attrs = %{
       "account_id" => account_id,
       "content" => note_json["content"] || "",
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
+      "cw" => content_warning(note_json),
       "in_reply_to_ap_id" => extract(note_json["inReplyTo"]),
       "quote_of_ap_id" => quote_uri(note_json),
       "mfm" => mfm_source(note_json)

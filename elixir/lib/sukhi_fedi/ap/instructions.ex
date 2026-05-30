@@ -173,6 +173,12 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp extract_mfm(_), do: nil
 
+  # The content warning rides the AP `summary`. Mirror it so the Mastodon
+  # view hides the body behind a spoiler (cw drives `spoiler_text` and
+  # `sensitive`).
+  defp content_warning(%{"summary" => s}) when is_binary(s) and s != "", do: s
+  defp content_warning(_), do: nil
+
   defp mfm_from_source(%{"content" => s}) when is_binary(s) and s != "", do: s
   defp mfm_from_source(_), do: nil
 
@@ -356,6 +362,7 @@ defmodule SukhiFedi.AP.Instructions do
       "content" => object["content"] || "",
       "ap_id" => object["id"],
       "visibility" => "direct",
+      "cw" => content_warning(object),
       "conversation_ap_id" => conversation_ap_id,
       "in_reply_to_ap_id" => extract_uri(object["inReplyTo"])
     }
@@ -427,6 +434,7 @@ defmodule SukhiFedi.AP.Instructions do
           "content" => note["content"] || "",
           "ap_id" => ap_id,
           "visibility" => visibility_from(note),
+          "cw" => content_warning(note),
           "in_reply_to_ap_id" => extract_uri(note["inReplyTo"]),
           "quote_of_ap_id" => extract_quote_uri(note),
           "mfm" => extract_mfm(note)

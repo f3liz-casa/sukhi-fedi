@@ -148,6 +148,55 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
     end
   end
 
+  describe "inbound content warning" do
+    test "Create(Note) with a summary stores it as the content warning" do
+      author = create_remote_account!("cw_author", "remote.example")
+      note_uri = "https://remote.example/notes/cw1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "the spoilery body",
+                     "summary" => "CW: late-game spoilers",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+                   }
+                 }
+               })
+
+      assert %Note{cw: "CW: late-game spoilers"} = Repo.get_by(Note, ap_id: note_uri)
+    end
+
+    test "Create(Note) with no summary leaves cw nil" do
+      author = create_remote_account!("nocw_author", "remote.example")
+      note_uri = "https://remote.example/notes/nocw1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "no warning here",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+                   }
+                 }
+               })
+
+      assert %Note{cw: nil} = Repo.get_by(Note, ap_id: note_uri)
+    end
+  end
+
   describe "inbound quote notes" do
     test "Create(Note) with quoteUrl mirrors quote_of_ap_id" do
       quoter = create_remote_account!("quoter", "remote.example")
