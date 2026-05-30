@@ -6,11 +6,19 @@ export type Field = {
   verified_at?: string | null;
 };
 
+export type Emoji = {
+  shortcode: string;
+  url: string;
+  static_url?: string;
+  visible_in_picker?: boolean;
+};
+
 export type Account = {
   id: string;
   username: string;
   acct: string;
   display_name: string;
+  emojis?: Emoji[];
   avatar: string | null;
   avatar_static?: string | null;
   header?: string | null;
@@ -45,6 +53,7 @@ export type Status = {
   id: string;
   created_at: string;
   content: string;
+  emojis?: Emoji[];
   spoiler_text?: string;
   sensitive?: boolean;
   visibility?: Visibility;

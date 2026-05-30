@@ -318,3 +318,13 @@
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
+
+/* Custom emoji injected into names, bios and post content from the
+   server's `emojis` array (see lib/emoji.ts). Sized to ride the text. */
+img.custom-emoji {
+  height: 1.3em;
+  width: auto;
+  vertical-align: text-bottom;
+  object-fit: contain;
+  display: inline-block;
+}

@@ -15,6 +15,7 @@
   import StatusCard from '$lib/components/Status.svelte';
   import FollowButton from '$lib/components/FollowButton.svelte';
   import { phrase } from '$lib/phrase';
+  import { renderEmojis } from '$lib/emoji';
 
   let account = $state<Account | null>(null);
   let me = $state<Account | null>(null);
@@ -103,7 +104,7 @@
       {/if}
       <div class="stack-tight" style="flex: 1;">
         <p class="display-name" style="font-size: var(--text-lg);">
-          {@html phrase(account.display_name || account.username)}
+          {@html renderEmojis(phrase(account.display_name || account.username), account.emojis)}
         </p>
         <p class="muted">@{account.acct}</p>
       </div>
@@ -115,7 +116,7 @@
     </div>
 
     {#if account.note}
-      <div class="profile-note">{@html account.note}</div>
+      <div class="profile-note">{@html renderEmojis(account.note, account.emojis)}</div>
     {/if}
 
     <p class="profile-counts">

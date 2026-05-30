@@ -2,6 +2,8 @@
   import type { Status, Reaction } from '$lib/api';
   import * as api from '$lib/api';
   import ReactionPicker from './ReactionPicker.svelte';
+  import { renderEmojis } from '$lib/emoji';
+  import { phrase } from '$lib/phrase';
 
   let {
     status,
@@ -115,7 +117,9 @@
 
   <div class="body">
     <header class="meta">
-      <a class="display-name" href={`/@${status.account.acct}`}>{name}</a>
+      <a class="display-name" href={`/@${status.account.acct}`}
+        >{@html renderEmojis(phrase(name), status.account.emojis)}</a
+      >
       <a href={`/@${status.account.acct}`}>@{status.account.acct}</a>
       <span>·</span>
       <a class="timestamp" href={`/@${status.account.acct}/${status.id}`} title={status.created_at}>{ts}</a>
@@ -124,10 +128,10 @@
     {#if status.spoiler_text}
       <details>
         <summary>{status.spoiler_text}</summary>
-        <div class="content">{@html status.content}</div>
+        <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
       </details>
     {:else}
-      <div class="content">{@html status.content}</div>
+      <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
     {/if}
 
     {#if status.media_attachments.length > 0}
