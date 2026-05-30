@@ -96,6 +96,58 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
     end
   end
 
+  describe "inbound note publish time" do
+    test "Create(Note) keeps the remote published date as created_at" do
+      author = create_remote_account!("dated_author", "remote.example")
+      note_uri = "https://remote.example/notes/dated1"
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "an old post",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"],
+                     "published" => "2021-03-14T09:26:53Z"
+                   }
+                 }
+               })
+
+      note = Repo.get_by(Note, ap_id: note_uri)
+      assert DateTime.compare(note.created_at, ~U[2021-03-14 09:26:53Z]) == :eq
+    end
+
+    test "Create(Note) without published falls back to insert time" do
+      author = create_remote_account!("undated_author", "remote.example")
+      note_uri = "https://remote.example/notes/undated1"
+      before = DateTime.add(DateTime.utc_now(), -5, :second)
+
+      assert :ok =
+               Instructions.execute(%{
+                 "action" => "save",
+                 "object" => %{
+                   "type" => "Create",
+                   "actor" => author.actor_uri,
+                   "object" => %{
+                     "type" => "Note",
+                     "id" => note_uri,
+                     "attributedTo" => author.actor_uri,
+                     "content" => "no date",
+                     "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+                   }
+                 }
+               })
+
+      note = Repo.get_by(Note, ap_id: note_uri)
+      assert DateTime.compare(note.created_at, before) == :gt
+    end
+  end
+
   describe "inbound quote notes" do
     test "Create(Note) with quoteUrl mirrors quote_of_ap_id" do
       quoter = create_remote_account!("quoter", "remote.example")

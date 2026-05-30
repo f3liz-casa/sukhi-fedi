@@ -8,6 +8,7 @@ defmodule SukhiFedi.AP.Instructions do
   import Ecto.Query
 
   alias SukhiFedi.{Notes, Notifications, Outbox, Repo}
+  alias SukhiFedi.AP.Published
   alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note, Reaction}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
@@ -361,6 +362,7 @@ defmodule SukhiFedi.AP.Instructions do
 
     %Note{}
     |> Note.changeset(attrs)
+    |> Published.stamp(object)
     |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id)
   end
 
@@ -432,6 +434,7 @@ defmodule SukhiFedi.AP.Instructions do
 
         case %Note{}
              |> Note.changeset(attrs)
+             |> Published.stamp(note)
              |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id) do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])

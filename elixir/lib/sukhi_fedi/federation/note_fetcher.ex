@@ -17,6 +17,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
   require Logger
 
+  alias SukhiFedi.AP.Published
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
   alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
@@ -132,6 +133,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
     %Note{}
     |> Note.changeset(attrs)
+    |> Published.stamp(note_json)
     |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id)
     |> case do
       {:ok, %Note{id: nil}} ->
