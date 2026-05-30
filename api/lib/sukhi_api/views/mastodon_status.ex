@@ -42,7 +42,7 @@ defmodule SukhiApi.Views.MastodonStatus do
       in_reply_to_account_id: encode_id(Map.get(note, :in_reply_to_account_id)),
       sensitive: !!(Map.get(note, :cw) && Map.get(note, :cw) != ""),
       spoiler_text: Map.get(note, :cw) || "",
-      visibility: Map.get(note, :visibility) || "public",
+      visibility: mastodon_visibility(Map.get(note, :visibility)),
       language: nil,
       uri: uri,
       url: uri,
@@ -104,6 +104,14 @@ defmodule SukhiApi.Views.MastodonStatus do
       _ -> nil
     end
   end
+
+  # Our notes store the AP-flavoured "followers"; Mastodon's StatusPrivacy
+  # enum calls that "private". A Gson client (Moshidon) rejects the whole
+  # status when `visibility` isn't one of its four known values, so map it
+  # and fall back to "public" for anything unexpected.
+  defp mastodon_visibility("followers"), do: "private"
+  defp mastodon_visibility(v) when v in ["public", "unlisted", "private", "direct"], do: v
+  defp mastodon_visibility(_), do: "public"
 
   defp render_content(note) do
     raw = Map.get(note, :content) || ""
