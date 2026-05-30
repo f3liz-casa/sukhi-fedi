@@ -83,7 +83,24 @@ defmodule SukhiFedi.Social do
       join: a in Account,
       on: a.id == f.followee_id,
       where: f.follower_uri == ^follower_uri and f.state == "accepted",
-      select: %{id: a.id, username: a.username, display_name: a.display_name, summary: a.summary}
+      # Same projection as the followers list: the Mastodon account view
+      # needs `domain` + `actor_uri` to render a remote followee as
+      # "user@host" with its real URL. Without them it falls back to a
+      # bare local handle and the profile link 404s.
+      select: %{
+        id: a.id,
+        username: a.username,
+        domain: a.domain,
+        display_name: a.display_name,
+        summary: a.summary,
+        actor_uri: a.actor_uri,
+        avatar_url: a.avatar_url,
+        banner_url: a.banner_url,
+        locked: a.locked,
+        is_bot: a.is_bot,
+        is_admin: a.is_admin,
+        created_at: a.created_at
+      }
     )
     |> Repo.all()
   end

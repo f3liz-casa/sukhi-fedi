@@ -127,6 +127,28 @@ defmodule SukhiFedi.Integration.SocialTest do
     end
   end
 
+  describe "list_following/1" do
+    test "projects remote followees with domain + actor_uri, not a local fallback" do
+      alice = create_account!("alice_lfg")
+      bob_remote = create_remote_account!("bob_lfg", "social.example")
+      potato = create_account!("potato_lfg")
+
+      alice_uri = "https://#{SukhiFedi.Config.domain!()}/users/alice_lfg"
+      Repo.insert!(%Follow{follower_uri: alice_uri, followee_id: bob_remote.id, state: "accepted"})
+      Repo.insert!(%Follow{follower_uri: alice_uri, followee_id: potato.id, state: "accepted"})
+
+      by_id = Social.list_following(alice_uri) |> Map.new(fn f -> {f[:id], f} end)
+
+      # A remote followee must keep its domain + actor_uri — otherwise the
+      # Mastodon account view renders it as a bare local handle and the
+      # profile link 404s.
+      assert by_id[bob_remote.id].domain == "social.example"
+      assert by_id[bob_remote.id].actor_uri == bob_remote.actor_uri
+      # …while a local followee stays local.
+      assert by_id[potato.id].domain == nil
+    end
+  end
+
   describe "unfollow/2" do
     test "deletes the Follow row + emits sns.outbox.follow.undone (remote target)" do
       alice = create_account!("alice_unf")
