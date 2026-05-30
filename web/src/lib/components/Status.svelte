@@ -134,6 +134,24 @@
       <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
     {/if}
 
+    {#if status.quote}
+      <a class="quote-card" href={`/@${status.quote.account.acct}/${status.quote.id}`}>
+        <div class="quote-head">
+          {#if status.quote.account.avatar}
+            <img class="quote-avatar" src={status.quote.account.avatar} alt="" loading="lazy" />
+          {/if}
+          <span class="quote-name"
+            >{@html renderEmojis(
+              phrase(status.quote.account.display_name || status.quote.account.username),
+              status.quote.account.emojis
+            )}</span
+          >
+          <span class="quote-acct">@{status.quote.account.acct}</span>
+        </div>
+        <div class="quote-content">{@html renderEmojis(status.quote.content, status.quote.emojis)}</div>
+      </a>
+    {/if}
+
     {#if status.media_attachments.length > 0}
       <div class="media">
         {#each status.media_attachments as m (m.id)}
@@ -194,6 +212,41 @@
 </article>
 
 <style>
+  .quote-card {
+    display: block;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: inherit;
+  }
+  .quote-card:hover {
+    background: rgba(127, 127, 127, 0.08);
+  }
+  .quote-head {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-bottom: 0.25rem;
+    font-size: var(--text-sm);
+  }
+  .quote-avatar {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .quote-name {
+    font-weight: 600;
+  }
+  .quote-acct {
+    color: var(--color-text-muted);
+  }
+  .quote-content {
+    font-size: var(--text-sm);
+  }
+
   .reactions {
     display: flex;
     flex-wrap: wrap;

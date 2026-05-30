@@ -60,6 +60,8 @@ export type Status = {
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
   account: Account;
+  // Fedibird-compatible quote post, nested one level deep (no further).
+  quote?: Status | null;
   media_attachments: MediaAttachment[];
   tags: Tag[];
   url?: string;
