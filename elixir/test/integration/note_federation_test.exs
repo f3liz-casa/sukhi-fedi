@@ -454,6 +454,61 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
 
       assert 1 = Repo.aggregate(from(n in Note, where: n.ap_id == ^note_uri), :count)
     end
+
+    test "a reply with no context threads under the parent's conversation" do
+      bob = create_account!("bob_dm_thread")
+      alice = create_remote_account!("alice_thread", "remote.example")
+      bob_uri = "https://#{Config.domain!()}/users/#{bob.username}"
+
+      root_uri = "https://remote.example/notes/dm_root"
+      reply_uri = "https://remote.example/notes/dm_reply"
+
+      # Root DM, threaded under its own id.
+      :ok =
+        Instructions.execute(%{
+          "action" => "save",
+          "object" => %{
+            "type" => "Create",
+            "actor" => alice.actor_uri,
+            "object" => %{
+              "type" => "Note",
+              "id" => root_uri,
+              "attributedTo" => alice.actor_uri,
+              "content" => "first",
+              "to" => [bob_uri],
+              "context" => root_uri
+            }
+          }
+        })
+
+      # Reply in_reply_to the root, but carrying NO `context` (Misskey-
+      # family servers omit it). It must still join the root's thread
+      # rather than open a second conversation under its own id.
+      :ok =
+        Instructions.execute(%{
+          "action" => "save",
+          "object" => %{
+            "type" => "Create",
+            "actor" => alice.actor_uri,
+            "object" => %{
+              "type" => "Note",
+              "id" => reply_uri,
+              "attributedTo" => alice.actor_uri,
+              "content" => "second",
+              "to" => [bob_uri],
+              "inReplyTo" => root_uri
+            }
+          }
+        })
+
+      root = Repo.get_by(Note, ap_id: root_uri)
+      reply = Repo.get_by(Note, ap_id: reply_uri)
+      assert reply.conversation_ap_id == root.conversation_ap_id
+
+      # One conversation for the recipient, not two.
+      assert [convo] = Conversations.list(bob.id)
+      assert convo.last_status.id == reply.id
+    end
   end
 
   defp participant(conversation_ap_id, account_id) do

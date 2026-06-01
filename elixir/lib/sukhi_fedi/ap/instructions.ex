@@ -269,8 +269,13 @@ defmodule SukhiFedi.AP.Instructions do
       end) and length(to_list) > 0
 
     if is_direct do
+      # A reply joins its parent's conversation first, so a thread stays
+      # one conversation even when the origin omits a stable `context`
+      # (Misskey-family servers do). Fall back to the AP thread id, then
+      # to this note's own id as a brand-new thread's root.
       conversation_ap_id =
-        object["context"] || object["conversation"] || object["id"]
+        dm_parent_conversation(extract_uri(object["inReplyTo"])) ||
+          object["context"] || object["conversation"] || object["id"]
 
       domain = SukhiFedi.Config.domain!()
       local_recipients = Enum.filter(to_list, &String.contains?(&1, domain))
@@ -293,6 +298,34 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   defp maybe_handle_dm(_), do: :ok
+
+  # Resolve the `conversation_ap_id` of the note an inbound DM replies to,
+  # so the reply threads with it. A local parent synthesizes its AP id
+  # (its `ap_id` column is NULL), so pull the note id out of our own
+  # `/notes/<id>` URL and match on that; a remote parent matches on
+  # `ap_id`. nil when there's no parent or we don't hold it.
+  defp dm_parent_conversation(uri) when is_binary(uri) do
+    query =
+      case local_note_id(uri) do
+        nil -> from(n in Note, where: n.ap_id == ^uri, select: n.conversation_ap_id)
+        id -> from(n in Note, where: n.id == ^id, select: n.conversation_ap_id)
+      end
+
+    Repo.one(query)
+  end
+
+  defp dm_parent_conversation(_), do: nil
+
+  # The numeric note id from one of our own synthesized note URLs
+  # (`https://<domain>/users/<u>/notes/<id>`); nil for anything else.
+  defp local_note_id(uri) do
+    domain = SukhiFedi.Config.domain!()
+
+    case Regex.run(~r{^https://#{Regex.escape(domain)}/users/[^/]+/notes/(\d+)$}, uri) do
+      [_, id] -> String.to_integer(id)
+      _ -> nil
+    end
+  end
 
   defp record_participant(conversation_ap_id, actor_uri) when is_binary(conversation_ap_id) do
     domain = SukhiFedi.Config.domain!()
