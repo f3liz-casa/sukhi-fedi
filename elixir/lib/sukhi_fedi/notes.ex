@@ -731,10 +731,13 @@ defmodule SukhiFedi.Notes do
     walk_ancestors(parent_ap_id, [], 0, @ancestor_backfill)
   end
 
+  # `acc` is built by prepending each note as we climb, so the furthest
+  # ancestor (the root) ends up at the head — already the oldest-first
+  # order Mastodon wants. Return it as-is; don't reverse.
   defp walk_ancestors(_ap_id, acc, depth, _budget) when depth >= @max_depth,
-    do: Enum.reverse(acc)
+    do: acc
 
-  defp walk_ancestors(nil, acc, _depth, _budget), do: Enum.reverse(acc)
+  defp walk_ancestors(nil, acc, _depth, _budget), do: acc
 
   defp walk_ancestors(ap_id, acc, depth, budget) do
     case lookup_note_by_uri(ap_id) do
@@ -751,10 +754,10 @@ defmodule SukhiFedi.Notes do
               walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget - 1)
 
             nil ->
-              Enum.reverse(acc)
+              acc
           end
         else
-          Enum.reverse(acc)
+          acc
         end
     end
   end

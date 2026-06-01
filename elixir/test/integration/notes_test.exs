@@ -273,32 +273,45 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert leaf.id in descendant_ids
     end
 
-    test "threads a remote reply onto a local parent (local notes carry no ap_id)" do
+    test "threads through a local parent and orders ancestors oldest-first" do
       alice = create_account!("alice_local_ctx")
       bob = create_remote_account!("bob_remote_ctx", "remote.example")
 
-      # A real local note: its `ap_id` column stays NULL, addressed only by
-      # the synthesized `/notes/<id>` URL.
-      {:ok, root} = Notes.create_status(alice, %{"status" => "local root"})
-      root_uri = "https://#{SukhiFedi.Config.domain!()}/users/#{alice.username}/notes/#{root.id}"
+      # original (remote) <- mid (local, ap_id NULL) <- reply (remote).
+      original =
+        %Note{
+          account_id: bob.id,
+          content: "original",
+          visibility: "public",
+          ap_id: "https://remote.example/notes/ctx_root"
+        }
+        |> Repo.insert!()
 
-      # A remote reply references the local root by that URL.
+      {:ok, mid} =
+        Notes.create_status(alice, %{
+          "status" => "local mid",
+          "in_reply_to_id" => to_string(original.id)
+        })
+
+      mid_uri = "https://#{SukhiFedi.Config.domain!()}/users/#{alice.username}/notes/#{mid.id}"
+
       reply =
         %Note{
           account_id: bob.id,
           content: "remote reply",
           visibility: "public",
-          ap_id: "https://remote.example/notes/ctx_reply1",
-          in_reply_to_ap_id: root_uri
+          ap_id: "https://remote.example/notes/ctx_reply",
+          in_reply_to_ap_id: mid_uri
         }
         |> Repo.insert!()
 
-      # Opening the reply surfaces the local root as an ancestor…
+      # Opening the reply surfaces the whole chain, oldest first — the
+      # local mid (NULL ap_id) resolved by its synthesized URL.
       assert {:ok, %{ancestors: ancestors}} = Notes.context(reply.id)
-      assert root.id in Enum.map(ancestors, & &1.id)
+      assert Enum.map(ancestors, & &1.id) == [original.id, mid.id]
 
-      # …and opening the local root surfaces the remote reply as a descendant.
-      assert {:ok, %{descendants: descendants}} = Notes.context(root.id)
+      # Opening the local mid shows its remote child as a descendant.
+      assert {:ok, %{descendants: descendants}} = Notes.context(mid.id)
       assert reply.id in Enum.map(descendants, & &1.id)
     end
   end
