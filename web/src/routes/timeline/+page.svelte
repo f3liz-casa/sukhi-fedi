@@ -116,6 +116,7 @@
 <header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);">
   <h1 style="font-size: var(--text-lg);">sukhi-fedi</h1>
   <span style="display: flex; gap: var(--space-2);">
+    <a class="chip" href="/messages">メッセージ</a>
     <a class="chip" href="/search">さがす</a>
     <a class="chip" href="/settings">設定</a>
     <button class="chip" onclick={openCompose}>書く</button>

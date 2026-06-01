@@ -189,6 +189,37 @@ export async function fetchTimeline(
   return { items, nextMaxId };
 }
 
+// ── conversations (DM) ───────────────────────────────────────────────
+
+export type Conversation = {
+  id: string;
+  unread: boolean;
+  accounts: Account[];
+  last_status: Status | null;
+};
+
+export async function getConversations(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Conversation>> {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? 20));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+
+  const res = await get(`/api/v1/conversations?${qs}`);
+  failOn401(res);
+  if (!res.ok) throw new Error(`conversations_failed_${res.status}`);
+
+  const items = (await res.json()) as Conversation[];
+  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+export async function markConversationRead(id: string): Promise<Conversation> {
+  const res = await sendJson('POST', `/api/v1/conversations/${encodeURIComponent(id)}/read`, {});
+  failOn401(res);
+  if (!res.ok) throw new Error(`conversation_read_failed_${res.status}`);
+  return (await res.json()) as Conversation;
+}
+
 // ── statuses ─────────────────────────────────────────────────────────
 
 export type ComposeInput = {
