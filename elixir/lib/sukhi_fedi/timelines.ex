@@ -66,13 +66,11 @@ defmodule SukhiFedi.Timelines do
     |> SukhiFedi.Notes.with_refs()
   end
 
-  defp maybe_local_only(query, true) do
-    from(n in query,
-      join: a in Account,
-      on: a.id == n.account_id,
-      where: is_nil(a.domain)
-    )
-  end
+  # Local-origin notes carry no `ap_id` (it's synthesized on demand), so a
+  # mirrored remote post always has one. Filtering on that is equivalent to
+  # joining the author and checking `accounts.domain IS NULL`, but drops the
+  # join. `SukhiFedi.Notes.local_notes/1` is the shared origin predicate.
+  defp maybe_local_only(query, true), do: SukhiFedi.Notes.local_notes(query)
 
   defp maybe_local_only(query, _), do: query
 

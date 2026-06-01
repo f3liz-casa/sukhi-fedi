@@ -91,6 +91,16 @@ registry:
 ssh:
   user: rocky
 
+# ── Container log rotation (host-level) ──────────────────────────────────────
+# The json-file driver is unbounded by default — a disk-fill risk on a small
+# box. Cap it once for *every* container (the gateway/delivery accessories
+# included, which a per-role `logging:` here would miss) by installing the
+# Docker daemon default on the host, then restarting docker:
+#   sudo cp infra/docker-daemon.json /etc/docker/daemon.json
+#   sudo systemctl restart docker && kamal deploy
+# The rotated files at /var/lib/docker/containers/*/*-json.log* are what the
+# backup picks up to keep logs off-host (see infra/backup/README.md).
+
 # ── Servers ────────────────────────────────────────────────────────────────
 # `web` is now the Anubis container. It listens on 8080 inside the
 # kamal network; kamal-proxy terminates TLS on 443 and forwards there.

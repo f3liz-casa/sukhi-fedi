@@ -78,6 +78,7 @@ if endpoint = System.get_env("S3_ENDPOINT") do
   config :sukhi_fedi, :s3,
     bucket: System.get_env("S3_BUCKET", "media"),
     inbound_bucket: System.get_env("S3_INBOUND_BUCKET", "inbound"),
+    outbound_bucket: System.get_env("S3_OUTBOUND_BUCKET", "outbound"),
     enabled: true
 else
   config :sukhi_fedi, :s3, enabled: false

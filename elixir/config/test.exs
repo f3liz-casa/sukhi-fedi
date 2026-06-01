@@ -48,4 +48,8 @@ config :ex_aws,
   secret_access_key: "testsecret",
   json_codec: Jason
 
-config :sukhi_fedi, :s3, bucket: "media-test", inbound_bucket: "inbound-test", enabled: true
+config :sukhi_fedi, :s3,
+  bucket: "media-test",
+  inbound_bucket: "inbound-test",
+  outbound_bucket: "outbound-test",
+  enabled: true

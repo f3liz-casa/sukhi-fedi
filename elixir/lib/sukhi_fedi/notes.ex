@@ -22,6 +22,22 @@ defmodule SukhiFedi.Notes do
 
   @favourite_emoji "⭐"
 
+  # ── origin ───────────────────────────────────────────────────────────────
+
+  @doc """
+  Compose an origin filter onto a `Note` query. A local note carries no
+  `ap_id` (it's derived on demand — see the threading code below); a note
+  mirrored from a remote server always has one. So `ap_id IS NULL` ⇔ local,
+  the corroborating signal to the author's `accounts.domain`. Shared by the
+  public/tag timeline's local filter and the remote wipe/rebuild tooling so
+  there's a single definition of origin.
+  """
+  @spec local_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def local_notes(query \\ Note), do: from(n in query, where: is_nil(n.ap_id))
+
+  @spec remote_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def remote_notes(query \\ Note), do: from(n in query, where: not is_nil(n.ap_id))
+
   # ── create ───────────────────────────────────────────────────────────────
 
   @doc """

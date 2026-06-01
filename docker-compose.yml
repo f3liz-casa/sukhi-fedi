@@ -8,9 +8,21 @@
 # Operators may set SUKHI_VERSION to a stricter pin (`:v1.2`, `:v1.2.3`)
 # to slow the update stream. Dev users can still override any service
 # with a local `build:` by supplying a docker-compose.override.yml.
+# Cap container log growth and keep a few rotated, gzip'd files. The
+# json-file driver is unbounded by default — a real disk-fill risk on a
+# small box. The rotated files (/var/lib/docker/containers/*/*-json.log*)
+# are what a backup picks up to keep logs off-host. See infra/backup/.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    compress: "true"
+
 services:
   postgres:
     image: postgres:16-alpine
+    logging: *logging
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -25,6 +37,7 @@ services:
 
   nats:
     image: nats:2-alpine
+    logging: *logging
     command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
     volumes:
       - nats_data:/data
@@ -47,6 +60,7 @@ services:
 
   gateway:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-gateway:${SUKHI_VERSION:-v1}
+    logging: *logging
     hostname: elixir
     environment:
       DB_HOST: postgres
@@ -77,6 +91,7 @@ services:
 
   bun:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-bun:${SUKHI_VERSION:-v1}
+    logging: *logging
     environment:
       NATS_URL: nats://nats:4222
       ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
@@ -97,6 +112,7 @@ services:
   # deliberately no distributed Erlang on this edge.
   delivery:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-delivery:${SUKHI_VERSION:-v1}
+    logging: *logging
     hostname: delivery
     environment:
       DOMAIN: ${DOMAIN:-localhost:4000}
@@ -128,6 +144,7 @@ services:
   # narrower ENABLED_CAPABILITIES.
   api:
     image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-api:${SUKHI_VERSION:-v1}
+    logging: *logging
     hostname: api
     environment:
       RELEASE_DISTRIBUTION: sname
@@ -152,6 +169,7 @@ services:
   # proxies through to `gateway:4000`.
   anubis:
     image: ghcr.io/techarohq/anubis:latest
+    logging: *logging
     environment:
       BIND: ":8080"
       DIFFICULTY: "4"
@@ -185,6 +203,7 @@ services:
   # postgres and nats are explicitly left alone.
   watchtower:
     image: containrrr/watchtower:latest
+    logging: *logging
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

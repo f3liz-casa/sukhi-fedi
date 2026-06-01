@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Install to /etc/systemd/system/sukhi-backup.timer — see README.md.
+[Unit]
+Description=Run the sukhi-fedi backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Install to /etc/systemd/system/sukhi-backup.service — see README.md.
+[Unit]
+Description=sukhi-fedi off-host backup (Postgres + rustfs + logs -> restic/B2)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sukhi-fedi/backup.env
+ExecStart=/usr/local/bin/sukhi-backup.sh

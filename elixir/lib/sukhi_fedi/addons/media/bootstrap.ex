@@ -20,9 +20,9 @@ defmodule SukhiFedi.Addons.Media.Bootstrap do
       Logger.info("media bootstrap: S3 not configured, skipping bucket check")
       :ok
     else
-      # Both the media bucket and the inbound-archive bucket (Q10) live in
-      # the same rustfs accessory; ensure each exists.
-      [bucket(), inbound_bucket()]
+      # The media bucket and the inbound/outbound archive buckets all live
+      # in the same rustfs accessory; ensure each exists.
+      [bucket(), inbound_bucket(), outbound_bucket()]
       |> Enum.uniq()
       |> Enum.each(&ensure_one/1)
     end
@@ -73,6 +73,9 @@ defmodule SukhiFedi.Addons.Media.Bootstrap do
 
   defp inbound_bucket,
     do: Application.get_env(:sukhi_fedi, :s3, [])[:inbound_bucket] || "inbound"
+
+  defp outbound_bucket,
+    do: Application.get_env(:sukhi_fedi, :s3, [])[:outbound_bucket] || "outbound"
 
   defp region do
     case Application.get_env(:ex_aws, :s3) do

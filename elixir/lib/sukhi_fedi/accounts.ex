@@ -11,6 +11,23 @@ defmodule SukhiFedi.Accounts do
   alias SukhiFedi.{Outbox, Repo}
   alias SukhiFedi.Schema.{Account, Follow, Note, Session}
 
+  # ── origin ────────────────────────────────────────────────────────────────
+
+  @doc """
+  Compose an origin filter onto an `Account` query — the one place that
+  spells "which side a row came from", so the remote wipe/rebuild tooling
+  and any caller scoping by origin share it instead of re-spelling the
+  predicate. `local` ⇔ `domain IS NULL` (see `by_local_username/1` for why
+  `is_nil/1` and not `domain: nil`). Remote rows are mirrored from upstream
+  and reconstructible from the inbound archive; local rows are the source
+  of truth and can't be re-fetched.
+  """
+  @spec local_accounts(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def local_accounts(query \\ Account), do: from(a in query, where: is_nil(a.domain))
+
+  @spec remote_accounts(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def remote_accounts(query \\ Account), do: from(a in query, where: not is_nil(a.domain))
+
   # ── reads ─────────────────────────────────────────────────────────────────
 
   def get_account_by_username(username), do: by_local_username(username)
