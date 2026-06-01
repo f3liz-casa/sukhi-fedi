@@ -84,7 +84,7 @@ defmodule SukhiFedi.Notifications do
     |> order_by([n], desc: n.id)
     |> limit(^clamp(opts[:limit] || @default_limit))
     |> Repo.all()
-    |> Repo.preload([:from_account, :note])
+    |> Repo.preload([:from_account, note: [:account, :media, :tags]])
   end
 
   @doc "Scoped single fetch — won't return rows owned by other accounts."
@@ -102,7 +102,7 @@ defmodule SukhiFedi.Notifications do
       |> Repo.one()
       |> case do
         nil -> nil
-        n -> Repo.preload(n, [:from_account, :note])
+        n -> Repo.preload(n, [:from_account, note: [:account, :media, :tags]])
       end
     end
   end

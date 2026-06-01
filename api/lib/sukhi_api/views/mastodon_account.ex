@@ -66,7 +66,7 @@ defmodule SukhiApi.Views.MastodonAccount do
       id: Id.encode(account.id),
       username: username,
       acct: acct,
-      display_name: account.display_name || username,
+      display_name: Map.get(account, :display_name) || username,
       locked: Map.get(account, :locked, false) || false,
       bot: Map.get(account, :is_bot, false) || false,
       discoverable: true,
