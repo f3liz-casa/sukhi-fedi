@@ -6,9 +6,13 @@
     updateCredentials,
     type Account
   } from '$lib/api';
-  import { clearToken, isLoggedIn } from '$lib/auth';
+  import { clearToken, isLoggedIn, loadToken } from '$lib/auth';
 
   let me = $state<Account | null>(null);
+  // admin の「管理ページへ」ボタンが /admin/login に POST する bearer。
+  // SPA がすでに持っている OAuth トークンをそのまま渡すので、トークンを
+  // 貼り直す手間が要らない。
+  let adminToken = $state('');
   let displayName = $state('');
   let note = $state('');
   let locked = $state(false);
@@ -57,6 +61,7 @@
     error = null;
     try {
       me = await verifyCredentials();
+      adminToken = loadToken()?.access_token ?? '';
       displayName = me.display_name ?? '';
       // note は HTML で返ってくる。編集はテキストとして扱いたいので、
       // 雑だけど <br> を改行、その他のタグを落とす最小処理。
@@ -194,4 +199,19 @@
       <p class="error">{error}</p>
     {/if}
   </form>
+
+  {#if me.role?.name === 'admin' && adminToken}
+    <!-- /admin は別ドア(bearer 貼り付けログイン)。SPA が持っている
+         トークンをそのまま POST して、貼り直しなしで入れるようにする。
+         通常のリンクではなく form なのは、/admin/login が token を
+         body で受けて session cookie を立てて 302 する作りだから。 -->
+    <section class="admin-entry" style="margin-top: var(--space-5);">
+      <h2 style="font-size: var(--text-md);">管理</h2>
+      <p class="muted">このインスタンスの管理ページに入れます。</p>
+      <form method="post" action="/admin/login">
+        <input type="hidden" name="token" value={adminToken} />
+        <button type="submit" class="chip">管理ページへ</button>
+      </form>
+    </section>
+  {/if}
 {/if}

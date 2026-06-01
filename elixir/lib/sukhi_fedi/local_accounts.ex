@@ -18,10 +18,12 @@ defmodule SukhiFedi.LocalAccounts do
   the AP actor controller already publishes.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Ecto.Multi
   alias SukhiFedi.Addons.NodeinfoMonitor.KeyGen
   alias SukhiFedi.{InviteCodes, Repo}
-  alias SukhiFedi.Schema.Account
+  alias SukhiFedi.Schema.{Account, Session}
 
   @type signup_attrs :: %{
           required(:username) => String.t(),
@@ -69,6 +71,51 @@ defmodule SukhiFedi.LocalAccounts do
         {:error, :account, %Ecto.Changeset{} = cs, _} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
         {:error, :invite, reason, _} -> {:error, reason}
         {:error, _step, reason, _} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Create a local account with `is_admin: true`, bypassing the
+  invite-code requirement.
+
+  This is the bootstrap door for the very first operator: signup needs
+  an invite, and `Accounts.set_admin/3` needs an existing admin to drive
+  the back-office UI, so neither can mint the first admin. Reachable as a
+  release task — see `SukhiFedi.Release.create_admin/3`.
+
+  `is_admin` is forced on with `put_change`, not cast, so an ordinary
+  signup can never smuggle it in through `changeset_local`.
+  """
+  @spec create_admin(String.t(), String.t(), keyword()) ::
+          {:ok, Account.t()}
+          | {:error, :password_too_short}
+          | {:error, {:validation, map()}}
+  def create_admin(username, password, opts \\ [])
+      when is_binary(username) and is_binary(password) do
+    username = username |> String.trim() |> String.downcase()
+    display_name = Keyword.get(opts, :display_name) || username
+
+    with {:ok, hash} <- hash_password(password) do
+      keys = KeyGen.generate()
+
+      attrs = %{
+        username: username,
+        display_name: display_name,
+        email: Keyword.get(opts, :email),
+        password_hash: hash,
+        public_key_pem: keys.public_pem,
+        public_key_jwk: keys.public_jwk,
+        private_key_jwk: keys.private_jwk
+      }
+
+      %Account{}
+      |> Account.changeset_local(attrs)
+      |> Ecto.Changeset.put_change(:is_admin, true)
+      |> Repo.insert()
+      |> case do
+        {:ok, a} -> {:ok, a}
+        {:error, cs} -> {:error, {:validation, SukhiFedi.Changeset.errors(cs)}}
       end
     end
   end
@@ -133,6 +180,47 @@ defmodule SukhiFedi.LocalAccounts do
   end
 
   def authenticate(_, _), do: {:error, :invalid}
+
+  @doc """
+  Change a local account's password.
+
+  Verifies `current` against the stored hash before swapping in a hash
+  of `new`. Returns `{:error, :invalid_current}` if the current password
+  doesn't match (with a dummy verify to keep timing even on the account
+  that has no hash, e.g. a remote row), or `{:error, :password_too_short}`
+  if `new` is under 8 bytes — same floor as signup.
+
+  On success every session for the account is revoked in the same
+  transaction, so a changed password logs out all devices (including the
+  one that made the change) — they have to sign in again with the new
+  password.
+  """
+  @spec change_password(Account.t(), String.t(), String.t()) ::
+          {:ok, Account.t()}
+          | {:error, :invalid_current}
+          | {:error, :password_too_short}
+  def change_password(%Account{id: id, password_hash: hash} = account, current, new)
+      when is_binary(current) and is_binary(new) do
+    if is_binary(hash) and Argon2.verify_pass(current, hash) do
+      case hash_password(new) do
+        {:ok, new_hash} ->
+          Multi.new()
+          |> Multi.update(:account, Ecto.Changeset.change(account, %{password_hash: new_hash}))
+          |> Multi.delete_all(:sessions, from(s in Session, where: s.account_id == ^id))
+          |> Repo.transaction()
+          |> case do
+            {:ok, %{account: a}} -> {:ok, a}
+            {:error, _step, reason, _} -> {:error, reason}
+          end
+
+        {:error, _} = err ->
+          err
+      end
+    else
+      Argon2.no_user_verify()
+      {:error, :invalid_current}
+    end
+  end
 
   @session_ttl_days 30
 

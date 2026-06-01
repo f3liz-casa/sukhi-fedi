@@ -32,6 +32,9 @@ export type Account = {
   following_count?: number;
   statuses_count?: number;
   fields?: Field[];
+  // verify_credentials だけが返す。admin は { name: "admin", ... }。
+  // 管理ページへの入口を出すかどうかの判定に使う。
+  role?: { id: string; name: string; permissions: string } | null;
 };
 
 export type MediaAttachment = {

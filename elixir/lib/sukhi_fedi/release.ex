@@ -111,6 +111,34 @@ defmodule SukhiFedi.Release do
   end
 
   @doc """
+  Bootstrap the first admin account. Creates a local account with
+  `is_admin: true`, bypassing the invite-code requirement that normal
+  signup enforces.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Release.create_admin("nyanrus", "a-long-passphrase")'
+
+  Optional third arg is a keyword list (`display_name:`, `email:`).
+  Once you have one admin, promote others from the back-office UI
+  instead of running this again. The password floor is 8 bytes; change
+  it later at `/settings/password`.
+  """
+  def create_admin(username, password, opts \\ [])
+      when is_binary(username) and is_binary(password) do
+    load_app()
+
+    do_create = fn -> SukhiFedi.LocalAccounts.create_admin(username, password, opts) end
+
+    if Process.whereis(SukhiFedi.Repo) do
+      do_create.()
+    else
+      {:ok, result, _apps} =
+        Ecto.Migrator.with_repo(SukhiFedi.Repo, fn _repo -> do_create.() end)
+
+      result
+    end
+  end
+
+  @doc """
   One-shot: for every `MonitoredInstance` that already has at least one
   snapshot, publish an "監視を始めました" Note using the latest snapshot.
   Use after `backfill_monitored_instances/0` on a deployment where the

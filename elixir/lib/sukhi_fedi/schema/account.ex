@@ -113,7 +113,7 @@ defmodule SukhiFedi.Schema.Account do
       message: "は小文字英数字とアンダースコアのみ、30字までです"
     )
     |> validate_length(:display_name, max: 100)
-    |> unique_constraint(:username, name: :accounts_username_index)
+    |> unique_constraint(:username, name: :accounts_local_username_index)
   end
 
   defp normalize_credentials_attrs(attrs) when is_map(attrs) do

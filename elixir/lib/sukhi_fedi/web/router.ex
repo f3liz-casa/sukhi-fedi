@@ -14,6 +14,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.StreamingController
   alias SukhiFedi.Web.StreamingSseController
   alias SukhiFedi.Web.Auth.LoginController
+  alias SukhiFedi.Web.Auth.PasswordController
 
   plug(Plug.Logger)
   plug(SukhiFedi.Web.AccessLogPlug)
@@ -60,6 +61,18 @@ defmodule SukhiFedi.Web.Router do
 
   post "/logout" do
     LoginController.logout(conn)
+  end
+
+  # ── Password change (session_token cookie required) ────────────────────
+  # Server-rendered, same auth surface as /login. Distinct path from the
+  # SPA-owned `/settings`, so no route conflict.
+
+  get "/settings/password" do
+    PasswordController.show(conn)
+  end
+
+  post "/settings/password" do
+    PasswordController.submit(conn)
   end
 
   # ── Static assets for the SPA + login page ─────────────────────────────
