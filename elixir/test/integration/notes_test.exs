@@ -272,6 +272,35 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert root.id in ancestor_ids
       assert leaf.id in descendant_ids
     end
+
+    test "threads a remote reply onto a local parent (local notes carry no ap_id)" do
+      alice = create_account!("alice_local_ctx")
+      bob = create_remote_account!("bob_remote_ctx", "remote.example")
+
+      # A real local note: its `ap_id` column stays NULL, addressed only by
+      # the synthesized `/notes/<id>` URL.
+      {:ok, root} = Notes.create_status(alice, %{"status" => "local root"})
+      root_uri = "https://#{SukhiFedi.Config.domain!()}/users/#{alice.username}/notes/#{root.id}"
+
+      # A remote reply references the local root by that URL.
+      reply =
+        %Note{
+          account_id: bob.id,
+          content: "remote reply",
+          visibility: "public",
+          ap_id: "https://remote.example/notes/ctx_reply1",
+          in_reply_to_ap_id: root_uri
+        }
+        |> Repo.insert!()
+
+      # Opening the reply surfaces the local root as an ancestor…
+      assert {:ok, %{ancestors: ancestors}} = Notes.context(reply.id)
+      assert root.id in Enum.map(ancestors, & &1.id)
+
+      # …and opening the local root surfaces the remote reply as a descendant.
+      assert {:ok, %{descendants: descendants}} = Notes.context(root.id)
+      assert reply.id in Enum.map(descendants, & &1.id)
+    end
   end
 
   describe "Timelines" do

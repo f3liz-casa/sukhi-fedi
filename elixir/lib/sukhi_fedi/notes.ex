@@ -714,6 +714,8 @@ defmodule SukhiFedi.Notes do
             {:error, :not_found}
 
           note ->
+            note = Repo.preload(note, :account)
+
             {:ok,
              %{
                ancestors: with_refs(ancestors_of(note)),
@@ -735,20 +737,25 @@ defmodule SukhiFedi.Notes do
   defp walk_ancestors(nil, acc, _depth, _budget), do: Enum.reverse(acc)
 
   defp walk_ancestors(ap_id, acc, depth, budget) do
-    case Repo.one(from(n in Note, where: n.ap_id == ^ap_id, preload: [:account, :media])) do
+    case lookup_note_by_uri(ap_id) do
       %Note{} = note ->
         walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget)
 
-      nil when budget > 0 ->
-        # Parent isn't mirrored yet — pull it from the origin so the thread
-        # has its chain. A fetch miss just ends the walk.
-        case fetch_ancestor(ap_id) do
-          %Note{} = note -> walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget - 1)
-          nil -> Enum.reverse(acc)
-        end
-
       nil ->
-        Enum.reverse(acc)
+        # A local parent (its `ap_id` is NULL) resolves above by id, so a
+        # miss is a remote ancestor we haven't mirrored — pull it from the
+        # origin. Never federate-fetch one of our own URLs; a miss ends it.
+        if budget > 0 and is_nil(local_note_id_from_uri(ap_id)) do
+          case fetch_ancestor(ap_id) do
+            %Note{} = note ->
+              walk_ancestors(note.in_reply_to_ap_id, [note | acc], depth + 1, budget - 1)
+
+            nil ->
+              Enum.reverse(acc)
+          end
+        else
+          Enum.reverse(acc)
+        end
     end
   end
 
@@ -767,8 +774,12 @@ defmodule SukhiFedi.Notes do
     end
   end
 
-  defp descendants_of(%Note{ap_id: nil}), do: []
-  defp descendants_of(%Note{ap_id: ap_id}), do: walk_descendants([ap_id], [], 0)
+  defp descendants_of(note) do
+    case local_note_ap_id(note) do
+      nil -> []
+      ap_id -> walk_descendants([ap_id], [], 0)
+    end
+  end
 
   defp walk_descendants(_frontier, acc, depth) when depth >= @max_depth, do: Enum.reverse(acc)
   defp walk_descendants([], acc, _depth), do: Enum.reverse(acc)
@@ -787,10 +798,45 @@ defmodule SukhiFedi.Notes do
         Enum.reverse(acc)
 
       _ ->
-        next_frontier = Enum.map(children, & &1.ap_id) |> Enum.reject(&is_nil/1)
+        next_frontier = Enum.map(children, &local_note_ap_id/1) |> Enum.reject(&is_nil/1)
         walk_descendants(next_frontier, Enum.reverse(children, acc), depth + 1)
     end
   end
+
+  # Resolve a note by an AP URL that may be one of our own synthesized
+  # local ids (`https://<domain>/users/<u>/notes/<id>`, whose row carries
+  # a NULL `ap_id`) or a real remote `ap_id`.
+  defp lookup_note_by_uri(uri) do
+    query =
+      case local_note_id_from_uri(uri) do
+        nil -> from(n in Note, where: n.ap_id == ^uri)
+        id -> from(n in Note, where: n.id == ^id)
+      end
+
+    Repo.one(from(n in query, preload: [:account, :media]))
+  end
+
+  # A note's public AP id: the stored `ap_id` for remote notes, or the
+  # synthesized `/notes/<id>` URL for local ones (whose `ap_id` is NULL).
+  # Needs `:account` preloaded; nil if neither applies.
+  defp local_note_ap_id(%Note{ap_id: ap_id}) when is_binary(ap_id), do: ap_id
+
+  defp local_note_ap_id(%Note{ap_id: nil, id: id, account: %Account{username: u, domain: nil}}),
+    do: "https://#{SukhiFedi.Config.domain!()}/users/#{u}/notes/#{id}"
+
+  defp local_note_ap_id(_), do: nil
+
+  # The numeric id from one of our own synthesized note URLs; nil otherwise.
+  defp local_note_id_from_uri(uri) when is_binary(uri) do
+    domain = SukhiFedi.Config.domain!()
+
+    case Regex.run(~r{^https?://#{Regex.escape(domain)}/users/[^/]+/notes/(\d+)$}, uri) do
+      [_, id] -> String.to_integer(id)
+      _ -> nil
+    end
+  end
+
+  defp local_note_id_from_uri(_), do: nil
 
   # ── interactions: favourite / reblog / bookmark / pin ────────────────────
 
