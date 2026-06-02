@@ -102,8 +102,15 @@ defmodule SukhiFedi.Web.InboxController do
 
   defp maybe_enqueue_follower_sync(raw_json, sync_header) do
     actor_uri = Map.get(raw_json, "actor")
+    domain = Application.get_env(:sukhi_fedi, :domain)
 
+    # FEP-8fcf reconciliation only makes sense for a *remote* sender telling
+    # us about its own followers collection. Our own activities are HTTP-
+    # delivered to local followers' inboxes (with a sync header attached for
+    # shared-inbox dedup), so they arrive back here with actor = a local URI.
+    # Reconciling on those would wipe the local actor's own follow edges.
     with true <- is_binary(actor_uri),
+         false <- is_binary(domain) and String.starts_with?(actor_uri, "https://#{domain}/"),
          [_, collection_url] <- Regex.run(@sync_url_regex, sync_header) do
       Oban.insert(
         SukhiFedi.Oban,

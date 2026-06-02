@@ -60,23 +60,33 @@ defmodule SukhiDelivery.Delivery.FollowersSync do
   """
   def reconcile(sender_actor_uri, collection_items) when is_list(collection_items) do
     domain = Application.get_env(:sukhi_delivery, :domain)
+    local_prefix = "https://#{domain}/users/"
 
-    local_follows =
-      from(f in Follow,
-        join: a in Account,
-        on: a.id == f.followee_id,
-        where: f.follower_uri == ^sender_actor_uri,
-        select: %{id: f.id, followee_username: a.username}
-      )
-      |> Repo.all()
+    # The sender is a remote actor; `collection_items` is the @our-domain
+    # subset of *its* followers collection (the URIs of our local users it
+    # believes follow it). We reconcile our local "local-user follows sender"
+    # edges against that list. A local sender has no actor_uri row, so this
+    # no-ops — we never touch a local actor's own follow edges.
+    sender = Repo.one(from a in Account, where: a.actor_uri == ^sender_actor_uri, limit: 1)
 
-    stale_ids =
-      for %{id: id, followee_username: username} <- local_follows,
-          "https://#{domain}/users/#{username}" not in collection_items,
-          do: id
+    if sender do
+      local_follows =
+        from(f in Follow,
+          where:
+            f.followee_id == ^sender.id and f.state == "accepted" and
+              like(f.follower_uri, ^(local_prefix <> "%")),
+          select: %{id: f.id, follower_uri: f.follower_uri}
+        )
+        |> Repo.all()
 
-    unless stale_ids == [] do
-      from(f in Follow, where: f.id in ^stale_ids) |> Repo.delete_all()
+      stale_ids =
+        for %{id: id, follower_uri: uri} <- local_follows,
+            uri not in collection_items,
+            do: id
+
+      unless stale_ids == [] do
+        from(f in Follow, where: f.id in ^stale_ids) |> Repo.delete_all()
+      end
     end
 
     :ok
