@@ -60,6 +60,30 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert child.in_reply_to_ap_id == "https://x.example/notes/parent_42"
     end
 
+    test "reply to a LOCAL parent stores the parent's synthesized ap_id" do
+      a = create_account!("alice_local_reply")
+
+      # Parent is local: its `ap_id` is NULL (left as the schema default).
+      {:ok, parent} = Notes.create_status(a, %{"status" => "first", "visibility" => "public"})
+      assert is_nil(parent.ap_id)
+
+      {:ok, child} =
+        Notes.create_status(a, %{
+          "status" => "reply",
+          "in_reply_to_id" => to_string(parent.id),
+          "visibility" => "public"
+        })
+
+      expected =
+        "https://#{SukhiFedi.Config.domain!()}/users/#{a.username}/notes/#{parent.id}"
+
+      # Not NULL — otherwise a local→local reply has no threading link.
+      assert child.in_reply_to_ap_id == expected
+      # …and the Mastodon Status view resolves it back to the parent.
+      assert child.in_reply_to_id == parent.id
+      assert child.in_reply_to_account_id == a.id
+    end
+
     test "direct status with no resolvable mention → :dm_no_recipients" do
       a = create_account!("alice_dm")
 
@@ -314,6 +338,26 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert {:ok, %{descendants: descendants}} = Notes.context(mid.id)
       assert reply.id in Enum.map(descendants, & &1.id)
     end
+
+    test "threads through a purely local chain (every note ap_id NULL)" do
+      alice = create_account!("alice_all_local")
+
+      {:ok, root} = Notes.create_status(alice, %{"status" => "root"})
+
+      {:ok, mid} =
+        Notes.create_status(alice, %{"status" => "mid", "in_reply_to_id" => to_string(root.id)})
+
+      {:ok, leaf} =
+        Notes.create_status(alice, %{"status" => "leaf", "in_reply_to_id" => to_string(mid.id)})
+
+      # No `update_ap_id` anywhere: all three keep a NULL ap_id, the real
+      # local shape. Threading must work off the synthesized URLs alone.
+      assert is_nil(Repo.get(Note, root.id).ap_id)
+
+      assert {:ok, %{ancestors: ancestors, descendants: descendants}} = Notes.context(mid.id)
+      assert Enum.map(ancestors, & &1.id) == [root.id]
+      assert leaf.id in Enum.map(descendants, & &1.id)
+    end
   end
 
   describe "Timelines" do
@@ -397,6 +441,29 @@ defmodule SukhiFedi.Integration.NotesTest do
       [er] = Notes.with_refs([reply])
       assert er.in_reply_to_id == nil
       assert er.in_reply_to_account_id == nil
+    end
+
+    test "resolves a LOCAL parent / LOCAL quoted note (NULL ap_id, synthesized URL)" do
+      author = create_account!("wr_local_author")
+      replier = create_account!("wr_local_replier")
+
+      # Local targets: ap_id NULL, referenced by their synthesized URL.
+      {:ok, parent} = Notes.create_status(author, %{"status" => "local parent"})
+      {:ok, quoted} = Notes.create_status(author, %{"status" => "local quoted"})
+
+      base = "https://#{SukhiFedi.Config.domain!()}/users/#{author.username}/notes"
+      parent_uri = "#{base}/#{parent.id}"
+      quoted_uri = "#{base}/#{quoted.id}"
+
+      reply = note!(replier, "https://x.example/notes/lr1", "reply", in_reply_to_ap_id: parent_uri)
+      quoting = note!(replier, "https://x.example/notes/lq1", "quoting", quote_of_ap_id: quoted_uri)
+
+      [er, eq] = Notes.with_refs([reply, quoting])
+
+      assert er.in_reply_to_id == parent.id
+      assert er.in_reply_to_account_id == author.id
+      assert eq.quoted_note.id == quoted.id
+      assert eq.quoted_note.account.username == "wr_local_author"
     end
   end
 
