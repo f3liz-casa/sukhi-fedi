@@ -11,12 +11,15 @@
     // など、置き場ごとに切り替えたい。
     canReply = false,
     onreply,
-    onupdate
+    onupdate,
+    ondelete
   }: {
     status: Status;
     canReply?: boolean;
     onreply?: (s: Status) => void;
     onupdate?: (s: Status) => void;
+    // 自分のノートを削除したとき。置き場ごとに一覧から外したい。
+    ondelete?: (s: Status) => void;
   } = $props();
 
   // Display name falls back to username when servers omit it (Misskey
@@ -30,11 +33,22 @@
   let favourited = $state(false);
   let favCount = $state(0);
   let pickerOpen = $state(false);
+  // 自分のノートか（削除ボタンを出すか）。current id は memoise 済みなので
+  // 一覧に何枚あっても verify_credentials は一度きり。
+  let mine = $state(false);
+  let deleting = $state(false);
 
   $effect(() => {
     reactions = status.reactions ?? [];
     favourited = !!status.favourited;
     favCount = status.favourites_count ?? 0;
+  });
+
+  $effect(() => {
+    const authorId = status.account.id;
+    api.currentAccountId().then((id) => {
+      mine = !!id && id === authorId;
+    });
   });
 
   function formatTime(iso: string): string {
@@ -91,6 +105,21 @@
   function pickFromPicker(emoji: string) {
     pickerOpen = false;
     toggleReaction(emoji);
+  }
+
+  async function remove() {
+    if (deleting) return;
+    if (!confirm('このノートを削除しますか？ この操作は取り消せません。')) return;
+    deleting = true;
+    try {
+      await api.deleteStatus(status.id);
+      // 成功したら一覧から外す（このカードは外れて消える）。
+      ondelete?.(status);
+    } catch {
+      // 失敗したら押せる状態に戻す。federation の Delete は非同期なので
+      // ここでの成功はローカル削除＝即ビューから消える、で十分。
+      deleting = false;
+    }
   }
 
   async function toggleFavourite() {
@@ -201,6 +230,17 @@
           返信
         </button>
       {/if}
+      {#if mine}
+        <button
+          type="button"
+          class="chip danger"
+          onclick={remove}
+          disabled={deleting}
+          aria-label="このノートを削除"
+        >
+          🗑
+        </button>
+      {/if}
     </footer>
 
     {#if pickerOpen}
@@ -286,6 +326,13 @@
   }
   .status-actions .chip.active {
     background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
+  }
+  .status-actions .chip.danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.14);
+  }
+  .status-actions .chip.danger:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .picker-anchor {
     position: relative;

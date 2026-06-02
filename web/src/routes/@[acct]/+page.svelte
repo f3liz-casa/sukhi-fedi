@@ -136,7 +136,7 @@
     {/if}
 
     {#each items as s (s.id)}
-      <StatusCard status={s} />
+      <StatusCard status={s} ondelete={(d) => (items = items.filter((it) => it.id !== d.id))} />
     {/each}
 
     {#if !initial && loading}

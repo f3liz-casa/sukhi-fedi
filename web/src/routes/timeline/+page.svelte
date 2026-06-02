@@ -35,6 +35,10 @@
     replyTo = null;
   }
 
+  function onDelete(s: Status) {
+    items = items.filter((it) => it.id !== s.id);
+  }
+
   let kind = $state<TimelineKind>('home');
   let tag = $state('');
   let pendingTag = $state('');
@@ -187,7 +191,7 @@
   {/if}
 
   {#each items as s (s.id)}
-    <StatusCard status={s} canReply onreply={onReply} />
+    <StatusCard status={s} canReply onreply={onReply} ondelete={onDelete} />
   {/each}
 
   {#if !initial && loading}

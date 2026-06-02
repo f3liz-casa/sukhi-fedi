@@ -294,6 +294,18 @@ async function statusAction(method: string, path: string): Promise<Status> {
   return (await res.json()) as Status;
 }
 
+// Delete one of your own notes. The gateway enforces ownership (a
+// non-owner gets 403); the deleted Status JSON Mastodon returns is
+// unused, so resolve void.
+export async function deleteStatus(statusId: string): Promise<void> {
+  const res = await sendNoBody('DELETE', `/api/v1/statuses/${encodeURIComponent(statusId)}`);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `delete_failed_${res.status}`);
+  }
+}
+
 // ── media ────────────────────────────────────────────────────────────
 
 export async function uploadMedia(file: File, description?: string): Promise<MediaAttachment> {
@@ -320,6 +332,27 @@ export async function verifyCredentials(): Promise<Account> {
   failOn401(res);
   if (!res.ok) throw new Error(`verify_failed_${res.status}`);
   return (await res.json()) as Account;
+}
+
+// Memoised id of the logged-in account, for "is this mine?" UI checks
+// (e.g. whether to offer delete on a status). Resolves null when logged
+// out or on a lookup miss; cached so a timeline of N statuses costs one
+// verify_credentials call, not N.
+let meIdPromise: Promise<string | null> | null = null;
+
+export function currentAccountId(): Promise<string | null> {
+  if (!loadToken()) return Promise.resolve(null);
+
+  if (!meIdPromise) {
+    meIdPromise = verifyCredentials()
+      .then((a) => a.id)
+      .catch(() => {
+        meIdPromise = null; // let a later call retry after a transient failure
+        return null;
+      });
+  }
+
+  return meIdPromise;
 }
 
 export type CredentialsUpdate = {
