@@ -14,34 +14,141 @@ defmodule SukhiFedi.Timelines do
   """
 
   import Ecto.Query
+  import Bitwise
 
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Account, Follow, Note, Tag}
+  alias SukhiFedi.Schema.{Account, Boost, Follow, Note, Tag}
 
   @default_limit 20
   @max_limit 40
 
+  # Same epoch/shift as the `snowflake_id()` Postgres function (see the
+  # SnowflakeNoteIds migration). A boost has no snowflake id of its own — it's
+  # a plain `bigserial` row — so the home feed mints one from the boost's
+  # `created_at` the same way a note id is minted. That puts boosts and notes
+  # in one time-sortable id space, which is what lets us interleave them and
+  # keep id-based (`max_id`/`since_id`) pagination working across both.
+  @snowflake_epoch_ms 1_704_067_200_000
+
   @doc """
   Home timeline: notes from accounts the viewer follows (state=accepted),
-  plus the viewer's own notes. Newest first. Mastodon pagination opts.
+  plus the viewer's own notes, interleaved with boosts (reblogs) by those
+  same accounts. Newest first. Mastodon pagination opts.
+
+  Boosts come back as wrapper maps (`%{__boost__: true, ...}`) carrying the
+  booster and the already-enriched boosted note; `MastodonStatus.render`
+  turns each into a reblog Status. Notes come back as `%Note{}` as before.
   """
-  @spec home(Account.t() | integer(), keyword() | map()) :: [Note.t()]
+  @spec home(Account.t() | integer(), keyword() | map()) :: [Note.t() | map()]
   def home(%Account{id: id, username: username}, opts \\ []) do
     opts = normalize_opts(opts)
+    limit = opts |> Map.get(:limit, @default_limit) |> clamp_limit()
 
     actor_uri = local_actor_uri(username)
     following_account_ids = following_local_account_ids(actor_uri)
 
     visible_account_ids = [id | following_account_ids]
 
-    Note
-    |> where([n], n.account_id in ^visible_account_ids)
-    |> where([n], n.visibility in ["public", "unlisted", "followers"])
-    |> apply_paging(opts)
-    |> Repo.all()
-    |> Repo.preload([:account, :media, :tags])
-    |> SukhiFedi.Notes.with_refs()
+    notes =
+      Note
+      |> where([n], n.account_id in ^visible_account_ids)
+      |> where([n], n.visibility in ["public", "unlisted", "followers"])
+      |> apply_paging(opts)
+      |> Repo.all()
+      |> Repo.preload([:account, :media, :tags])
+      |> SukhiFedi.Notes.with_refs(id)
+
+    boosts = home_boosts(visible_account_ids, opts, limit, id)
+
+    # Both notes (id) and boost wrappers (synthesized id) share one
+    # time-sortable id space, so a plain id-desc merge is chronological.
+    (notes ++ boosts)
+    |> Enum.sort_by(& &1.id, :desc)
+    |> Enum.take(limit)
   end
+
+  # Boosts by `account_ids`, wrapped for the reblog render. Only reblogs of
+  # public/unlisted notes surface — a followers-only or direct note must not
+  # leak into the home feed via someone else's boost. Paged in the same
+  # id space as notes (see `@snowflake_epoch_ms`).
+  defp home_boosts(account_ids, opts, limit, viewer_id) do
+    rows =
+      from(b in Boost,
+        join: n in Note,
+        on: n.id == b.note_id,
+        join: ba in Account,
+        on: ba.id == b.account_id,
+        where: b.account_id in ^account_ids,
+        where: n.visibility in ["public", "unlisted"],
+        order_by: [desc: b.created_at],
+        limit: ^limit,
+        select: %{boost_id: b.id, created_at: b.created_at, booster: ba, note: n}
+      )
+      |> boost_time_bounds(opts)
+      |> Repo.all()
+
+    enriched =
+      rows
+      |> Enum.map(& &1.note)
+      |> Repo.preload([:account, :media, :tags])
+      |> SukhiFedi.Notes.with_refs(viewer_id)
+
+    rows
+    |> Enum.zip(enriched)
+    |> Enum.map(fn {row, note} ->
+      %{
+        __boost__: true,
+        id: boost_cursor(row.created_at, row.boost_id),
+        boost_id: row.boost_id,
+        created_at: row.created_at,
+        account: row.booster,
+        note: note
+      }
+    end)
+    |> boost_exact_paging(opts)
+  end
+
+  # Mint a note-id-compatible cursor for a boost from its timestamp.
+  defp boost_cursor(%DateTime{} = created_at, boost_id) do
+    ms = DateTime.to_unix(created_at, :millisecond)
+    bsl(ms - @snowflake_epoch_ms, 16) ||| rem(boost_id, 65536)
+  end
+
+  # DB-side pre-filter: bound `created_at` by the millisecond a cursor encodes
+  # (inclusive, since the 16-bit counter tail is resolved exactly in Elixir by
+  # `boost_exact_paging`). Cheap and keeps the fetched set to one page.
+  defp boost_time_bounds(query, opts) do
+    query
+    |> maybe_boost_upper(opts[:max_id])
+    |> maybe_boost_lower(opts[:since_id] || opts[:min_id])
+  end
+
+  defp maybe_boost_upper(q, nil), do: q
+
+  defp maybe_boost_upper(q, max_id) when is_integer(max_id),
+    do: where(q, [b], b.created_at <= ^cursor_to_dt(max_id))
+
+  defp maybe_boost_lower(q, nil), do: q
+
+  defp maybe_boost_lower(q, since_id) when is_integer(since_id),
+    do: where(q, [b], b.created_at >= ^cursor_to_dt(since_id))
+
+  defp cursor_to_dt(cursor) do
+    ms = bsr(cursor, 16) + @snowflake_epoch_ms
+    DateTime.from_unix!(ms, :millisecond)
+  end
+
+  # Exact cursor comparison on the synthesized ids (the DB bound was inclusive).
+  defp boost_exact_paging(wrappers, opts) do
+    wrappers
+    |> filter_cursor(opts[:max_id], fn id, c -> c < id end)
+    |> filter_cursor(opts[:since_id] || opts[:min_id], fn id, c -> c > id end)
+  end
+
+  defp filter_cursor(wrappers, nil, _cmp), do: wrappers
+
+  defp filter_cursor(wrappers, id, cmp) when is_integer(id),
+    do: Enum.filter(wrappers, fn w -> cmp.(id, w.id) end)
 
   @doc """
   Public timeline: every public-visibility note authored by a local

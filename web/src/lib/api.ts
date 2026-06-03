@@ -65,12 +65,38 @@ export type Status = {
   account: Account;
   // Fedibird-compatible quote post, nested one level deep (no further).
   quote?: Status | null;
+  // Boost (reblog): the boosted status, nested one level deep. Present only
+  // on the wrapper status whose `account` is the booster.
+  reblog?: Status | null;
   media_attachments: MediaAttachment[];
   tags: Tag[];
   url?: string;
   reactions?: Reaction[];
   favourited?: boolean;
   favourites_count?: number;
+  reblogged?: boolean;
+  reblogs_count?: number;
+  bookmarked?: boolean;
+  pinned?: boolean;
+  poll?: Poll | null;
+};
+
+export type PollOption = {
+  title: string;
+  votes_count?: number | null;
+};
+
+export type Poll = {
+  id: string;
+  expires_at?: string | null;
+  expired: boolean;
+  multiple: boolean;
+  votes_count: number;
+  voters_count?: number | null;
+  options: PollOption[];
+  emojis?: Emoji[];
+  voted?: boolean;
+  own_votes?: number[];
 };
 
 export type Reaction = {
@@ -270,6 +296,22 @@ export async function unfavourite(statusId: string): Promise<Status> {
   return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/unfavourite`);
 }
 
+export async function reblog(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/reblog`);
+}
+
+export async function unreblog(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/unreblog`);
+}
+
+export async function bookmark(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/bookmark`);
+}
+
+export async function unbookmark(statusId: string): Promise<Status> {
+  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/unbookmark`);
+}
+
 export async function react(statusId: string, emoji: string): Promise<Status> {
   return statusAction(
     'PUT',
@@ -292,6 +334,45 @@ async function statusAction(method: string, path: string): Promise<Status> {
     throw new Error(err?.error ?? `action_failed_${res.status}`);
   }
   return (await res.json()) as Status;
+}
+
+// Delete one of your own notes. The gateway enforces ownership (a
+// non-owner gets 403); the deleted Status JSON Mastodon returns is
+// unused, so resolve void.
+export async function deleteStatus(statusId: string): Promise<void> {
+  const res = await sendNoBody('DELETE', `/api/v1/statuses/${encodeURIComponent(statusId)}`);
+  failOn401(res);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error ?? `delete_failed_${res.status}`);
+  }
+}
+
+export async function getBookmarks(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Status>> {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? 20));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+
+  const res = await get(`/api/v1/bookmarks?${qs}`);
+  failOn401(res);
+  if (!res.ok) throw new Error(`bookmarks_failed_${res.status}`);
+  const items = (await res.json()) as Status[];
+  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+// ── polls ────────────────────────────────────────────────────────────
+
+// choices は選んだ選択肢の index 配列。single choice の投票でも配列で送る
+// のが Mastodon の仕様。返ってくるのは最新の集計を載せた Poll。
+export async function votePoll(pollId: string, choices: number[]): Promise<Poll> {
+  const res = await sendJson('POST', `/api/v1/polls/${encodeURIComponent(pollId)}/votes`, {
+    choices: choices.map(String)
+  });
+  failOn401(res);
+  if (!res.ok) throw new Error(`vote_failed_${res.status}`);
+  return (await res.json()) as Poll;
 }
 
 // ── media ────────────────────────────────────────────────────────────
@@ -320,6 +401,27 @@ export async function verifyCredentials(): Promise<Account> {
   failOn401(res);
   if (!res.ok) throw new Error(`verify_failed_${res.status}`);
   return (await res.json()) as Account;
+}
+
+// Memoised id of the logged-in account, for "is this mine?" UI checks
+// (e.g. whether to offer delete on a status). Resolves null when logged
+// out or on a lookup miss; cached so a timeline of N statuses costs one
+// verify_credentials call, not N.
+let meIdPromise: Promise<string | null> | null = null;
+
+export function currentAccountId(): Promise<string | null> {
+  if (!loadToken()) return Promise.resolve(null);
+
+  if (!meIdPromise) {
+    meIdPromise = verifyCredentials()
+      .then((a) => a.id)
+      .catch(() => {
+        meIdPromise = null; // let a later call retry after a transient failure
+        return null;
+      });
+  }
+
+  return meIdPromise;
 }
 
 export type CredentialsUpdate = {
@@ -472,3 +574,71 @@ export async function searchAll(
   if (!res.ok) throw new Error(`search_failed_${res.status}`);
   return (await res.json()) as SearchResult;
 }
+
+// ── notifications ────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'favourite'
+  | 'reblog'
+  | 'follow'
+  | 'follow_request'
+  | 'mention'
+  | 'status'
+  | 'poll'
+  | 'update'
+  // Sukhi 拡張のリアクション通知。サーバが未対応でも型として許す。
+  | 'reaction';
+
+export type Notification = {
+  id: string;
+  type: NotificationType;
+  created_at: string;
+  account: Account;
+  status?: Status | null;
+};
+
+export async function getNotifications(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Notification>> {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? 30));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+
+  const res = await get(`/api/v1/notifications?${qs}`);
+  failOn401(res);
+  if (!res.ok) throw new Error(`notifications_failed_${res.status}`);
+  const items = (await res.json()) as Notification[];
+  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  const res = await sendJson('POST', `/api/v1/notifications/${encodeURIComponent(id)}/dismiss`, {});
+  failOn401(res);
+  if (!res.ok) throw new Error(`dismiss_failed_${res.status}`);
+}
+
+export async function clearNotifications(): Promise<void> {
+  const res = await sendJson('POST', '/api/v1/notifications/clear', {});
+  failOn401(res);
+  if (!res.ok) throw new Error(`clear_failed_${res.status}`);
+}
+
+// ── moderation: block / mute ─────────────────────────────────────────
+// block/unblock/mute/unmute はどれも更新後の Relationship を返す。
+
+function relAction(method: string, path: string): Promise<Relationship> {
+  return sendJson(method, path, {}).then(async (res) => {
+    failOn401(res);
+    if (!res.ok) throw new Error(`rel_action_failed_${res.status}`);
+    return (await res.json()) as Relationship;
+  });
+}
+
+export const blockAccount = (id: string) =>
+  relAction('POST', `/api/v1/accounts/${encodeURIComponent(id)}/block`);
+export const unblockAccount = (id: string) =>
+  relAction('POST', `/api/v1/accounts/${encodeURIComponent(id)}/unblock`);
+export const muteAccount = (id: string) =>
+  relAction('POST', `/api/v1/accounts/${encodeURIComponent(id)}/mute`);
+export const unmuteAccount = (id: string) =>
+  relAction('POST', `/api/v1/accounts/${encodeURIComponent(id)}/unmute`);

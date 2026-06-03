@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Status, Reaction } from '$lib/api';
+  import type { Status, Reaction, Poll } from '$lib/api';
   import * as api from '$lib/api';
+  import Self from './Status.svelte';
   import ReactionPicker from './ReactionPicker.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
@@ -11,12 +12,15 @@
     // など、置き場ごとに切り替えたい。
     canReply = false,
     onreply,
-    onupdate
+    onupdate,
+    ondelete
   }: {
     status: Status;
     canReply?: boolean;
     onreply?: (s: Status) => void;
     onupdate?: (s: Status) => void;
+    // 自分のノートを削除したとき。置き場ごとに一覧から外したい。
+    ondelete?: (s: Status) => void;
   } = $props();
 
   // Display name falls back to username when servers omit it (Misskey
@@ -29,12 +33,29 @@
   let reactions = $state<Reaction[]>([]);
   let favourited = $state(false);
   let favCount = $state(0);
+  let reblogged = $state(false);
+  let reblogCount = $state(0);
+  let bookmarked = $state(false);
   let pickerOpen = $state(false);
+  // 自分のノートか（削除ボタンを出すか）。current id は memoise 済みなので
+  // 一覧に何枚あっても verify_credentials は一度きり。
+  let mine = $state(false);
+  let deleting = $state(false);
 
   $effect(() => {
     reactions = status.reactions ?? [];
     favourited = !!status.favourited;
     favCount = status.favourites_count ?? 0;
+    reblogged = !!status.reblogged;
+    reblogCount = status.reblogs_count ?? 0;
+    bookmarked = !!status.bookmarked;
+  });
+
+  $effect(() => {
+    const authorId = status.account.id;
+    api.currentAccountId().then((id) => {
+      mine = !!id && id === authorId;
+    });
   });
 
   function formatTime(iso: string): string {
@@ -93,6 +114,21 @@
     toggleReaction(emoji);
   }
 
+  async function remove() {
+    if (deleting) return;
+    if (!confirm('このノートを削除しますか？ この操作は取り消せません。')) return;
+    deleting = true;
+    try {
+      await api.deleteStatus(status.id);
+      // 成功したら一覧から外す（このカードは外れて消える）。
+      ondelete?.(status);
+    } catch {
+      // 失敗したら押せる状態に戻す。federation の Delete は非同期なので
+      // ここでの成功はローカル削除＝即ビューから消える、で十分。
+      deleting = false;
+    }
+  }
+
   async function toggleFavourite() {
     const wasFav = favourited;
     const before = favCount;
@@ -106,8 +142,82 @@
       favCount = before;
     }
   }
+
+  async function toggleReblog() {
+    const was = reblogged;
+    const before = reblogCount;
+    reblogged = !was;
+    reblogCount = was ? Math.max(0, before - 1) : before + 1;
+    try {
+      const s = was ? await api.unreblog(status.id) : await api.reblog(status.id);
+      onupdate?.(s);
+    } catch {
+      reblogged = was;
+      reblogCount = before;
+    }
+  }
+
+  async function toggleBookmark() {
+    const was = bookmarked;
+    bookmarked = !was;
+    try {
+      const s = was ? await api.unbookmark(status.id) : await api.bookmark(status.id);
+      onupdate?.(s);
+    } catch {
+      bookmarked = was;
+    }
+  }
+
+  // ── poll ──────────────────────────────────────────────────────────
+  // 投票は楽観更新せずサーバの集計をそのまま映す。投票後 / 締切後 / 既に
+  // 投票済みは結果表示、それ以外は選択 UI。single choice は radio、
+  // multiple は checkbox。
+  let poll = $state<Poll | null>(null);
+  let pollChoices = $state<number[]>([]);
+  let pollVoting = $state(false);
+
+  $effect(() => {
+    poll = status.poll ?? null;
+    pollChoices = [];
+  });
+
+  let pollTotal = $derived(poll ? Math.max(1, poll.votes_count) : 1);
+  let pollClosed = $derived(!!poll && (poll.expired || !!poll.voted));
+
+  function toggleChoice(idx: number) {
+    if (!poll) return;
+    if (poll.multiple) {
+      pollChoices = pollChoices.includes(idx)
+        ? pollChoices.filter((i) => i !== idx)
+        : [...pollChoices, idx];
+    } else {
+      pollChoices = [idx];
+    }
+  }
+
+  async function submitVote() {
+    if (!poll || pollVoting || pollChoices.length === 0) return;
+    pollVoting = true;
+    try {
+      poll = await api.votePoll(poll.id, pollChoices);
+    } catch {
+      // 投票に失敗したら選択は残したまま、また押せる状態に戻す。
+    } finally {
+      pollVoting = false;
+    }
+  }
 </script>
 
+{#if status.reblog}
+  <!-- ブースト: 上に「○○がブースト」を出し、中身は元の status をそのまま描く。
+       返信・ブースト等のアクションは入れ子側（本物のノート）に効く。 -->
+  <div class="boost">
+    <a class="boost-by" href={`/@${status.account.acct}`}>
+      🔁 {@html renderEmojis(phrase(name), status.account.emojis)} がブースト
+    </a>
+    <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
+  </div>
+{:else}
 <article class="status">
   {#if avatar}
     <img class="avatar" src={avatar} alt="" loading="lazy" />
@@ -157,8 +267,67 @@
         {#each status.media_attachments as m (m.id)}
           {#if m.type === 'image'}
             <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
+          {:else if m.type === 'video' || m.type === 'gifv'}
+            <!-- gifv は無音ループ動画。ふつうの動画は controls を出す。 -->
+            <video
+              src={m.url}
+              poster={m.preview_url || undefined}
+              controls={m.type === 'video'}
+              autoplay={m.type === 'gifv'}
+              loop={m.type === 'gifv'}
+              muted={m.type === 'gifv'}
+              playsinline
+              preload="metadata"
+              aria-label={m.description || ''}
+            ></video>
+          {:else if m.type === 'audio'}
+            <audio src={m.url} controls preload="metadata" aria-label={m.description || ''}></audio>
+          {:else}
+            <!-- 未知の型でも黙って捨てず、せめてリンクで残す。 -->
+            <a class="media-fallback" href={m.url} target="_blank" rel="noopener noreferrer">
+              {m.description || '添付ファイルを開く'}
+            </a>
           {/if}
         {/each}
+      </div>
+    {/if}
+
+    {#if poll}
+      <div class="poll" aria-label="投票">
+        {#if pollClosed}
+          {#each poll.options as opt, i (i)}
+            {@const votes = opt.votes_count ?? 0}
+            {@const pct = Math.round((votes / pollTotal) * 100)}
+            <div class="poll-result" class:mine={poll.own_votes?.includes(i)}>
+              <div class="poll-bar" style={`width: ${pct}%`}></div>
+              <span class="poll-label">{opt.title}</span>
+              <span class="poll-pct">{pct}%</span>
+            </div>
+          {/each}
+        {:else}
+          {#each poll.options as opt, i (i)}
+            <label class="poll-choice">
+              <input
+                type={poll.multiple ? 'checkbox' : 'radio'}
+                name={`poll-${poll.id}`}
+                checked={pollChoices.includes(i)}
+                onchange={() => toggleChoice(i)}
+              />
+              <span>{opt.title}</span>
+            </label>
+          {/each}
+          <button
+            type="button"
+            class="chip"
+            disabled={pollVoting || pollChoices.length === 0}
+            onclick={submitVote}
+          >
+            {pollVoting ? '送っています…' : '投票する'}
+          </button>
+        {/if}
+        <p class="poll-meta">
+          {poll.votes_count} 票{poll.expired ? '・締め切りました' : ''}
+        </p>
       </div>
     {/if}
 
@@ -196,9 +365,40 @@
       >
         ⭐ {favCount > 0 ? favCount : ''}
       </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={reblogged}
+        onclick={toggleReblog}
+        aria-pressed={reblogged}
+        aria-label="ブースト"
+      >
+        🔁 {reblogCount > 0 ? reblogCount : ''}
+      </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={bookmarked}
+        onclick={toggleBookmark}
+        aria-pressed={bookmarked}
+        aria-label={bookmarked ? 'ブックマークを外す' : 'ブックマーク'}
+      >
+        {bookmarked ? '🔖' : '🏷'}
+      </button>
       {#if canReply}
         <button type="button" class="chip" onclick={() => onreply?.(status)}>
           返信
+        </button>
+      {/if}
+      {#if mine}
+        <button
+          type="button"
+          class="chip danger"
+          onclick={remove}
+          disabled={deleting}
+          aria-label="このノートを削除"
+        >
+          🗑
         </button>
       {/if}
     </footer>
@@ -210,8 +410,21 @@
     {/if}
   </div>
 </article>
+{/if}
 
 <style>
+  .boost-by {
+    display: block;
+    padding: 0.25rem 1rem 0;
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #888);
+    text-decoration: none;
+  }
+
+  .boost-by:hover {
+    text-decoration: underline;
+  }
+
   .quote-card {
     display: block;
     margin-top: 0.5rem;
@@ -287,8 +500,73 @@
   .status-actions .chip.active {
     background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
   }
+  .status-actions .chip.danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.14);
+  }
+  .status-actions .chip.danger:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .picker-anchor {
     position: relative;
     margin-top: 0.25rem;
+  }
+
+  .media video,
+  .media audio {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+  }
+  .media-fallback {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: var(--text-sm);
+  }
+
+  .poll {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+  .poll-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  .poll-result {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: rgba(127, 127, 127, 0.08);
+  }
+  .poll-bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
+    z-index: 0;
+  }
+  .poll-result.mine .poll-bar {
+    background: var(--reaction-border-me, rgba(99, 102, 241, 0.5));
+  }
+  .poll-label,
+  .poll-pct {
+    position: relative;
+    z-index: 1;
+  }
+  .poll-label {
+    flex: 1;
+  }
+  .poll-pct {
+    font-variant-numeric: tabular-nums;
+  }
+  .poll-meta {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted, #666);
   }
 </style>
