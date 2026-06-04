@@ -197,6 +197,21 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  get "/favourites" do
+    serve_spa(conn)
+  end
+
+  # lists の一覧 (`/lists`) と個別リスト (`/lists/:id`)。web 側だけ足して
+  # ここを足し忘れると、アプリ内クリックは SvelteKit が捌くのに直リンク /
+  # リロードだけ 404 になる。
+  get "/lists" do
+    serve_spa(conn)
+  end
+
+  get "/lists/:id" do
+    serve_spa(conn)
+  end
+
   # PoW で守られる「通り道」。Anubis がこの path だけを challenge する。
   # 中身は SPA shell ─ JS で intent / next を読んで分岐する。
   get "/check" do
