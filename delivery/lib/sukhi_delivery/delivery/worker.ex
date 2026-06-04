@@ -28,19 +28,26 @@ defmodule SukhiDelivery.Delivery.Worker do
   alias SukhiDelivery.Schema.{Object, Account, DeliveryReceipt}
   alias SukhiDelivery.Delivery.FollowersSync
 
+  # Outbound archive runs on the gateway (it owns the S3/zstd deps). We hand
+  # it the bytes we actually sent by inserting a job on the shared oban_jobs
+  # table, naming the gateway worker as a string — the reverse of how the
+  # gateway enqueues us. See SukhiFedi.Federation.OutboundArchive.
+  @archive_worker "SukhiFedi.Federation.OutboundArchive"
+  @archive_queue "outbound_archive"
+
   @impl Oban.Worker
-  def perform(%Oban.Job{args: args}) do
+  def perform(%Oban.Job{args: args} = job) do
     inbox_url = args["inbox_url"]
     activity_id = args["activity_id"]
 
     if already_delivered?(activity_id, inbox_url) do
       :ok
     else
-      do_deliver(args, activity_id, inbox_url)
+      do_deliver(job, args, activity_id, inbox_url)
     end
   end
 
-  defp do_deliver(args, activity_id, inbox_url) do
+  defp do_deliver(job, args, activity_id, inbox_url) do
     {body, actor_uri} = resolve_body_and_actor(args)
 
     base_headers = %{"content-type" => "application/activity+json"}
@@ -74,10 +81,12 @@ defmodule SukhiDelivery.Delivery.Worker do
          ) do
       {:ok, %{status: status}} when status in 200..299 ->
         record_delivery(activity_id, inbox_url, "delivered")
+        archive_outbound(body, activity_id, inbox_url, actor_uri, "delivered", status)
         :ok
 
       {:ok, %{status: 410}} ->
         record_delivery(activity_id, inbox_url, "gone")
+        archive_outbound(body, activity_id, inbox_url, actor_uri, "gone", 410)
         :ok
 
       {:ok, %{status: status, body: resp_body, headers: resp_headers}} ->
@@ -95,12 +104,68 @@ defmodule SukhiDelivery.Delivery.Worker do
           "delivery #{status} from #{inbox_url}: body=#{inspect(body_str)} headers=#{inspect(Enum.take(resp_headers, 8))}"
         )
 
+        maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, status)
         {:error, "unexpected status #{status}"}
 
       {:error, reason} ->
+        maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, nil)
         {:error, inspect(reason)}
     end
   end
+
+  # Keep the bytes we actually delivered. The body is content-addressed on
+  # the gateway, so the same activity fanned out to many inboxes stores one
+  # object; the index row is per (activity_id, inbox_url) with the outcome.
+  # Enqueue is fire-and-forget — a failure here must never fail the delivery.
+  defp archive_outbound(_body, nil, _inbox_url, _actor_uri, _status, _response_status), do: :ok
+
+  defp archive_outbound(body, activity_id, inbox_url, actor_uri, status, response_status) do
+    Oban.insert(
+      SukhiDelivery.Oban,
+      Oban.Job.new(
+        %{
+          body: body,
+          activity_id: activity_id,
+          inbox_url: inbox_url,
+          actor_uri: actor_uri,
+          status: status,
+          response_status: response_status,
+          delivered_at: DateTime.utc_now() |> DateTime.to_iso8601()
+        },
+        worker: @archive_worker,
+        queue: @archive_queue
+      )
+    )
+
+    :ok
+  rescue
+    # The delivery already happened — enqueueing the archive must never fail
+    # it. In prod the row just lands on `outbound_archive` for the gateway to
+    # run; this guards a transient DB hiccup. (It also covers test `:inline`,
+    # where the gateway-only worker isn't loaded on the delivery node.)
+    error ->
+      require Logger
+      Logger.warning("outbound archive enqueue failed: #{inspect(error)}")
+      :ok
+  end
+
+  # A non-2xx / transport error is retried (returning {:error, _}), so only
+  # archive it once, on the final attempt, as a "failed" record — audit cares
+  # most about deliveries that never got through.
+  defp maybe_archive_failure(
+         %Oban.Job{attempt: attempt, max_attempts: max},
+         body,
+         activity_id,
+         inbox_url,
+         actor_uri,
+         response_status
+       )
+       when attempt >= max do
+    archive_outbound(body, activity_id, inbox_url, actor_uri, "failed", response_status)
+  end
+
+  defp maybe_archive_failure(_job, _body, _activity_id, _inbox_url, _actor_uri, _response_status),
+    do: :ok
 
   defp resolve_body_and_actor(%{"object_id" => id}) do
     object = Repo.get!(Object, id)

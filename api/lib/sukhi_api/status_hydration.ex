@@ -28,7 +28,9 @@ defmodule SukhiApi.StatusHydration do
   def many([], _viewer), do: []
 
   def many(notes, viewer) when is_list(notes) do
-    note_ids = Enum.map(notes, & &1.id)
+    # Key off `context_key` so a boost wrapper's reactions are fetched for the
+    # boosted note (its real id), not the synthesized wrapper id.
+    note_ids = Enum.map(notes, &MastodonStatus.context_key/1)
     viewer_id = viewer && viewer.id
 
     reactions =

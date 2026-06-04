@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Install to /etc/systemd/system/sukhi-backup-verify.timer — see README.md.
+[Unit]
+Description=Run the sukhi-fedi backup verification weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

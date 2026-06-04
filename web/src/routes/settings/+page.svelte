@@ -4,9 +4,14 @@
   import {
     verifyCredentials,
     updateCredentials,
+    getBlocks,
+    getMutes,
+    unblockAccount,
+    unmuteAccount,
     type Account
   } from '$lib/api';
   import { clearToken, isLoggedIn, loadToken } from '$lib/auth';
+  import AccountActionRow from '$lib/components/AccountActionRow.svelte';
 
   let me = $state<Account | null>(null);
   // admin の「管理ページへ」ボタンが /admin/login に POST する bearer。
@@ -101,6 +106,58 @@
   function onHeader(ev: Event) {
     const input = ev.currentTarget as HTMLInputElement;
     headerFile = input.files?.[0] ?? null;
+  }
+
+  // ── ブロック / ミュート管理 ──────────────────────────────────────────
+  // <details> を開いたとき一度だけ読む。サーバは全件返すのでページング無し。
+  let blocks = $state<Account[]>([]);
+  let mutes = $state<Account[]>([]);
+  let relLoaded = $state(false);
+  let relLoading = $state(false);
+  let relError = $state<string | null>(null);
+
+  function onRelToggle(e: Event) {
+    if ((e.currentTarget as HTMLDetailsElement).open) void loadRelations();
+  }
+
+  async function loadRelations() {
+    if (relLoaded || relLoading) return;
+    relLoading = true;
+    relError = null;
+    try {
+      const [b, m] = await Promise.all([getBlocks(), getMutes()]);
+      blocks = b;
+      mutes = m;
+      relLoaded = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg === 'unauthorized') {
+        clearToken();
+        void goto('/');
+        return;
+      }
+      relError = 'うまく読めませんでした。';
+    } finally {
+      relLoading = false;
+    }
+  }
+
+  async function doUnblock(a: Account) {
+    try {
+      await unblockAccount(a.id);
+      blocks = blocks.filter((x) => x.id !== a.id);
+    } catch {
+      // 失敗時はそのまま。開き直して押し直せる。
+    }
+  }
+
+  async function doUnmute(a: Account) {
+    try {
+      await unmuteAccount(a.id);
+      mutes = mutes.filter((x) => x.id !== a.id);
+    } catch {
+      // 失敗時はそのまま。
+    }
   }
 
   async function save() {
@@ -199,6 +256,34 @@
       <p class="error">{error}</p>
     {/if}
   </form>
+
+  <details class="rel-manage" style="margin-top: var(--space-5);" ontoggle={onRelToggle}>
+    <summary style="font-size: var(--text-md); cursor: pointer;">ブロック・ミュート</summary>
+
+    {#if relLoading}
+      <p class="loading">読んでいます…</p>
+    {:else if relError}
+      <p class="error">{relError}</p>
+    {:else if relLoaded}
+      <h2 style="font-size: var(--text-sm); margin-top: var(--space-3);">ブロック中</h2>
+      {#if blocks.length === 0}
+        <p class="prose-small">いません。</p>
+      {:else}
+        {#each blocks as a (a.id)}
+          <AccountActionRow account={a} actionLabel="解除" onaction={doUnblock} />
+        {/each}
+      {/if}
+
+      <h2 style="font-size: var(--text-sm); margin-top: var(--space-4);">ミュート中</h2>
+      {#if mutes.length === 0}
+        <p class="prose-small">いません。</p>
+      {:else}
+        {#each mutes as a (a.id)}
+          <AccountActionRow account={a} actionLabel="解除" onaction={doUnmute} />
+        {/each}
+      {/if}
+    {/if}
+  </details>
 
   {#if me.role?.name === 'admin' && adminToken}
     <!-- /admin は別ドア(bearer 貼り付けログイン)。SPA が持っている

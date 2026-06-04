@@ -22,6 +22,22 @@ defmodule SukhiFedi.Notes do
 
   @favourite_emoji "⭐"
 
+  # ── origin ───────────────────────────────────────────────────────────────
+
+  @doc """
+  Compose an origin filter onto a `Note` query. A local note carries no
+  `ap_id` (it's derived on demand — see the threading code below); a note
+  mirrored from a remote server always has one. So `ap_id IS NULL` ⇔ local,
+  the corroborating signal to the author's `accounts.domain`. Shared by the
+  public/tag timeline's local filter and the remote wipe/rebuild tooling so
+  there's a single definition of origin.
+  """
+  @spec local_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def local_notes(query \\ Note), do: from(n in query, where: is_nil(n.ap_id))
+
+  @spec remote_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def remote_notes(query \\ Note), do: from(n in query, where: not is_nil(n.ap_id))
+
   # ── create ───────────────────────────────────────────────────────────────
 
   @doc """
@@ -597,8 +613,11 @@ defmodule SukhiFedi.Notes do
 
   Accepts a list or a single note; anything else passes through.
   """
-  @spec with_refs([Note.t()] | Note.t() | any()) :: [Note.t()] | Note.t() | any()
-  def with_refs(notes) when is_list(notes) do
+  @spec with_refs([Note.t()] | Note.t() | any(), integer() | nil) ::
+          [Note.t()] | Note.t() | any()
+  def with_refs(notes, viewer_id \\ nil)
+
+  def with_refs(notes, viewer_id) when is_list(notes) do
     refs =
       notes
       |> Enum.flat_map(fn n -> [n.in_reply_to_ap_id, n.quote_of_ap_id] end)
@@ -606,6 +625,7 @@ defmodule SukhiFedi.Notes do
       |> Enum.uniq()
 
     by_ap = resolve_refs(refs)
+    poll_views = poll_views_for(Enum.map(notes, & &1.id), viewer_id)
 
     Enum.map(notes, fn n ->
       parent = n.in_reply_to_ap_id && Map.get(by_ap, n.in_reply_to_ap_id)
@@ -615,13 +635,33 @@ defmodule SukhiFedi.Notes do
         n
         | in_reply_to_id: parent && parent.id,
           in_reply_to_account_id: parent && parent.account_id,
-          quoted_note: quoted
+          quoted_note: quoted,
+          poll_view: Map.get(poll_views, n.id)
       }
     end)
   end
 
-  def with_refs(%Note{} = note), do: note |> List.wrap() |> with_refs() |> hd()
-  def with_refs(other), do: other
+  def with_refs(%Note{} = note, viewer_id),
+    do: note |> List.wrap() |> with_refs(viewer_id) |> hd()
+
+  def with_refs(other, _viewer_id), do: other
+
+  # For the notes that own a poll (usually none in a given page), build the
+  # Mastodon-shaped poll view, keyed by note id. One query finds the polls;
+  # the per-poll tally reuse keeps remote-poll handling identical to the
+  # single-status path. `viewer_id` nil → no own-vote highlight (public TLs).
+  defp poll_views_for([], _viewer_id), do: %{}
+
+  defp poll_views_for(note_ids, viewer_id) do
+    from(p in SukhiFedi.Schema.Poll, where: p.note_id in ^note_ids, select: {p.note_id, p.id})
+    |> Repo.all()
+    |> Map.new(fn {note_id, poll_id} ->
+      case SukhiFedi.Polls.get_with_results(poll_id, viewer_id) do
+        {:ok, view} -> {note_id, view}
+        _ -> {note_id, nil}
+      end
+    end)
+  end
 
   # Resolve each ref URI to its local Note (account preloaded), keyed by
   # the URI string the caller holds. A ref is either a remote `ap_id` or

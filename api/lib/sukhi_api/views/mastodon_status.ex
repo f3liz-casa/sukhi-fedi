@@ -18,11 +18,20 @@ defmodule SukhiApi.Views.MastodonStatus do
   reactions_for_notes}` and pass the per-note submap on render.
   """
 
-  alias SukhiApi.Views.{Id, MastodonAccount, MastodonMedia}
+  alias SukhiApi.Views.{Id, MastodonAccount, MastodonMedia, MastodonPoll}
 
   @spec render(map() | nil, map()) :: map() | nil
   def render(note, ctx \\ %{})
   def render(nil, _ctx), do: nil
+
+  # A boost wrapper from `Timelines.home` (`%{__boost__: true, ...}`): a reblog
+  # Status whose `account` is the booster and whose `reblog` is the boosted
+  # note. The booster contributes no content of its own, so the outer shell is
+  # empty and `ctx` (reactions etc.) flows down to the inner render.
+  def render(%{__boost__: true} = boost, ctx) do
+    inner = render(Map.get(boost, :note), ctx)
+    build_reblog(boost, inner)
+  end
 
   def render(note, ctx) do
     counts = Map.get(ctx, :counts, %{})
@@ -63,7 +72,7 @@ defmodule SukhiApi.Views.MastodonStatus do
       tags: render_tags(note),
       emojis: Map.get(note, :emojis) || [],
       card: nil,
-      poll: nil,
+      poll: render_poll(note),
       pinned: Map.get(viewer, :pinned, false),
       bookmarked: Map.get(viewer, :bookmarked, false),
       favourited: Map.get(viewer, :favourited, false),
@@ -84,16 +93,92 @@ defmodule SukhiApi.Views.MastodonStatus do
   def render_list(notes, counts_by_id \\ %{}, viewer_by_id \\ %{}, reactions_by_id \\ %{})
       when is_list(notes) do
     Enum.map(notes, fn n ->
+      # For a boost wrapper, key the context off the boosted note's id so the
+      # reblog's reactions/counts land on the inner status, not the wrapper.
+      key = context_key(n)
+
       render(n, %{
-        counts: Map.get(counts_by_id, n.id, %{}),
-        viewer: Map.get(viewer_by_id, n.id, %{}),
-        reactions: Map.get(reactions_by_id, n.id, [])
+        counts: Map.get(counts_by_id, key, %{}),
+        viewer: Map.get(viewer_by_id, key, %{}),
+        reactions: Map.get(reactions_by_id, key, [])
       })
     end)
   end
 
+  @doc """
+  The id a feed item's hydration context is keyed by: a boost wrapper borrows
+  its boosted note's id, a plain note uses its own. Callers batch-fetch
+  reactions/counts against these ids.
+  """
+  @spec context_key(map()) :: integer() | nil
+  def context_key(%{__boost__: true, note: %{id: id}}), do: id
+  def context_key(%{id: id}), do: id
+
+  # The reblog wrapper Status. Mirrors the inner status's visibility, carries no
+  # body of its own, and nests the boosted note under `reblog`.
+  defp build_reblog(boost, inner) do
+    booster = Map.get(boost, :account)
+    uri = reblog_uri(booster, Map.get(boost, :boost_id))
+
+    %{
+      id: Id.encode(Map.get(boost, :id)),
+      created_at: format_dt(Map.get(boost, :created_at)),
+      in_reply_to_id: nil,
+      in_reply_to_account_id: nil,
+      sensitive: false,
+      spoiler_text: "",
+      visibility: (inner && inner.visibility) || "public",
+      language: nil,
+      uri: uri,
+      url: uri,
+      replies_count: 0,
+      reblogs_count: 0,
+      favourites_count: 0,
+      edited_at: nil,
+      content: "",
+      reblog: inner,
+      quote: nil,
+      application: nil,
+      account: render_booster(booster),
+      media_attachments: [],
+      mentions: [],
+      tags: [],
+      emojis: [],
+      card: nil,
+      poll: nil,
+      pinned: false,
+      bookmarked: false,
+      favourited: false,
+      reblogged: false,
+      muted: false,
+      reactions: []
+    }
+  end
+
+  defp render_booster(account) when is_map(account), do: MastodonAccount.render(account, %{})
+  defp render_booster(_), do: MastodonAccount.render(%{id: 0, username: "unknown"}, %{})
+
+  defp reblog_uri(%{username: u}, boost_id) when is_binary(u) do
+    domain = SukhiApi.Config.domain!()
+    "https://#{domain}/users/#{u}/statuses/#{boost_id}/activity"
+  end
+
+  defp reblog_uri(_, boost_id) do
+    domain = SukhiApi.Config.domain!()
+    "https://#{domain}/statuses/#{boost_id}/activity"
+  end
+
   defp encode_id(nil), do: nil
   defp encode_id(id), do: Id.encode(id)
+
+  # `poll_view` is the `Polls.get_with_results/2` map the gateway attaches
+  # in `Notes.with_refs/2`. nil (no poll) renders as the spec's `poll: null`.
+  defp render_poll(note) do
+    case Map.get(note, :poll_view) do
+      %{poll: _} = view -> MastodonPoll.render(view)
+      _ -> nil
+    end
+  end
 
   # The quoted status, rendered one level deep. The quoted note carries
   # no `:quoted_note` of its own (gateway only enriches the top level),

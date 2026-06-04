@@ -65,12 +65,38 @@ export type Status = {
   account: Account;
   // Fedibird-compatible quote post, nested one level deep (no further).
   quote?: Status | null;
+  // Boost (reblog): the boosted status, nested one level deep. Present only
+  // on the wrapper status whose `account` is the booster.
+  reblog?: Status | null;
   media_attachments: MediaAttachment[];
   tags: Tag[];
   url?: string;
   reactions?: Reaction[];
   favourited?: boolean;
   favourites_count?: number;
+  reblogged?: boolean;
+  reblogs_count?: number;
+  bookmarked?: boolean;
+  pinned?: boolean;
+  poll?: Poll | null;
+};
+
+export type PollOption = {
+  title: string;
+  votes_count?: number | null;
+};
+
+export type Poll = {
+  id: string;
+  expires_at?: string | null;
+  expired: boolean;
+  multiple: boolean;
+  votes_count: number;
+  voters_count?: number | null;
+  options: PollOption[];
+  emojis?: Emoji[];
+  voted?: boolean;
+  own_votes?: number[];
 };
 
 export type Reaction = {
@@ -92,46 +118,55 @@ export type Relationship = {
 
 export type TimelineKind = 'home' | 'public' | 'tag';
 
-type FetchOpts = {
-  auth?: boolean;
-};
+// ── core ─────────────────────────────────────────────────────────────
+// Every call funnels through `req`. One place attaches the bearer (unless
+// `auth: false`), trips a logout on 401 for authed calls, optionally maps a
+// 404 to `not_found`, and turns any non-2xx into a thrown Error — its message
+// is the server's `error` field when present, otherwise `<label>_failed_<status>`.
+// The thin `json` / `page` wrappers shape the success side; `pageQs` builds the
+// shared `limit` + `max_id` query for cursor-paginated lists.
 
 function authHeader(): Record<string, string> {
   const t = loadToken();
   return t ? { authorization: `Bearer ${t.access_token}` } : {};
 }
 
-async function get(path: string, opts: FetchOpts = {}): Promise<Response> {
+type ReqInit = {
+  auth?: boolean; // attach bearer + enforce 401 logout (default true)
+  json?: unknown; // JSON request body
+  form?: FormData; // multipart request body
+  notFound?: boolean; // map a 404 to Error('not_found')
+};
+
+async function req(method: string, path: string, label: string, init: ReqInit = {}): Promise<Response> {
+  const authed = init.auth !== false;
   const headers: Record<string, string> = { accept: 'application/json' };
-  if (opts.auth !== false) Object.assign(headers, authHeader());
-  return fetch(path, { headers });
-}
+  if (authed) Object.assign(headers, authHeader());
 
-async function sendJson(method: string, path: string, body: unknown): Promise<Response> {
-  return fetch(path, {
-    method,
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      ...authHeader()
-    },
-    body: JSON.stringify(body)
-  });
-}
+  let body: BodyInit | undefined;
+  if (init.json !== undefined) {
+    headers['content-type'] = 'application/json';
+    body = JSON.stringify(init.json);
+  } else if (init.form) {
+    body = init.form;
+  }
 
-async function sendForm(method: string, path: string, form: FormData): Promise<Response> {
-  return fetch(path, {
-    method,
-    headers: { accept: 'application/json', ...authHeader() },
-    body: form
-  });
-}
+  const res = await fetch(path, { method, headers, body });
 
-function failOn401(res: Response): void {
-  if (res.status === 401) {
+  if (authed && res.status === 401) {
     clearToken();
     throw new Error('unauthorized');
   }
+  if (init.notFound && res.status === 404) throw new Error('not_found');
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err?.error ?? `${label}_failed_${res.status}`);
+  }
+  return res;
+}
+
+async function json<T>(res: Response): Promise<T> {
+  return (await res.json()) as T;
 }
 
 function parseLinkMaxId(link: string | null): string | null {
@@ -155,23 +190,31 @@ export type Page<T> = {
   nextMaxId: string | null;
 };
 
+async function page<T>(res: Response): Promise<Page<T>> {
+  return { items: await json<T[]>(res), nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+}
+
+function pageQs(opts: { maxId?: string | null; limit?: number }, defaultLimit: number): URLSearchParams {
+  const qs = new URLSearchParams();
+  qs.set('limit', String(opts.limit ?? defaultLimit));
+  if (opts.maxId) qs.set('max_id', opts.maxId);
+  return qs;
+}
+
 // ── timelines ────────────────────────────────────────────────────────
 
 export async function fetchTimeline(
   kind: TimelineKind,
   opts: { tag?: string; maxId?: string | null; limit?: number } = {}
 ): Promise<Page<Status>> {
-  const limit = opts.limit ?? 20;
-  const qs = new URLSearchParams();
-  qs.set('limit', String(limit));
-  if (opts.maxId) qs.set('max_id', opts.maxId);
+  const qs = pageQs(opts, 20);
 
   let path: string;
-  let needsAuth = false;
+  let auth = false;
   switch (kind) {
     case 'home':
       path = `/api/v1/timelines/home?${qs}`;
-      needsAuth = true;
+      auth = true;
       break;
     case 'public':
       qs.set('local', '1');
@@ -183,13 +226,7 @@ export async function fetchTimeline(
       break;
   }
 
-  const res = await get(path, { auth: needsAuth });
-  if (needsAuth) failOn401(res);
-  if (!res.ok) throw new Error(`timeline_failed_${res.status}`);
-
-  const items = (await res.json()) as Status[];
-  const nextMaxId = parseLinkMaxId(res.headers.get('link'));
-  return { items, nextMaxId };
+  return page<Status>(await req('GET', path, 'timeline', { auth }));
 }
 
 // ── conversations (DM) ───────────────────────────────────────────────
@@ -204,23 +241,13 @@ export type Conversation = {
 export async function getConversations(
   opts: { maxId?: string | null; limit?: number } = {}
 ): Promise<Page<Conversation>> {
-  const qs = new URLSearchParams();
-  qs.set('limit', String(opts.limit ?? 20));
-  if (opts.maxId) qs.set('max_id', opts.maxId);
-
-  const res = await get(`/api/v1/conversations?${qs}`);
-  failOn401(res);
-  if (!res.ok) throw new Error(`conversations_failed_${res.status}`);
-
-  const items = (await res.json()) as Conversation[];
-  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+  return page<Conversation>(await req('GET', `/api/v1/conversations?${pageQs(opts, 20)}`, 'conversations'));
 }
 
 export async function markConversationRead(id: string): Promise<Conversation> {
-  const res = await sendJson('POST', `/api/v1/conversations/${encodeURIComponent(id)}/read`, {});
-  failOn401(res);
-  if (!res.ok) throw new Error(`conversation_read_failed_${res.status}`);
-  return (await res.json()) as Conversation;
+  return json(
+    await req('POST', `/api/v1/conversations/${encodeURIComponent(id)}/read`, 'conversation_read', { json: {} })
+  );
 }
 
 // ── statuses ─────────────────────────────────────────────────────────
@@ -244,66 +271,61 @@ export async function postStatus(input: ComposeInput): Promise<Status> {
   if (input.in_reply_to_id) body.in_reply_to_id = input.in_reply_to_id;
   if (input.media_ids && input.media_ids.length > 0) body.media_ids = input.media_ids;
 
-  const res = await sendJson('POST', '/api/v1/statuses', body);
-  failOn401(res);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error ?? `post_failed_${res.status}`);
-  }
-  return (await res.json()) as Status;
-}
-
-// ── interactions ─────────────────────────────────────────────────────
-
-async function sendNoBody(method: string, path: string): Promise<Response> {
-  return fetch(path, {
-    method,
-    headers: { accept: 'application/json', ...authHeader() }
-  });
-}
-
-export async function favourite(statusId: string): Promise<Status> {
-  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/favourite`);
-}
-
-export async function unfavourite(statusId: string): Promise<Status> {
-  return statusAction('POST', `/api/v1/statuses/${encodeURIComponent(statusId)}/unfavourite`);
-}
-
-export async function react(statusId: string, emoji: string): Promise<Status> {
-  return statusAction(
-    'PUT',
-    `/api/v1/sukhi/statuses/${encodeURIComponent(statusId)}/react/${encodeURIComponent(emoji)}`
-  );
-}
-
-export async function unreact(statusId: string, emoji: string): Promise<Status> {
-  return statusAction(
-    'DELETE',
-    `/api/v1/sukhi/statuses/${encodeURIComponent(statusId)}/react/${encodeURIComponent(emoji)}`
-  );
-}
-
-async function statusAction(method: string, path: string): Promise<Status> {
-  const res = await sendNoBody(method, path);
-  failOn401(res);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error ?? `action_failed_${res.status}`);
-  }
-  return (await res.json()) as Status;
+  return json(await req('POST', '/api/v1/statuses', 'post', { json: body }));
 }
 
 // Delete one of your own notes. The gateway enforces ownership (a
 // non-owner gets 403); the deleted Status JSON Mastodon returns is
 // unused, so resolve void.
 export async function deleteStatus(statusId: string): Promise<void> {
-  const res = await sendNoBody('DELETE', `/api/v1/statuses/${encodeURIComponent(statusId)}`);
-  failOn401(res);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error ?? `delete_failed_${res.status}`);
-  }
+  await req('DELETE', `/api/v1/statuses/${encodeURIComponent(statusId)}`, 'delete');
+}
+
+// ── interactions ─────────────────────────────────────────────────────
+// Each toggle returns the updated Status.
+
+async function statusAction(method: string, path: string): Promise<Status> {
+  return json<Status>(await req(method, path, 'action'));
+}
+
+const statusPath = (id: string, action: string) => `/api/v1/statuses/${encodeURIComponent(id)}/${action}`;
+const reactPath = (id: string, emoji: string) =>
+  `/api/v1/sukhi/statuses/${encodeURIComponent(id)}/react/${encodeURIComponent(emoji)}`;
+
+export const favourite = (id: string) => statusAction('POST', statusPath(id, 'favourite'));
+export const unfavourite = (id: string) => statusAction('POST', statusPath(id, 'unfavourite'));
+export const reblog = (id: string) => statusAction('POST', statusPath(id, 'reblog'));
+export const unreblog = (id: string) => statusAction('POST', statusPath(id, 'unreblog'));
+export const bookmark = (id: string) => statusAction('POST', statusPath(id, 'bookmark'));
+export const unbookmark = (id: string) => statusAction('POST', statusPath(id, 'unbookmark'));
+// pin/unpin は自分の投稿だけ。サーバが ownership を強制し、非所有者は 403。
+export const pinStatus = (id: string) => statusAction('POST', statusPath(id, 'pin'));
+export const unpinStatus = (id: string) => statusAction('POST', statusPath(id, 'unpin'));
+export const react = (id: string, emoji: string) => statusAction('PUT', reactPath(id, emoji));
+export const unreact = (id: string, emoji: string) => statusAction('DELETE', reactPath(id, emoji));
+
+export async function getBookmarks(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Status>> {
+  return page<Status>(await req('GET', `/api/v1/bookmarks?${pageQs(opts, 20)}`, 'bookmarks'));
+}
+
+export async function getFavourites(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Status>> {
+  return page<Status>(await req('GET', `/api/v1/favourites?${pageQs(opts, 20)}`, 'favourites'));
+}
+
+// ── polls ────────────────────────────────────────────────────────────
+
+// choices は選んだ選択肢の index 配列。single choice の投票でも配列で送る
+// のが Mastodon の仕様。返ってくるのは最新の集計を載せた Poll。
+export async function votePoll(pollId: string, choices: number[]): Promise<Poll> {
+  return json(
+    await req('POST', `/api/v1/polls/${encodeURIComponent(pollId)}/votes`, 'vote', {
+      json: { choices: choices.map(String) }
+    })
+  );
 }
 
 // ── media ────────────────────────────────────────────────────────────
@@ -316,22 +338,13 @@ export async function uploadMedia(file: File, description?: string): Promise<Med
   // /api/v1/media/:id で polling、というのが Mastodon の仕様。
   // 最初は v1 のシンプルさを取る。重い変換が要るときは server 側で
   // 設定するか、別途 v2 にスイッチ。
-  const res = await sendForm('POST', '/api/v1/media', fd);
-  failOn401(res);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error ?? `media_failed_${res.status}`);
-  }
-  return (await res.json()) as MediaAttachment;
+  return json(await req('POST', '/api/v1/media', 'media', { form: fd }));
 }
 
 // ── accounts: self ───────────────────────────────────────────────────
 
 export async function verifyCredentials(): Promise<Account> {
-  const res = await get('/api/v1/accounts/verify_credentials');
-  failOn401(res);
-  if (!res.ok) throw new Error(`verify_failed_${res.status}`);
-  return (await res.json()) as Account;
+  return json(await req('GET', '/api/v1/accounts/verify_credentials', 'verify'));
 }
 
 // Memoised id of the logged-in account, for "is this mine?" UI checks
@@ -371,61 +384,42 @@ export async function updateCredentials(input: CredentialsUpdate): Promise<Accou
   if (input.avatar) fd.set('avatar', input.avatar);
   if (input.header) fd.set('header', input.header);
 
-  const res = await sendForm('PATCH', '/api/v1/accounts/update_credentials', fd);
-  failOn401(res);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error ?? `update_failed_${res.status}`);
-  }
-  return (await res.json()) as Account;
+  return json(await req('PATCH', '/api/v1/accounts/update_credentials', 'update', { form: fd }));
 }
 
 // ── accounts: lookup / show ──────────────────────────────────────────
 
 export async function lookupAccount(acct: string): Promise<Account> {
   const qs = new URLSearchParams({ acct });
-  const res = await get(`/api/v1/accounts/lookup?${qs}`, { auth: false });
-  if (res.status === 404) throw new Error('not_found');
-  if (!res.ok) throw new Error(`lookup_failed_${res.status}`);
-  return (await res.json()) as Account;
+  return json(await req('GET', `/api/v1/accounts/lookup?${qs}`, 'lookup', { auth: false, notFound: true }));
 }
 
 export async function getAccount(id: string): Promise<Account> {
-  const res = await get(`/api/v1/accounts/${encodeURIComponent(id)}`, { auth: false });
-  if (res.status === 404) throw new Error('not_found');
-  if (!res.ok) throw new Error(`account_failed_${res.status}`);
-  return (await res.json()) as Account;
+  return json(
+    await req('GET', `/api/v1/accounts/${encodeURIComponent(id)}`, 'account', { auth: false, notFound: true })
+  );
 }
 
 export async function getAccountStatuses(
   id: string,
-  opts: { maxId?: string | null; limit?: number } = {}
+  opts: { maxId?: string | null; limit?: number; pinned?: boolean } = {}
 ): Promise<Page<Status>> {
-  const qs = new URLSearchParams();
-  qs.set('limit', String(opts.limit ?? 20));
-  if (opts.maxId) qs.set('max_id', opts.maxId);
-
-  const res = await get(`/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`, {
-    auth: false
-  });
-  if (!res.ok) throw new Error(`account_statuses_failed_${res.status}`);
-  const items = (await res.json()) as Status[];
-  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+  const qs = pageQs(opts, 20);
+  if (opts.pinned) qs.set('pinned', 'true');
+  const path = `/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`;
+  return page<Status>(await req('GET', path, 'account_statuses', { auth: false }));
 }
 
 export async function getStatus(id: string): Promise<Status> {
-  const res = await get(`/api/v1/statuses/${encodeURIComponent(id)}`, { auth: false });
-  if (res.status === 404) throw new Error('not_found');
-  if (!res.ok) throw new Error(`status_failed_${res.status}`);
-  return (await res.json()) as Status;
+  return json(
+    await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}`, 'status', { auth: false, notFound: true })
+  );
 }
 
 export type Context = { ancestors: Status[]; descendants: Status[] };
 
 export async function getContext(id: string): Promise<Context> {
-  const res = await get(`/api/v1/statuses/${encodeURIComponent(id)}/context`, { auth: false });
-  if (!res.ok) throw new Error(`context_failed_${res.status}`);
-  return (await res.json()) as Context;
+  return json(await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}/context`, 'context', { auth: false }));
 }
 
 async function fetchAccountList(
@@ -433,16 +427,8 @@ async function fetchAccountList(
   id: string,
   opts: { maxId?: string | null; limit?: number } = {}
 ): Promise<Page<Account>> {
-  const qs = new URLSearchParams();
-  qs.set('limit', String(opts.limit ?? 40));
-  if (opts.maxId) qs.set('max_id', opts.maxId);
-  const res = await get(
-    `/api/v1/accounts/${encodeURIComponent(id)}/${endpoint}?${qs}`,
-    { auth: false }
-  );
-  if (!res.ok) throw new Error(`${endpoint}_failed_${res.status}`);
-  const items = (await res.json()) as Account[];
-  return { items, nextMaxId: parseLinkMaxId(res.headers.get('link')) };
+  const path = `/api/v1/accounts/${encodeURIComponent(id)}/${endpoint}?${pageQs(opts, 40)}`;
+  return page<Account>(await req('GET', path, endpoint, { auth: false }));
 }
 
 export const getAccountFollowers = (id: string, opts?: { maxId?: string | null; limit?: number }) =>
@@ -457,24 +443,15 @@ export async function getRelationships(ids: string[]): Promise<Relationship[]> {
   if (ids.length === 0) return [];
   const qs = new URLSearchParams();
   for (const id of ids) qs.append('id[]', id);
-  const res = await get(`/api/v1/accounts/relationships?${qs}`);
-  failOn401(res);
-  if (!res.ok) throw new Error(`relationships_failed_${res.status}`);
-  return (await res.json()) as Relationship[];
+  return json(await req('GET', `/api/v1/accounts/relationships?${qs}`, 'relationships'));
 }
 
 export async function followAccount(id: string): Promise<Relationship> {
-  const res = await sendJson('POST', `/api/v1/accounts/${encodeURIComponent(id)}/follow`, {});
-  failOn401(res);
-  if (!res.ok) throw new Error(`follow_failed_${res.status}`);
-  return (await res.json()) as Relationship;
+  return json(await req('POST', `/api/v1/accounts/${encodeURIComponent(id)}/follow`, 'follow', { json: {} }));
 }
 
 export async function unfollowAccount(id: string): Promise<Relationship> {
-  const res = await sendJson('POST', `/api/v1/accounts/${encodeURIComponent(id)}/unfollow`, {});
-  failOn401(res);
-  if (!res.ok) throw new Error(`unfollow_failed_${res.status}`);
-  return (await res.json()) as Relationship;
+  return json(await req('POST', `/api/v1/accounts/${encodeURIComponent(id)}/unfollow`, 'unfollow', { json: {} }));
 }
 
 // ── search ───────────────────────────────────────────────────────────
@@ -500,8 +477,140 @@ export async function searchAll(
   if (opts.limit) qs.set('limit', String(opts.limit));
   if (opts.type) qs.set('type', opts.type);
 
-  const res = await get(`/api/v2/search?${qs}`);
-  failOn401(res);
-  if (!res.ok) throw new Error(`search_failed_${res.status}`);
-  return (await res.json()) as SearchResult;
+  return json(await req('GET', `/api/v2/search?${qs}`, 'search'));
+}
+
+// ── notifications ────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'favourite'
+  | 'reblog'
+  | 'follow'
+  | 'follow_request'
+  | 'mention'
+  | 'status'
+  | 'poll'
+  | 'update'
+  // Sukhi 拡張のリアクション通知。サーバが未対応でも型として許す。
+  | 'reaction';
+
+export type Notification = {
+  id: string;
+  type: NotificationType;
+  created_at: string;
+  account: Account;
+  status?: Status | null;
+};
+
+export async function getNotifications(
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Notification>> {
+  return page<Notification>(await req('GET', `/api/v1/notifications?${pageQs(opts, 30)}`, 'notifications'));
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  await req('POST', `/api/v1/notifications/${encodeURIComponent(id)}/dismiss`, 'dismiss', { json: {} });
+}
+
+export async function clearNotifications(): Promise<void> {
+  await req('POST', '/api/v1/notifications/clear', 'clear', { json: {} });
+}
+
+// ── moderation: block / mute ─────────────────────────────────────────
+// block/unblock/mute/unmute はどれも更新後の Relationship を返す。
+
+function relAction(path: string): Promise<Relationship> {
+  return req('POST', path, 'rel_action', { json: {} }).then((r) => json<Relationship>(r));
+}
+
+export const blockAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/block`);
+export const unblockAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/unblock`);
+export const muteAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/mute`);
+export const unmuteAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/unmute`);
+
+// blocks/mutes 一覧はサーバ側がページネーションせず全件返す（Account 配列）。
+export async function getBlocks(): Promise<Account[]> {
+  return json(await req('GET', '/api/v1/blocks', 'blocks'));
+}
+
+export async function getMutes(): Promise<Account[]> {
+  return json(await req('GET', '/api/v1/mutes', 'mutes'));
+}
+
+// 通報。account_id は必須、status_ids と comment は任意。サーバは確認だけ
+// 返す（UI では使わない）ので void。
+export type ReportInput = { statusIds?: string[]; comment?: string };
+
+export async function reportAccount(accountId: string, input: ReportInput = {}): Promise<void> {
+  const body: Record<string, unknown> = { account_id: accountId };
+  if (input.statusIds && input.statusIds.length > 0) body.status_ids = input.statusIds;
+  if (input.comment) body.comment = input.comment;
+  await req('POST', '/api/v1/reports', 'report', { json: body });
+}
+
+// ── lists ────────────────────────────────────────────────────────────
+
+export type RepliesPolicy = 'list' | 'followed' | 'none';
+
+export type List = {
+  id: string;
+  title: string;
+  replies_policy: RepliesPolicy;
+  exclusive: boolean;
+};
+
+export type ListAttrs = { title?: string; repliesPolicy?: RepliesPolicy; exclusive?: boolean };
+
+// title 以外は省略可（サーバ既定に委ねる）。camelCase → snake_case はここで。
+function listBody(attrs: ListAttrs): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (attrs.title !== undefined) body.title = attrs.title;
+  if (attrs.repliesPolicy) body.replies_policy = attrs.repliesPolicy;
+  if (attrs.exclusive !== undefined) body.exclusive = attrs.exclusive;
+  return body;
+}
+
+export async function getLists(): Promise<List[]> {
+  return json(await req('GET', '/api/v1/lists', 'lists'));
+}
+
+export async function getList(id: string): Promise<List> {
+  return json(await req('GET', `/api/v1/lists/${encodeURIComponent(id)}`, 'list', { notFound: true }));
+}
+
+export async function createList(title: string, attrs: Omit<ListAttrs, 'title'> = {}): Promise<List> {
+  return json(await req('POST', '/api/v1/lists', 'list_create', { json: listBody({ title, ...attrs }) }));
+}
+
+export async function updateList(id: string, attrs: ListAttrs): Promise<List> {
+  return json(await req('PUT', `/api/v1/lists/${encodeURIComponent(id)}`, 'list_update', { json: listBody(attrs) }));
+}
+
+export async function deleteList(id: string): Promise<void> {
+  await req('DELETE', `/api/v1/lists/${encodeURIComponent(id)}`, 'list_delete');
+}
+
+// メンバー一覧はサーバ側がページネーションせず全件返す（Account 配列）。
+export async function getListAccounts(id: string): Promise<Account[]> {
+  return json(await req('GET', `/api/v1/lists/${encodeURIComponent(id)}/accounts`, 'list_accounts'));
+}
+
+export async function addToList(id: string, accountIds: string[]): Promise<void> {
+  await req('POST', `/api/v1/lists/${encodeURIComponent(id)}/accounts`, 'list_add', {
+    json: { account_ids: accountIds }
+  });
+}
+
+export async function removeFromList(id: string, accountIds: string[]): Promise<void> {
+  await req('DELETE', `/api/v1/lists/${encodeURIComponent(id)}/accounts`, 'list_remove', {
+    json: { account_ids: accountIds }
+  });
+}
+
+export async function fetchListTimeline(
+  id: string,
+  opts: { maxId?: string | null; limit?: number } = {}
+): Promise<Page<Status>> {
+  const path = `/api/v1/timelines/list/${encodeURIComponent(id)}?${pageQs(opts, 20)}`;
+  return page<Status>(await req('GET', path, 'list_timeline'));
 }

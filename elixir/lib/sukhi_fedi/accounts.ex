@@ -11,6 +11,23 @@ defmodule SukhiFedi.Accounts do
   alias SukhiFedi.{Outbox, Repo}
   alias SukhiFedi.Schema.{Account, Follow, Note, Session}
 
+  # ── origin ────────────────────────────────────────────────────────────────
+
+  @doc """
+  Compose an origin filter onto an `Account` query — the one place that
+  spells "which side a row came from", so the remote wipe/rebuild tooling
+  and any caller scoping by origin share it instead of re-spelling the
+  predicate. `local` ⇔ `domain IS NULL` (see `by_local_username/1` for why
+  `is_nil/1` and not `domain: nil`). Remote rows are mirrored from upstream
+  and reconstructible from the inbound archive; local rows are the source
+  of truth and can't be re-fetched.
+  """
+  @spec local_accounts(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def local_accounts(query \\ Account), do: from(a in query, where: is_nil(a.domain))
+
+  @spec remote_accounts(Ecto.Queryable.t()) :: Ecto.Query.t()
+  def remote_accounts(query \\ Account), do: from(a in query, where: not is_nil(a.domain))
+
   # ── reads ─────────────────────────────────────────────────────────────────
 
   def get_account_by_username(username), do: by_local_username(username)
@@ -416,14 +433,25 @@ defmodule SukhiFedi.Accounts do
   def list_statuses(account_id, opts \\ []) do
     opts = normalize_opts(opts)
 
-    query =
-      from(n in Note,
-        where: n.account_id == ^account_id,
-        order_by: [desc: n.id]
-      )
+    base =
+      if Map.get(opts, :pinned, false) do
+        # ピン留め（featured collection）。id カーソルではなく position 順の
+        # 固定の並び。Mastodon クライアントはプロフィール先頭にこれを出す。
+        from(n in Note,
+          join: p in SukhiFedi.Schema.PinnedNote,
+          on: p.note_id == n.id and p.account_id == ^account_id,
+          where: n.account_id == ^account_id,
+          order_by: [asc: p.position, asc: p.created_at]
+        )
+      else
+        from(n in Note,
+          where: n.account_id == ^account_id,
+          order_by: [desc: n.id]
+        )
+      end
 
     query =
-      Enum.reduce(opts, query, fn
+      Enum.reduce(opts, base, fn
         {:max_id, v}, q when not is_nil(v) -> from(n in q, where: n.id < ^v)
         {:since_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)
         {:min_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)

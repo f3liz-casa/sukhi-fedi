@@ -1,0 +1,126 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { getLists, createList, deleteList, type List } from '$lib/api';
+  import { isLoggedIn, clearToken } from '$lib/auth';
+
+  let lists = $state<List[]>([]);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+  let newTitle = $state('');
+  let creating = $state(false);
+
+  onMount(() => {
+    if (!isLoggedIn()) {
+      goto('/');
+      return;
+    }
+    void load();
+  });
+
+  async function load() {
+    loading = true;
+    error = null;
+    try {
+      lists = await getLists();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg === 'unauthorized') {
+        clearToken();
+        goto('/');
+        return;
+      }
+      error = 'うまく読めませんでした。';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function create() {
+    const title = newTitle.trim();
+    if (!title || creating) return;
+    creating = true;
+    try {
+      const l = await createList(title);
+      lists = [...lists, l];
+      newTitle = '';
+    } catch {
+      // 失敗時はそのまま。
+    } finally {
+      creating = false;
+    }
+  }
+
+  async function remove(l: List) {
+    if (!confirm(`「${l.title}」を削除しますか？`)) return;
+    try {
+      await deleteList(l.id);
+      lists = lists.filter((x) => x.id !== l.id);
+    } catch {
+      // 失敗時はそのまま。
+    }
+  }
+</script>
+
+<header
+  class="timeline"
+  style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);"
+>
+  <h1 style="font-size: var(--text-lg);">リスト</h1>
+  <a class="chip" href="/timeline">タイムライン</a>
+</header>
+
+<section class="timeline">
+  <form
+    class="form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void create();
+    }}
+    style="display: flex; gap: var(--space-2); margin-bottom: var(--space-4);"
+  >
+    <input
+      type="text"
+      bind:value={newTitle}
+      placeholder="新しいリストの名前"
+      maxlength="60"
+      style="flex: 1;"
+    />
+    <button type="submit" disabled={creating || !newTitle.trim()}>作る</button>
+  </form>
+
+  {#if error}
+    <p class="error">{error}</p>
+  {:else if loading}
+    <p class="loading">読んでいます…</p>
+  {:else if lists.length === 0}
+    <p class="prose-small">まだ、リストは、ありません。上で作れます。</p>
+  {:else}
+    {#each lists as l (l.id)}
+      <article class="list-row">
+        <a class="list-link" href={`/lists/${l.id}`}>{l.title}</a>
+        <button type="button" class="chip" onclick={() => remove(l)}>削除</button>
+      </article>
+    {/each}
+  {/if}
+</section>
+
+<style>
+  .list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .list-link {
+    flex: 1;
+    text-decoration: none;
+    color: inherit;
+    font-weight: 600;
+  }
+  .list-link:hover {
+    text-decoration: underline;
+  }
+</style>

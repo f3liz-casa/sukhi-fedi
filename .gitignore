@@ -21,4 +21,7 @@ infra/terraform-x64-freetier/.terraform.lock.hcl
 # committed. The repo ships only `.kamal/secrets.example` as a template.
 .kamal/secrets
 
+# TLS origin cert/key (Cloudflare Origin CA) — never commit private keys.
+config/tls/
+
 .claude/

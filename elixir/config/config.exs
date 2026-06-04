@@ -11,13 +11,16 @@ config :sukhi_fedi, ecto_repos: [SukhiFedi.Repo]
 
 config :sukhi_fedi, Oban,
   repo: SukhiFedi.Repo,
-  queues: [monitor: 5, inbound_archive: 10],
+  queues: [monitor: 5, inbound_archive: 10, outbound_archive: 10],
   plugins: [
     # NodeInfo monitor poll every 10 minutes. PollCoordinator enumerates
     # due MonitoredInstances and enqueues one PollWorker per instance.
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/10 * * * *", SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator}
+       {"*/10 * * * *", SukhiFedi.Addons.NodeinfoMonitor.PollCoordinator},
+       # Daily read-only archive health check (counts + S3 HEAD of the
+       # latest inbound original). Logs a WARNING if the archive drifted.
+       {"30 3 * * *", SukhiFedi.Maintenance.ArchiveIntegrity}
      ]}
   ]
 
