@@ -3,11 +3,12 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   @moduledoc """
   Backfill existing remote notes from the raw inbound archive in rustfs.
 
-  Two fields were historically dropped on ingest and only fixed going
-  forward: the content warning (AP `summary` → `cw`, fixed v0.2.4) and
-  the publish time (AP `published` → `created_at`, fixed v0.2.2). Notes
-  mirrored before those fixes still show no spoiler and a fetch-time
-  date. The bytes the remote signed are kept verbatim in the `inbound`
+  Some fields were historically dropped on ingest and only fixed going
+  forward: the content warning (AP `summary` → `cw`, fixed v0.2.4), the
+  publish time (AP `published` → `created_at`, fixed v0.2.2), and the
+  media `attachment` (images / video, fixed v0.2.22). Notes mirrored
+  before those fixes still show no spoiler, a fetch-time date, and no
+  images. The bytes the remote signed are kept verbatim in the `inbound`
   bucket (`SukhiFedi.Federation.InboundArchive`), so we can recover the
   originals without hitting the network — the archive is the system of
   record, and replaying it is exactly what it's for.
@@ -29,7 +30,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   import Ecto.Query
   require Logger
 
-  alias SukhiFedi.AP.{Emojis, Published}
+  alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{InboundEvent, Note}
 
@@ -44,17 +45,22 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
       Enum.map(events, fn ev ->
         case fetch_inner_note(ev) do
           {:ok, note} ->
-            rebuild_note(note, mode)
+            {rebuild_note(note, mode), backfill_media(note, mode)}
 
           {:error, reason} ->
             Logger.warning("  skip #{ev.object_key}: #{inspect(reason)}")
-            :error
+            {:error, :error}
         end
       end)
 
-    summary = tally(results)
+    summary = %{
+      fields: tally(Enum.map(results, &elem(&1, 0))),
+      media: tally(Enum.map(results, &elem(&1, 1))),
+      mode: mode
+    }
+
     Logger.info("rebuild_from_archive done: #{inspect(summary)}")
-    Map.put(summary, :mode, mode)
+    summary
   end
 
   defp note_events do
@@ -121,6 +127,35 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   end
 
   def rebuild_note(_, _), do: :no_object_id
+
+  @doc """
+  Backfill media for the local note matching `note["id"]` from the
+  archived `attachment`. Idempotent: a note that already has media is left
+  alone, so re-runs don't duplicate. Exposed for testing.
+  """
+  @spec backfill_media(map(), :dry_run | :execute) :: atom()
+  def backfill_media(%{"id" => ap_id} = note, mode) when is_binary(ap_id) do
+    atts = note["attachment"]
+
+    case Repo.get_by(Note, ap_id: ap_id) do
+      %Note{} = existing ->
+        cond do
+          not has_attachment?(atts) -> :no_media
+          MediaIngest.has_media?(existing.id) -> :already
+          mode == :dry_run -> :would_attach
+          true -> MediaIngest.attach(existing.id, existing.account_id, atts) && :attached
+        end
+
+      nil ->
+        :no_local_note
+    end
+  end
+
+  def backfill_media(_, _), do: :no_object_id
+
+  defp has_attachment?(list) when is_list(list), do: list != []
+  defp has_attachment?(%{}), do: true
+  defp has_attachment?(_), do: false
 
   defp note_changes(note, %Note{} = existing) do
     %{}
