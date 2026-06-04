@@ -12,6 +12,7 @@ defmodule SukhiFedi.AP.Instructions do
   alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note, Reaction}
   alias SukhiFedi.Relays
   alias SukhiFedi.Addons.PinnedNotes
+  alias SukhiFedi.Addons.Media
 
   # How many recent public posts to replay to a brand-new follower so
   # their timeline isn't blank until our next outbound post.
@@ -481,6 +482,7 @@ defmodule SukhiFedi.AP.Instructions do
              |> Repo.insert(on_conflict: :nothing, conflict_target: :ap_id) do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])
+            attach_remote_media(nid, account_id, note["attachment"])
             notify_mentions(note, nid, account_id)
             fetch_referenced_notes(attrs)
             :ok
@@ -495,6 +497,61 @@ defmodule SukhiFedi.AP.Instructions do
   end
 
   defp maybe_mirror_create_note(_), do: :ok
+
+  # Inbound Note `attachment` (images / video / audio) → Media rows linked
+  # via note_media, so remote posts render their media instead of showing
+  # nothing. We point at the remote URL directly (same as avatars and
+  # custom emoji); no re-hosting. Best-effort: a bad item is skipped, not
+  # fatal. Only runs on first insert (id is nil on conflict), so a
+  # redelivered Create won't duplicate media.
+  defp attach_remote_media(note_id, account_id, attachments) when is_list(attachments) do
+    media_ids =
+      Enum.flat_map(attachments, fn att ->
+        with %{} = attrs <- remote_media_attrs(att, account_id),
+             {:ok, %{id: id}} <- Media.create_media(attrs) do
+          [id]
+        else
+          _ -> []
+        end
+      end)
+
+    if media_ids != [], do: Media.attach_to_note(note_id, media_ids)
+    :ok
+  end
+
+  defp attach_remote_media(_note_id, _account_id, _), do: :ok
+
+  defp remote_media_attrs(%{} = att, account_id) do
+    with url when is_binary(url) <- extract_media_url(att["url"]),
+         type when is_binary(type) <- media_type(att["mediaType"]) do
+      %{
+        "account_id" => account_id,
+        "url" => url,
+        "remote_url" => url,
+        "type" => type,
+        "description" => att["name"] || att["summary"],
+        "blurhash" => att["blurhash"],
+        "width" => att["width"],
+        "height" => att["height"]
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  defp remote_media_attrs(_, _), do: nil
+
+  # AP `url` may be a string, a Link object (`%{"href" => ...}`), or a
+  # list of either (content negotiation). Take the first usable href.
+  defp extract_media_url(url) when is_binary(url), do: url
+  defp extract_media_url(%{"href" => href}) when is_binary(href), do: href
+  defp extract_media_url([first | _]), do: extract_media_url(first)
+  defp extract_media_url(_), do: nil
+
+  defp media_type("image/" <> _), do: "image"
+  defp media_type("video/" <> _), do: "video"
+  defp media_type("audio/" <> _), do: "audio"
+  defp media_type(_), do: nil
 
   # Best-effort: pull the reply parent and the quoted note so threading
   # (`in_reply_to_id`) and quote rendering resolve to local rows.
