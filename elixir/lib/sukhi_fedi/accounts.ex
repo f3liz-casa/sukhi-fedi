@@ -433,14 +433,25 @@ defmodule SukhiFedi.Accounts do
   def list_statuses(account_id, opts \\ []) do
     opts = normalize_opts(opts)
 
-    query =
-      from(n in Note,
-        where: n.account_id == ^account_id,
-        order_by: [desc: n.id]
-      )
+    base =
+      if Map.get(opts, :pinned, false) do
+        # ピン留め（featured collection）。id カーソルではなく position 順の
+        # 固定の並び。Mastodon クライアントはプロフィール先頭にこれを出す。
+        from(n in Note,
+          join: p in SukhiFedi.Schema.PinnedNote,
+          on: p.note_id == n.id and p.account_id == ^account_id,
+          where: n.account_id == ^account_id,
+          order_by: [asc: p.position, asc: p.created_at]
+        )
+      else
+        from(n in Note,
+          where: n.account_id == ^account_id,
+          order_by: [desc: n.id]
+        )
+      end
 
     query =
-      Enum.reduce(opts, query, fn
+      Enum.reduce(opts, base, fn
         {:max_id, v}, q when not is_nil(v) -> from(n in q, where: n.id < ^v)
         {:since_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)
         {:min_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)

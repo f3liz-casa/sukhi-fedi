@@ -36,11 +36,16 @@
   let reblogged = $state(false);
   let reblogCount = $state(0);
   let bookmarked = $state(false);
+  let pinned = $state(false);
   let pickerOpen = $state(false);
-  // 自分のノートか（削除ボタンを出すか）。current id は memoise 済みなので
-  // 一覧に何枚あっても verify_credentials は一度きり。
+  // 自分のノートか（ピン留め・削除を出すか）。current id は memoise 済みなので
+  // 一覧に何枚あっても verify_credentials は一度きり。loggedIn は通報を出すか。
   let mine = $state(false);
+  let loggedIn = $state(false);
   let deleting = $state(false);
+  // ⋯ メニュー。低頻度・破壊的な操作（ピン留め・通報・削除）をしまっておく。
+  let menuOpen = $state(false);
+  let reported = $state(false);
 
   $effect(() => {
     reactions = status.reactions ?? [];
@@ -49,11 +54,13 @@
     reblogged = !!status.reblogged;
     reblogCount = status.reblogs_count ?? 0;
     bookmarked = !!status.bookmarked;
+    pinned = !!status.pinned;
   });
 
   $effect(() => {
     const authorId = status.account.id;
     api.currentAccountId().then((id) => {
+      loggedIn = !!id;
       mine = !!id && id === authorId;
     });
   });
@@ -165,6 +172,36 @@
       onupdate?.(s);
     } catch {
       bookmarked = was;
+    }
+  }
+
+  // 自分のノートをプロフィール先頭に固定する。サーバが ownership を強制する。
+  async function togglePin() {
+    menuOpen = false;
+    const was = pinned;
+    pinned = !was;
+    try {
+      const s = was ? await api.unpinStatus(status.id) : await api.pinStatus(status.id);
+      onupdate?.(s);
+    } catch {
+      pinned = was;
+    }
+  }
+
+  // 通報。理由は任意（プロンプトをキャンセルしたら何もしない）。送れたら
+  // メニューを「通報しました」に変えて二度押しを防ぐ。
+  async function doReport() {
+    const comment = prompt('通報の理由があれば書いてください（任意）');
+    if (comment === null) return;
+    menuOpen = false;
+    try {
+      await api.reportAccount(status.account.id, {
+        statusIds: [status.id],
+        comment: comment || undefined
+      });
+      reported = true;
+    } catch {
+      // 失敗時は黙って閉じる。開き直せば押し直せる。
     }
   }
 
@@ -390,15 +427,16 @@
           返信
         </button>
       {/if}
-      {#if mine}
+      {#if mine || loggedIn}
         <button
           type="button"
-          class="chip danger"
-          onclick={remove}
-          disabled={deleting}
-          aria-label="このノートを削除"
+          class="chip"
+          onclick={() => (menuOpen = !menuOpen)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label="その他の操作"
         >
-          🗑
+          ⋯
         </button>
       {/if}
     </footer>
@@ -406,6 +444,35 @@
     {#if pickerOpen}
       <div class="picker-anchor">
         <ReactionPicker onpick={pickFromPicker} onclose={() => (pickerOpen = false)} />
+      </div>
+    {/if}
+
+    {#if menuOpen}
+      <div class="menu" role="menu">
+        {#if mine}
+          <button type="button" class="menu-item" role="menuitem" onclick={togglePin}>
+            {pinned ? '📌 ピン留めを外す' : '📌 ピン留め'}
+          </button>
+          <button
+            type="button"
+            class="menu-item danger"
+            role="menuitem"
+            onclick={remove}
+            disabled={deleting}
+          >
+            🗑 削除
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="menu-item"
+            role="menuitem"
+            onclick={doReport}
+            disabled={reported}
+          >
+            {reported ? '🚩 通報しました' : '🚩 通報'}
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -500,16 +567,42 @@
   .status-actions .chip.active {
     background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
   }
-  .status-actions .chip.danger:hover:not(:disabled) {
-    background: rgba(220, 38, 38, 0.14);
-  }
-  .status-actions .chip.danger:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
   .picker-anchor {
     position: relative;
     margin-top: 0.25rem;
+  }
+
+  .menu {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.125rem;
+    margin-top: 0.25rem;
+    padding: 0.25rem;
+    width: max-content;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg, #fff);
+  }
+  .menu-item {
+    padding: 0.375rem 0.5rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .menu-item:hover:not(:disabled) {
+    background: rgba(127, 127, 127, 0.12);
+  }
+  .menu-item.danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.14);
+  }
+  .menu-item:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .media video,

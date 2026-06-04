@@ -35,6 +35,10 @@
     replyTo = null;
   }
 
+  function onDelete(s: Status) {
+    items = items.filter((it) => it.id !== s.id);
+  }
+
   let kind = $state<TimelineKind>('home');
   let tag = $state('');
   let pendingTag = $state('');
@@ -115,8 +119,12 @@
 
 <header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);">
   <h1 style="font-size: var(--text-lg);">sukhi-fedi</h1>
-  <span style="display: flex; gap: var(--space-2);">
+  <span style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+    <a class="chip" href="/notifications">通知</a>
     <a class="chip" href="/messages">メッセージ</a>
+    <a class="chip" href="/bookmarks">ブックマーク</a>
+    <a class="chip" href="/favourites">お気に入り</a>
+    <a class="chip" href="/lists">リスト</a>
     <a class="chip" href="/search">さがす</a>
     <a class="chip" href="/settings">設定</a>
     <button class="chip" onclick={openCompose}>書く</button>
@@ -187,7 +195,7 @@
   {/if}
 
   {#each items as s (s.id)}
-    <StatusCard status={s} canReply onreply={onReply} />
+    <StatusCard status={s} canReply onreply={onReply} ondelete={onDelete} />
   {/each}
 
   {#if !initial && loading}
