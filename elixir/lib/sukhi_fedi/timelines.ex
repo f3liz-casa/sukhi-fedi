@@ -14,21 +14,18 @@ defmodule SukhiFedi.Timelines do
   """
 
   import Ecto.Query
-  import Bitwise
 
-  alias SukhiFedi.Repo
+  alias SukhiFedi.{Repo, Snowflake}
   alias SukhiFedi.Schema.{Account, Boost, Follow, Note, Tag}
 
   @default_limit 20
   @max_limit 40
 
-  # Same epoch/shift as the `snowflake_id()` Postgres function (see the
-  # SnowflakeNoteIds migration). A boost has no snowflake id of its own — it's
-  # a plain `bigserial` row — so the home feed mints one from the boost's
-  # `created_at` the same way a note id is minted. That puts boosts and notes
-  # in one time-sortable id space, which is what lets us interleave them and
-  # keep id-based (`max_id`/`since_id`) pagination working across both.
-  @snowflake_epoch_ms 1_704_067_200_000
+  # A boost has no snowflake id of its own — it's a plain `bigserial` row — so
+  # the home feed mints a cursor from the boost's `created_at` via
+  # `SukhiFedi.Snowflake` (the same layout as a note id). That puts boosts and
+  # notes in one time-sortable id space, which is what lets us interleave them
+  # and keep id-based (`max_id`/`since_id`) pagination working across both.
 
   @doc """
   Home timeline: notes from accounts the viewer follows (state=accepted),
@@ -109,10 +106,8 @@ defmodule SukhiFedi.Timelines do
   end
 
   # Mint a note-id-compatible cursor for a boost from its timestamp.
-  defp boost_cursor(%DateTime{} = created_at, boost_id) do
-    ms = DateTime.to_unix(created_at, :millisecond)
-    bsl(ms - @snowflake_epoch_ms, 16) ||| rem(boost_id, 65536)
-  end
+  defp boost_cursor(%DateTime{} = created_at, boost_id),
+    do: Snowflake.encode(DateTime.to_unix(created_at, :millisecond), boost_id)
 
   # DB-side pre-filter: bound `created_at` by the millisecond a cursor encodes
   # (inclusive, since the 16-bit counter tail is resolved exactly in Elixir by
@@ -126,17 +121,12 @@ defmodule SukhiFedi.Timelines do
   defp maybe_boost_upper(q, nil), do: q
 
   defp maybe_boost_upper(q, max_id) when is_integer(max_id),
-    do: where(q, [b], b.created_at <= ^cursor_to_dt(max_id))
+    do: where(q, [b], b.created_at <= ^Snowflake.to_datetime(max_id))
 
   defp maybe_boost_lower(q, nil), do: q
 
   defp maybe_boost_lower(q, since_id) when is_integer(since_id),
-    do: where(q, [b], b.created_at >= ^cursor_to_dt(since_id))
-
-  defp cursor_to_dt(cursor) do
-    ms = bsr(cursor, 16) + @snowflake_epoch_ms
-    DateTime.from_unix!(ms, :millisecond)
-  end
+    do: where(q, [b], b.created_at >= ^Snowflake.to_datetime(since_id))
 
   # Exact cursor comparison on the synthesized ids (the DB bound was inclusive).
   defp boost_exact_paging(wrappers, opts) do
