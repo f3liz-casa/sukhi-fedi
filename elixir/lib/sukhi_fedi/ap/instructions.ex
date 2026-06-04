@@ -9,8 +9,9 @@ defmodule SukhiFedi.AP.Instructions do
 
   alias SukhiFedi.{Notes, Notifications, Outbox, Repo}
   alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
-  alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Note, Reaction}
+  alias SukhiFedi.Schema.{Follow, ConversationParticipant, Account, Boost, Note, Reaction}
   alias SukhiFedi.Relays
+  alias SukhiFedi.Federation.NoteFetcher
   alias SukhiFedi.Addons.PinnedNotes
 
   # How many recent public posts to replay to a brand-new follower so
@@ -38,6 +39,7 @@ defmodule SukhiFedi.AP.Instructions do
     maybe_mirror_create_note(object_data)
     maybe_handle_reaction(object_data)
     maybe_notify_announce(object_data)
+    materialize_boost(object_data)
     maybe_handle_pin_unpin(object_data)
     maybe_handle_delete(object_data)
     maybe_handle_undo(object_data)
@@ -675,6 +677,72 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_notify_announce(_), do: :ok
 
+  @doc """
+  Inbound `Announce` → materialise a `boosts` row so the home feed
+  surfaces it as a reblog (the boost wrapper join in `Timelines`). We do
+  this only when a local user actually follows the booster: a boost is
+  how an un-followed author's post reaches the timeline, but a relay can
+  forward Announces from anyone, and fetching every boosted note would be
+  a fetch storm for rows nobody would ever see. When the booster is
+  followed and we don't have the boosted note yet, fetch it (which also
+  mirrors its media) so the join has something to render.
+
+  Public + returns a status atom so the archive backfill can replay
+  Announces. Idempotent (the boost row is unique per booster+note).
+  """
+  @spec materialize_boost(map()) :: :created | :exists | :not_followed | :unresolved | :skip
+  def materialize_boost(%{"type" => "Announce", "actor" => actor_uri, "object" => object}) do
+    with uri when is_binary(uri) <- extract_object_id(object),
+         {:ok, %Account{id: booster_id}} <- resolve_or_ingest_actor(actor_uri),
+         true <- followed_locally?(booster_id),
+         {:ok, %Note{id: note_id}} <- resolve_or_fetch_note(uri) do
+      %Boost{}
+      |> Boost.changeset(%{account_id: booster_id, note_id: note_id})
+      |> Repo.insert(on_conflict: :nothing, conflict_target: [:account_id, :note_id])
+      |> case do
+        {:ok, %Boost{id: nil}} -> :exists
+        {:ok, %Boost{}} -> :created
+        {:error, _} -> :unresolved
+      end
+    else
+      false -> :not_followed
+      {:error, _} -> :unresolved
+      _ -> :skip
+    end
+  end
+
+  def materialize_boost(_), do: :skip
+
+  # True when some local user follows `account_id` (the booster). The
+  # follow row's `follower_uri` is the follower's actor URI; a local one
+  # lives under our domain.
+  defp followed_locally?(account_id) do
+    pattern = "https://#{SukhiFedi.Config.domain!()}/%"
+
+    Repo.exists?(
+      from(f in Follow,
+        where:
+          f.followee_id == ^account_id and f.state == "accepted" and
+            like(f.follower_uri, ^pattern)
+      )
+    )
+  end
+
+  # Local or already-mirrored note → use it. A remote note we don't have
+  # yet → fetch + mirror. A local note that resolved to nothing is gone
+  # (deleted), so don't try to fetch our own URL back.
+  defp resolve_or_fetch_note(uri) do
+    case resolve_target_note(uri) do
+      %Note{} = n ->
+        {:ok, n}
+
+      nil ->
+        if String.contains?(uri, SukhiFedi.Config.domain!()),
+          do: {:error, :local_note_gone},
+          else: NoteFetcher.fetch_and_mirror(uri)
+    end
+  end
+
   # Inbound `Follow` (already auto-accepted via save_and_reply) → follow
   # notification for the local followee.
   defp maybe_notify_follow(%{"follow" => follow_data} = data) do
@@ -837,8 +905,8 @@ defmodule SukhiFedi.AP.Instructions do
 
   # Inbound `Undo`: reverse what the original activity materialised.
   # `Undo(Follow)` drops the follow row; `Undo(Like)` / `Undo(EmojiReact)`
-  # drop the matching `reactions` row. `Undo(Announce)` stays a no-op —
-  # we notify on inbound Announce but don't materialise a Boost row.
+  # drop the matching `reactions` row; `Undo(Announce)` drops the `boosts`
+  # row so an un-boost removes it from the home feed.
   defp maybe_handle_undo(%{"type" => "Undo", "actor" => actor_uri, "object" => inner})
        when is_binary(actor_uri) and is_map(inner) do
     case inner["type"] do
@@ -869,6 +937,15 @@ defmodule SukhiFedi.AP.Instructions do
           from(r in Reaction,
             where: r.account_id == ^reactor_id and r.note_id == ^note_id and r.emoji == ^emoji
           )
+          |> Repo.delete_all()
+        end
+
+        :ok
+
+      "Announce" ->
+        with %Note{id: note_id} <- resolve_target_note(inner["object"]),
+             {:ok, %Account{id: booster_id}} <- resolve_or_ingest_actor(actor_uri) do
+          from(b in Boost, where: b.account_id == ^booster_id and b.note_id == ^note_id)
           |> Repo.delete_all()
         end
 
