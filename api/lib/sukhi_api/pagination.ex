@@ -64,8 +64,13 @@ defmodule SukhiApi.Pagination do
     last_id = id_fn.(List.last(items))
     limit = Map.get(opts, :limit, @default_limit)
 
-    next_url = "#{base_url}?#{URI.encode_query(%{"max_id" => last_id, "limit" => limit})}"
-    prev_url = "#{base_url}?#{URI.encode_query(%{"min_id" => first_id, "limit" => limit})}"
+    # Absolute URLs (host from the instance DOMAIN). Mastodon clients are
+    # told to follow this header verbatim, and many won't resolve a
+    # relative URI against the request — they need the scheme+host here.
+    # `base_url` is the path, e.g. "/api/v1/timelines/home".
+    base = "https://#{SukhiApi.Config.domain!()}#{base_url}"
+    next_url = "#{base}?#{URI.encode_query(%{"max_id" => last_id, "limit" => limit})}"
+    prev_url = "#{base}?#{URI.encode_query(%{"min_id" => first_id, "limit" => limit})}"
 
     {"link", ~s(<#{next_url}>; rel="next", <#{prev_url}>; rel="prev")}
   end
