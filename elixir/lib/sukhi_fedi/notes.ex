@@ -445,7 +445,10 @@ defmodule SukhiFedi.Notes do
   end
 
   # Three shapes accepted:
-  #   1. A local Note id (integer or numeric string) — look up the row's ap_id.
+  #   1. A local Note id (integer or numeric string) — its AP id, which for
+  #      a local note (NULL `ap_id`) is the synthesized URL, same as a quote
+  #      target. Returning NULL here would drop the threading link for a
+  #      local→local reply, so go through `note_ap_id/1`.
   #   2. An http(s) URI for a remote note already mirrored locally
   #      (`notes.ap_id` match) — return as-is.
   #   3. An http(s) URI we've never seen — fetch + mirror via
@@ -465,13 +468,13 @@ defmodule SukhiFedi.Notes do
       true ->
         case parse_int(id) do
           nil -> nil
-          int_id -> Repo.one(from(n in Note, where: n.id == ^int_id, select: n.ap_id))
+          int_id -> note_ap_id(int_id)
         end
     end
   end
 
   defp resolve_in_reply_to_ap_id(id) when is_integer(id) do
-    Repo.one(from(n in Note, where: n.id == ^id, select: n.ap_id))
+    note_ap_id(id)
   end
 
   defp resolve_in_reply_to_ap_id(_), do: nil
@@ -610,23 +613,19 @@ defmodule SukhiFedi.Notes do
 
   Accepts a list or a single note; anything else passes through.
   """
-  @spec with_refs([Note.t()] | Note.t() | any()) :: [Note.t()] | Note.t() | any()
-  def with_refs(notes) when is_list(notes) do
+  @spec with_refs([Note.t()] | Note.t() | any(), integer() | nil) ::
+          [Note.t()] | Note.t() | any()
+  def with_refs(notes, viewer_id \\ nil)
+
+  def with_refs(notes, viewer_id) when is_list(notes) do
     refs =
       notes
       |> Enum.flat_map(fn n -> [n.in_reply_to_ap_id, n.quote_of_ap_id] end)
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    by_ap =
-      if refs == [] do
-        %{}
-      else
-        from(n in Note, where: n.ap_id in ^refs)
-        |> Repo.all()
-        |> Repo.preload(:account)
-        |> Map.new(fn n -> {n.ap_id, n} end)
-      end
+    by_ap = resolve_refs(refs)
+    poll_views = poll_views_for(Enum.map(notes, & &1.id), viewer_id)
 
     Enum.map(notes, fn n ->
       parent = n.in_reply_to_ap_id && Map.get(by_ap, n.in_reply_to_ap_id)
@@ -636,13 +635,86 @@ defmodule SukhiFedi.Notes do
         n
         | in_reply_to_id: parent && parent.id,
           in_reply_to_account_id: parent && parent.account_id,
-          quoted_note: quoted
+          quoted_note: quoted,
+          poll_view: Map.get(poll_views, n.id)
       }
     end)
   end
 
-  def with_refs(%Note{} = note), do: note |> List.wrap() |> with_refs() |> hd()
-  def with_refs(other), do: other
+  def with_refs(%Note{} = note, viewer_id),
+    do: note |> List.wrap() |> with_refs(viewer_id) |> hd()
+
+  def with_refs(other, _viewer_id), do: other
+
+  # For the notes that own a poll (usually none in a given page), build the
+  # Mastodon-shaped poll view, keyed by note id. One query finds the polls;
+  # the per-poll tally reuse keeps remote-poll handling identical to the
+  # single-status path. `viewer_id` nil → no own-vote highlight (public TLs).
+  defp poll_views_for([], _viewer_id), do: %{}
+
+  defp poll_views_for(note_ids, viewer_id) do
+    from(p in SukhiFedi.Schema.Poll, where: p.note_id in ^note_ids, select: {p.note_id, p.id})
+    |> Repo.all()
+    |> Map.new(fn {note_id, poll_id} ->
+      case SukhiFedi.Polls.get_with_results(poll_id, viewer_id) do
+        {:ok, view} -> {note_id, view}
+        _ -> {note_id, nil}
+      end
+    end)
+  end
+
+  # Resolve each ref URI to its local Note (account preloaded), keyed by
+  # the URI string the caller holds. A ref is either a remote `ap_id` or
+  # one of our synthesized local note URLs (whose row has a NULL `ap_id`),
+  # so match remote refs by `ap_id` and local ones by the id in the URL —
+  # otherwise a reply/quote whose parent is local never resolves.
+  defp resolve_refs([]), do: %{}
+
+  defp resolve_refs(refs) do
+    {local_pairs, remote_uris} =
+      Enum.reduce(refs, {[], []}, fn uri, {locals, remotes} ->
+        case local_note_id_from_uri(uri) do
+          nil -> {locals, [uri | remotes]}
+          id -> {[{id, uri} | locals], remotes}
+        end
+      end)
+
+    remote_map =
+      if remote_uris == [] do
+        %{}
+      else
+        from(n in Note, where: n.ap_id in ^remote_uris)
+        |> Repo.all()
+        |> Repo.preload(:account)
+        |> Map.new(fn n -> {n.ap_id, n} end)
+      end
+
+    local_ids = Enum.map(local_pairs, fn {id, _uri} -> id end)
+
+    local_rows =
+      if local_ids == [] do
+        %{}
+      else
+        from(n in Note, where: n.id in ^local_ids)
+        |> Repo.all()
+        |> Repo.preload(:account)
+        |> Map.new(fn n -> {n.id, n} end)
+      end
+
+    # Re-key the local rows by the synthesized URL the caller looks up with;
+    # drop any whose note id no longer exists (e.g. deleted parent).
+    local_map =
+      local_pairs
+      |> Enum.flat_map(fn {id, uri} ->
+        case Map.get(local_rows, id) do
+          nil -> []
+          n -> [{uri, n}]
+        end
+      end)
+      |> Map.new()
+
+    Map.merge(remote_map, local_map)
+  end
 
   # ── delete ───────────────────────────────────────────────────────────────
 

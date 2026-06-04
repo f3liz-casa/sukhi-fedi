@@ -189,6 +189,14 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  get "/notifications" do
+    serve_spa(conn)
+  end
+
+  get "/bookmarks" do
+    serve_spa(conn)
+  end
+
   # PoW で守られる「通り道」。Anubis がこの path だけを challenge する。
   # 中身は SPA shell ─ JS で intent / next を読んで分岐する。
   get "/check" do

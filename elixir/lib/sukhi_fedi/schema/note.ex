@@ -20,6 +20,9 @@ defmodule SukhiFedi.Schema.Note do
     field(:in_reply_to_id, :integer, virtual: true)
     field(:in_reply_to_account_id, :integer, virtual: true)
     field(:quoted_note, :map, virtual: true)
+    # Virtual, populated by `Notes.with_refs/2` when the note owns a poll:
+    # the `Polls.get_with_results/2` map, ready for `MastodonPoll.render/1`.
+    field(:poll_view, :map, virtual: true)
 
     belongs_to(:account, SukhiFedi.Schema.Account)
     many_to_many(:media, SukhiFedi.Schema.Media, join_through: "note_media")
