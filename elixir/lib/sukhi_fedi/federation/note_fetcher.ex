@@ -17,7 +17,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
   require Logger
 
-  alias SukhiFedi.AP.{Emojis, Published}
+  alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
   alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
@@ -150,6 +150,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
         {:ok, Repo.get_by(Note, ap_id: uri)}
 
       {:ok, %Note{} = n} ->
+        MediaIngest.attach(n.id, account_id, note_json["attachment"])
         {:ok, n}
 
       {:error, _} = err ->
