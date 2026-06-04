@@ -175,7 +175,11 @@ function parseLinkMaxId(link: string | null): string | null {
     const m = part.match(/<([^>]+)>;\s*rel="next"/);
     if (m) {
       try {
-        const u = new URL(m[1]);
+        // サーバは同一オリジンの *相対* URL を返す
+        // (`</api/v1/timelines/home?…max_id=N>`)。base 無しの `new URL`
+        // は相対 URL で throw するので、現在オリジンを base に渡す。query
+        // を読むだけなので絶対 URL が来てもそのまま通る。
+        const u = new URL(m[1], location.origin);
         return u.searchParams.get('max_id');
       } catch {
         return null;
