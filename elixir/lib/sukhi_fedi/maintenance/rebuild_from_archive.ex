@@ -30,7 +30,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   import Ecto.Query
   require Logger
 
-  alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
+  alias SukhiFedi.AP.{Emojis, Instructions, MediaIngest, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{InboundEvent, Note}
 
@@ -56,11 +56,48 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     summary = %{
       fields: tally(Enum.map(results, &elem(&1, 0))),
       media: tally(Enum.map(results, &elem(&1, 1))),
+      boosts: backfill_boosts(mode),
       mode: mode
     }
 
     Logger.info("rebuild_from_archive done: #{inspect(summary)}")
     summary
+  end
+
+  # Replay archived `Announce` activities through the live boost handler so
+  # past remote boosts surface as reblogs. `materialize_boost/1` is
+  # idempotent and only acts on followed boosters, so a re-run is safe. It
+  # writes, so :dry_run just counts the candidates.
+  defp backfill_boosts(:dry_run) do
+    %{archived: Repo.aggregate(announce_events_query(), :count, :id)}
+  end
+
+  defp backfill_boosts(:execute) do
+    announce_events_query()
+    |> Repo.all()
+    |> Enum.map(fn ev ->
+      case fetch_activity(ev) do
+        {:ok, activity} ->
+          Instructions.materialize_boost(activity)
+
+        {:error, reason} ->
+          Logger.warning("  skip boost #{ev.object_key}: #{inspect(reason)}")
+          :error
+      end
+    end)
+    |> tally()
+  end
+
+  defp announce_events_query do
+    from(e in InboundEvent, where: e.activity_type == "Announce", order_by: e.received_at)
+  end
+
+  # Whole activity (not the inner object) — `materialize_boost/1` reads the
+  # Announce's `actor` and `object`.
+  defp fetch_activity(%InboundEvent{object_key: key}) do
+    with {:ok, body} <- download(key) do
+      Jason.decode(body)
+    end
   end
 
   defp note_events do
