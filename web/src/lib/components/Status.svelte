@@ -43,6 +43,13 @@
   let mine = $state(false);
   let loggedIn = $state(false);
   let deleting = $state(false);
+  // CW（spoiler）を開いているか。閉じている間は本文だけでなく添付も隠す。
+  let cwOpen = $state(false);
+  // センシティブ添付のブラーを外したか。クリックで一度だけ表に出す。
+  let mediaShown = $state(false);
+  // ぼかすのは「CW 無しの sensitive で、まだ表に出していない」添付だけ。
+  // CW 付きは cwOpen 側で隠すので、ブラーと二重にはしない。
+  let blurMedia = $derived(status.sensitive && !status.spoiler_text && !mediaShown);
   // ⋯ メニュー。低頻度・破壊的な操作（ピン留め・通報・削除）をしまっておく。
   let menuOpen = $state(false);
   let reported = $state(false);
@@ -273,7 +280,7 @@
     </header>
 
     {#if status.spoiler_text}
-      <details>
+      <details bind:open={cwOpen}>
         <summary>{status.spoiler_text}</summary>
         <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
       </details>
@@ -299,8 +306,15 @@
       </a>
     {/if}
 
-    {#if status.media_attachments.length > 0}
-      <div class="media">
+    {#if (!status.spoiler_text || cwOpen) && status.media_attachments.length > 0}
+      <!-- CW 付きは cwOpen で隠す。CW 無しの sensitive はぼかして「見る」を出す
+           （二重に隠さないよう spoiler のときはブラーを掛けない）。 -->
+      <div class="media" class:sensitive={blurMedia}>
+        {#if blurMedia}
+          <button type="button" class="media-reveal" onclick={() => (mediaShown = true)}>
+            センシティブな内容です。見るにはタップ。
+          </button>
+        {/if}
         {#each status.media_attachments as m (m.id)}
           {#if m.type === 'image'}
             <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
@@ -614,6 +628,38 @@
     display: inline-block;
     margin-top: 0.25rem;
     font-size: var(--text-sm);
+  }
+
+  /* センシティブ添付: 中身をぼかして、上に「見る」ボタンを重ねる。 */
+  .media.sensitive {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+  }
+  .media.sensitive :is(img, video, audio) {
+    filter: blur(28px);
+    /* ぼかしの縁が透けないよう、わずかに拡大してはみ出させる。 */
+    transform: scale(1.06);
+    pointer-events: none;
+  }
+  .media-reveal {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.38);
+    color: #fff;
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .media-reveal:hover {
+    background: rgba(0, 0, 0, 0.48);
   }
 
   .poll {
