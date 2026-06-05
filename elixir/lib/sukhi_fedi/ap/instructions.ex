@@ -455,12 +455,25 @@ defmodule SukhiFedi.AP.Instructions do
 
   defp maybe_handle_follow_accept(_), do: :ok
 
+  @doc """
+  Replay an archived `Create` activity to recreate a remote note that is
+  gone from `notes` (lost to a past cascade, not a `Delete`). Same mirror
+  path as live ingest, but `notify?: false` so resurrecting an old post
+  doesn't fire a "new" mention notification. Public for the archive
+  rebuild ([[RebuildFromArchive]]).
+  """
+  @spec reingest_for_rebuild(map()) :: term()
+  def reingest_for_rebuild(activity), do: maybe_mirror_create_note(activity, false)
+
   # Inbound Create(Note) → mirror to the `notes` table so Timelines.home /
   # Timelines.public can see it. DMs (no AS#Public in `to`/`cc`) are
   # routed by `maybe_handle_dm`, which writes its own Note row scoped
   # to the local recipient; we skip them here to avoid double-insert.
+  defp maybe_mirror_create_note(activity, notify? \\ true)
+
   defp maybe_mirror_create_note(
-         %{"type" => "Create", "object" => %{"type" => type} = note} = activity
+         %{"type" => "Create", "object" => %{"type" => type} = note} = activity,
+         notify?
        )
        when type in ["Note", "Article", "Question"] do
     if dm_addressing?(note) do
@@ -491,7 +504,7 @@ defmodule SukhiFedi.AP.Instructions do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])
             MediaIngest.attach(nid, account_id, note["attachment"])
-            notify_mentions(note, nid, account_id)
+            if notify?, do: notify_mentions(note, nid, account_id)
             fetch_referenced_notes(attrs)
             :ok
 
@@ -504,7 +517,7 @@ defmodule SukhiFedi.AP.Instructions do
     end
   end
 
-  defp maybe_mirror_create_note(_), do: :ok
+  defp maybe_mirror_create_note(_, _), do: :ok
 
   # Best-effort: pull the reply parent and the quoted note so threading
   # (`in_reply_to_id`) and quote rendering resolve to local rows.
