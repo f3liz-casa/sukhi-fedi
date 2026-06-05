@@ -224,6 +224,12 @@ defmodule SukhiFedi.Web.Router do
     serve_static(conn, ["_app" | path])
   end
 
+  # Self-hosted Twemoji SVGs, baked into priv/static/twemoji by the SPA
+  # build. The SPA points unicode emoji + UI icons at /twemoji/svg/<cp>.svg.
+  get "/twemoji/*path" do
+    serve_static(conn, ["twemoji" | path])
+  end
+
   get "/favicon.ico" do
     serve_static(conn, ["favicon.ico"])
   end
