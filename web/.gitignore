@@ -1,5 +1,7 @@
 node_modules
 build
+# Twemoji SVGs copied from @twemoji/svg at build time (prebuild script).
+static/twemoji
 .svelte-kit
 .env
 .env.*

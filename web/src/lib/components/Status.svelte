@@ -3,6 +3,7 @@
   import * as api from '$lib/api';
   import Self from './Status.svelte';
   import ReactionPicker from './ReactionPicker.svelte';
+  import Twemoji from './Twemoji.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
 
@@ -257,7 +258,7 @@
        返信・ブースト等のアクションは入れ子側（本物のノート）に効く。 -->
   <div class="boost">
     <a class="boost-by" href={`/@${status.account.acct}`}>
-      🔁 {@html renderEmojis(phrase(name), status.account.emojis)} がブースト
+      <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} がブースト
     </a>
     <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
   </div>
@@ -395,7 +396,7 @@
             {#if r.url}
               <img class="emoji" src={r.url} alt={r.name} loading="lazy" />
             {:else}
-              <span class="emoji">{r.name}</span>
+              <span class="emoji"><Twemoji emoji={r.name} /></span>
             {/if}
             <span class="count">{r.count}</span>
           </button>
@@ -414,7 +415,7 @@
         onclick={toggleFavourite}
         aria-pressed={favourited}
       >
-        ⭐ {favCount > 0 ? favCount : ''}
+        <Twemoji emoji="⭐" label="お気に入り" /> {favCount > 0 ? favCount : ''}
       </button>
       <button
         type="button"
@@ -424,7 +425,7 @@
         aria-pressed={reblogged}
         aria-label="ブースト"
       >
-        🔁 {reblogCount > 0 ? reblogCount : ''}
+        <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
       </button>
       <button
         type="button"
@@ -434,7 +435,7 @@
         aria-pressed={bookmarked}
         aria-label={bookmarked ? 'ブックマークを外す' : 'ブックマーク'}
       >
-        {bookmarked ? '🔖' : '🏷'}
+        <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
       </button>
       {#if canReply}
         <button type="button" class="chip" onclick={() => onreply?.(status)}>
@@ -465,7 +466,7 @@
       <div class="menu" role="menu">
         {#if mine}
           <button type="button" class="menu-item" role="menuitem" onclick={togglePin}>
-            {pinned ? '📌 ピン留めを外す' : '📌 ピン留め'}
+            <Twemoji emoji="📌" /> {pinned ? 'ピン留めを外す' : 'ピン留め'}
           </button>
           <button
             type="button"
@@ -474,7 +475,7 @@
             onclick={remove}
             disabled={deleting}
           >
-            🗑 削除
+            <Twemoji emoji="🗑" /> 削除
           </button>
         {:else}
           <button
@@ -484,7 +485,7 @@
             onclick={doReport}
             disabled={reported}
           >
-            {reported ? '🚩 通報しました' : '🚩 通報'}
+            <Twemoji emoji="🚩" /> {reported ? '通報しました' : '通報'}
           </button>
         {/if}
       </div>

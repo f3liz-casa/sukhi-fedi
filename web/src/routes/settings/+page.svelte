@@ -300,3 +300,11 @@
     </section>
   {/if}
 {/if}
+
+<footer class="muted" style="margin-top: var(--space-6); font-size: var(--text-sm);">
+  絵文字は <a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer">Twemoji</a>（<a
+    href="https://creativecommons.org/licenses/by/4.0/"
+    target="_blank"
+    rel="noopener noreferrer">CC-BY 4.0</a
+  >）。
+</footer>

@@ -1,6 +1,8 @@
 <script lang="ts">
   // 軽量の絵文字ピッカー。Phase 2 では固定リストで始める。
   // custom emoji / 検索つきの本格版は Phase 4 で考える。
+  import Twemoji from './Twemoji.svelte';
+
   let { onpick, onclose }: { onpick: (emoji: string) => void; onclose?: () => void } = $props();
 
   const QUICK = [
@@ -20,7 +22,7 @@
 <div class="reaction-picker" role="dialog" aria-label="リアクションを選ぶ">
   <div class="grid">
     {#each QUICK as e (e)}
-      <button type="button" class="pick" onclick={() => pick(e)} aria-label={e}>{e}</button>
+      <button type="button" class="pick" onclick={() => pick(e)} aria-label={e}><Twemoji emoji={e} /></button>
     {/each}
   </div>
 </div>

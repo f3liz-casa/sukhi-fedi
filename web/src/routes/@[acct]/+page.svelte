@@ -19,6 +19,7 @@
   import StatusCard from '$lib/components/Status.svelte';
   import FollowButton from '$lib/components/FollowButton.svelte';
   import Composer from '$lib/components/Composer.svelte';
+  import Twemoji from '$lib/components/Twemoji.svelte';
   import { phrase } from '$lib/phrase';
   import { renderEmojis } from '$lib/emoji';
 
@@ -236,7 +237,7 @@
 
   {#if pinnedItems.length > 0}
     <section class="timeline pinned">
-      <p class="pinned-label">📌 ピン留め</p>
+      <p class="pinned-label"><Twemoji emoji="📌" /> ピン留め</p>
       {#each pinnedItems as s (s.id)}
         <StatusCard
           status={s}

@@ -328,3 +328,15 @@ img.custom-emoji {
   object-fit: contain;
   display: inline-block;
 }
+
+/* Self-hosted Twemoji: unicode emoji in content (injected via {@html}, so
+   this must stay global) and the fixed UI action icons (boost, favourite,
+   …) via the Twemoji component. Sized to ride the text like a glyph. */
+img.twemoji {
+  height: 1.2em;
+  width: 1.2em;
+  margin: 0 0.05em;
+  vertical-align: -0.2em;
+  object-fit: contain;
+  display: inline-block;
+}
