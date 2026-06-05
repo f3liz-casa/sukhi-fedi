@@ -8,6 +8,7 @@ defmodule SukhiFedi.Schema.Note do
     field(:visibility, :string, default: "public")
     field(:ap_id, :string)
     field(:cw, :string)
+    field(:sensitive, :boolean, default: false)
     field(:in_reply_to_ap_id, :string)
     field(:conversation_ap_id, :string)
     field(:quote_of_ap_id, :string)
@@ -40,6 +41,7 @@ defmodule SukhiFedi.Schema.Note do
       :visibility,
       :account_id,
       :cw,
+      :sensitive,
       :ap_id,
       :in_reply_to_ap_id,
       :conversation_ap_id,

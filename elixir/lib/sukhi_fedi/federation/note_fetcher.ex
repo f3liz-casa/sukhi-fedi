@@ -133,6 +133,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
       "cw" => content_warning(note_json),
+      "sensitive" => note_json["sensitive"] == true,
       "emojis" => Emojis.from_tag(note_json["tag"]),
       "in_reply_to_ap_id" => extract(note_json["inReplyTo"]),
       "quote_of_ap_id" => quote_uri(note_json),

@@ -272,6 +272,9 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     |> put_new_value(:cw, content_warning(note), existing.cw)
     |> put_new_value(:created_at, Published.at(note), existing.created_at)
     |> put_new_value(:emojis, Emojis.from_tag(note["tag"]), existing.emojis)
+    # Only ever set sensitive (never clear it): an archived note without the
+    # flag yields nil, which put_new_value skips.
+    |> put_new_value(:sensitive, if(note["sensitive"] == true, do: true), existing.sensitive)
   end
 
   # Only a non-empty archive value that differs is a change — we never

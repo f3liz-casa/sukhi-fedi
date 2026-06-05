@@ -49,7 +49,9 @@ defmodule SukhiApi.Views.MastodonStatus do
       created_at: format_dt(Map.get(note, :created_at)),
       in_reply_to_id: encode_id(Map.get(note, :in_reply_to_id)),
       in_reply_to_account_id: encode_id(Map.get(note, :in_reply_to_account_id)),
-      sensitive: !!(Map.get(note, :cw) && Map.get(note, :cw) != ""),
+      # The real NSFW flag, or implied by a content warning (Mastodon marks
+      # a CW'd post sensitive too).
+      sensitive: !!Map.get(note, :sensitive) or (Map.get(note, :cw) not in [nil, ""]),
       spoiler_text: Map.get(note, :cw) || "",
       visibility: mastodon_visibility(Map.get(note, :visibility)),
       language: nil,

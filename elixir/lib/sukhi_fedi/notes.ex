@@ -109,6 +109,7 @@ defmodule SukhiFedi.Notes do
           account_id: account_id,
           content: params[:status] || params["status"] || "",
           cw: params[:spoiler_text] || params["spoiler_text"] || params[:cw] || params["cw"],
+          sensitive: params[:sensitive] || params["sensitive"] || false,
           visibility: visibility
         }
         |> resolve_in_reply_to(params)
@@ -178,6 +179,7 @@ defmodule SukhiFedi.Notes do
           account_id: account_id,
           content: content,
           cw: params[:spoiler_text] || params["spoiler_text"] || params[:cw] || params["cw"],
+          sensitive: params[:sensitive] || params["sensitive"] || false,
           visibility: "direct"
         }
         |> resolve_in_reply_to(params)

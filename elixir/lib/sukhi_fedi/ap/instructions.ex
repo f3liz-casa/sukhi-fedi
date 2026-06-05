@@ -398,6 +398,7 @@ defmodule SukhiFedi.AP.Instructions do
       "ap_id" => object["id"],
       "visibility" => "direct",
       "cw" => content_warning(object),
+      "sensitive" => object["sensitive"] == true,
       "emojis" => Emojis.from_tag(object["tag"]),
       "conversation_ap_id" => conversation_ap_id,
       "in_reply_to_ap_id" => extract_uri(object["inReplyTo"])
@@ -491,6 +492,7 @@ defmodule SukhiFedi.AP.Instructions do
           "ap_id" => ap_id,
           "visibility" => visibility_from(note),
           "cw" => content_warning(note),
+          "sensitive" => note["sensitive"] == true,
           "emojis" => Emojis.from_tag(note["tag"]),
           "in_reply_to_ap_id" => extract_uri(note["inReplyTo"]),
           "quote_of_ap_id" => extract_quote_uri(note),
