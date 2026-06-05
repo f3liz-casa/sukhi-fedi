@@ -38,6 +38,10 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
 
   @spec run(:dry_run | :execute) :: map()
   def run(mode \\ :dry_run) do
+    # Recreate notes lost from the DB first, so the field/media/boost
+    # passes below see them too.
+    notes = recreate_notes(mode)
+
     events = note_events()
     Logger.info("rebuild_from_archive: #{length(events)} Create/Update event(s), mode=#{mode}")
 
@@ -54,6 +58,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
       end)
 
     summary = %{
+      notes: notes,
       fields: tally(Enum.map(results, &elem(&1, 0))),
       media: tally(Enum.map(results, &elem(&1, 1))),
       boosts: backfill_boosts(mode),
@@ -63,6 +68,74 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     Logger.info("rebuild_from_archive done: #{inspect(summary)}")
     summary
   end
+
+  # Recreate remote notes that are gone from `notes` but still in the
+  # archive — *unless* the archive also holds a `Delete` for them (an
+  # intentional removal we must not resurrect). Replays each surviving
+  # `Create` through `Instructions.reingest_for_rebuild/1` (no mention
+  # notification). :dry_run counts; :execute does the work.
+  defp recreate_notes(mode) do
+    present = present_ap_ids()
+    deleted = deleted_ap_ids()
+
+    create_events()
+    |> Enum.map(fn ev ->
+      case fetch_activity(ev) do
+        {:ok, %{"object" => obj} = activity} ->
+          case object_ap_id(obj) do
+            ap_id when is_binary(ap_id) ->
+              cond do
+                MapSet.member?(present, ap_id) -> :present
+                MapSet.member?(deleted, ap_id) -> :deleted
+                mode == :dry_run -> :would_recreate
+                true -> Instructions.reingest_for_rebuild(activity) && :recreated
+              end
+
+            _ ->
+              :no_object_id
+          end
+
+        {:ok, _} ->
+          :no_object_id
+
+        {:error, reason} ->
+          Logger.warning("  skip recreate #{ev.object_key}: #{inspect(reason)}")
+          :error
+      end
+    end)
+    |> tally()
+  end
+
+  defp create_events do
+    from(e in InboundEvent, where: e.activity_type == "Create", order_by: e.received_at)
+    |> Repo.all()
+  end
+
+  # ap_ids of notes we still have. Local notes carry no ap_id (NULL), so
+  # they never collide with a remote archive id.
+  defp present_ap_ids do
+    from(n in Note, where: not is_nil(n.ap_id), select: n.ap_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  # ap_ids the archive says were deleted — download each `Delete` and read
+  # its target. These must never be recreated.
+  defp deleted_ap_ids do
+    from(e in InboundEvent, where: e.activity_type == "Delete")
+    |> Repo.all()
+    |> Enum.flat_map(fn ev ->
+      case fetch_activity(ev) do
+        {:ok, %{"object" => obj}} -> List.wrap(object_ap_id(obj))
+        _ -> []
+      end
+    end)
+    |> MapSet.new()
+  end
+
+  defp object_ap_id(id) when is_binary(id), do: id
+  defp object_ap_id(%{"id" => id}) when is_binary(id), do: id
+  defp object_ap_id(_), do: nil
 
   # Replay archived `Announce` activities through the live boost handler so
   # past remote boosts surface as reblogs. `materialize_boost/1` is
