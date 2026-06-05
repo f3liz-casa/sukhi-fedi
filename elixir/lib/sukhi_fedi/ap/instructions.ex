@@ -705,17 +705,23 @@ defmodule SukhiFedi.AP.Instructions do
   Public + returns a status atom so the archive backfill can replay
   Announces. Idempotent (the boost row is unique per booster+note).
   """
-  @spec materialize_boost(map()) :: :created | :exists | :not_followed | :unresolved | :skip
-  def materialize_boost(%{"type" => "Announce", "actor" => actor_uri, "object" => object}) do
+  @spec materialize_boost(map()) :: :created | :not_followed | :unresolved | :skip
+  def materialize_boost(%{"type" => "Announce", "actor" => actor_uri, "object" => object} = activity) do
     with uri when is_binary(uri) <- extract_object_id(object),
          {:ok, %Account{id: booster_id}} <- resolve_or_ingest_actor(actor_uri),
          true <- followed_locally?(booster_id),
          {:ok, %Note{id: note_id}} <- resolve_or_fetch_note(uri) do
+      # `created_at` orders the boost in the home feed (Timelines mints the
+      # cursor from it), so stamp the Announce's `published` — not the
+      # insert time, which would pile every back-filled boost onto "now".
+      # `:replace` lets a re-run of the backfill correct an earlier row.
       %Boost{}
       |> Boost.changeset(%{account_id: booster_id, note_id: note_id})
-      |> Repo.insert(on_conflict: :nothing, conflict_target: [:account_id, :note_id])
+      |> Published.stamp(activity)
+      |> Repo.insert(on_conflict: {:replace, [:created_at]}, conflict_target: [:account_id, :note_id])
       |> case do
-        {:ok, %Boost{id: nil}} -> :exists
+        # `:replace` returns the row (id set) whether inserted or refreshed,
+        # so we can't tell new from updated here — both count as materialised.
         {:ok, %Boost{}} -> :created
         {:error, _} -> :unresolved
       end
