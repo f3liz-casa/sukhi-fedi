@@ -105,7 +105,12 @@ main.wrap {
 }
 
 .status .media img {
+  display: block;
   width: 100%;
+  /* 上下左右に枠をはめる。縦長でも伸び放題にせず、はみ出しは切る。
+     原寸はクリックでライトボックス（Status.svelte）。 */
+  max-height: 22rem;
+  object-fit: cover;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
 }

@@ -48,6 +48,8 @@
   let cwOpen = $state(false);
   // センシティブ添付のブラーを外したか。クリックで一度だけ表に出す。
   let mediaShown = $state(false);
+  // 拡大表示中の画像 URL（null なら閉じている）。
+  let lightbox = $state<string | null>(null);
   // ぼかすのは「CW 無しの sensitive で、まだ表に出していない」添付だけ。
   // CW 付きは cwOpen 側で隠すので、ブラーと二重にはしない。
   let blurMedia = $derived(status.sensitive && !status.spoiler_text && !mediaShown);
@@ -313,12 +315,19 @@
       <div class="media" class:sensitive={blurMedia}>
         {#if blurMedia}
           <button type="button" class="media-reveal" onclick={() => (mediaShown = true)}>
-            センシティブな内容です。見るにはタップ。
+            タップで表示
           </button>
         {/if}
         {#each status.media_attachments as m (m.id)}
           {#if m.type === 'image'}
-            <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
+            <button
+              type="button"
+              class="media-zoom"
+              onclick={() => (lightbox = m.url)}
+              aria-label={m.description || '画像を拡大'}
+            >
+              <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
+            </button>
           {:else if m.type === 'video' || m.type === 'gifv'}
             <!-- gifv は無音ループ動画。ふつうの動画は controls を出す。 -->
             <video
@@ -342,6 +351,19 @@
           {/if}
         {/each}
       </div>
+    {/if}
+
+    {#if lightbox}
+      <!-- 画像の拡大。背景全面がボタンなので、どこを押しても/Escで閉じる。 -->
+      <button
+        type="button"
+        class="lightbox"
+        aria-label="閉じる"
+        onclick={() => (lightbox = null)}
+        onkeydown={(e) => e.key === 'Escape' && (lightbox = null)}
+      >
+        <img src={lightbox} alt="" />
+      </button>
     {/if}
 
     {#if poll}
@@ -661,6 +683,37 @@
   }
   .media-reveal:hover {
     background: rgba(0, 0, 0, 0.48);
+  }
+
+  /* サムネイルを包むボタン。クリックでライトボックス。 */
+  .media-zoom {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    line-height: 0;
+    cursor: zoom-in;
+  }
+
+  /* 画像の原寸表示。全面の背景ボタン、押すと閉じる。 */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    border: 0;
+    background: rgba(0, 0, 0, 0.85);
+    cursor: zoom-out;
+  }
+  .lightbox img {
+    max-width: 95vw;
+    max-height: 95vh;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
   }
 
   .poll {
