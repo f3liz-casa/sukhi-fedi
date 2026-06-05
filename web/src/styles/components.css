@@ -336,7 +336,9 @@ img.twemoji {
   height: 1.2em;
   width: 1.2em;
   margin: 0 0.05em;
-  vertical-align: -0.2em;
+  /* Center the glyph on the text's middle — action-bar icon+count, the
+     boost header, menu items and inline content emoji all line up. */
+  vertical-align: middle;
   object-fit: contain;
   display: inline-block;
 }
