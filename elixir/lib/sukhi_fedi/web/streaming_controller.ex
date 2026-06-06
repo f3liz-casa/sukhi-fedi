@@ -44,7 +44,7 @@ defmodule SukhiFedi.Web.StreamingController do
       _ ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(401, Jason.encode!(%{error: "This method requires an authenticated user"}))
+        |> send_resp(401, JSON.encode!(%{error: "This method requires an authenticated user"}))
     end
   end
 

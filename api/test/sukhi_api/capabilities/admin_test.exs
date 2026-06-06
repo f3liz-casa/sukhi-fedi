@@ -131,7 +131,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       req = authed("GET", "/api/admin/accounts", admin_fixture(), ["read:accounts"])
       {:ok, resp} = Router.handle(req)
       assert resp.status == 403
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["error"] == "insufficient_scope"
     end
 
@@ -140,7 +140,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       req = authed("GET", "/api/admin/accounts", non_admin, ["admin:read"])
       {:ok, resp} = Router.handle(req)
       assert resp.status == 403
-      assert Jason.decode!(resp.body)["error"] == "admin_required"
+      assert JSON.decode!(resp.body)["error"] == "admin_required"
     end
   end
 
@@ -158,7 +158,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body["items"]) == 2
       assert body["pagination"] == %{"page" => 1, "per_page" => 20, "total" => 42, "total_pages" => 3}
       assert Enum.at(body["items"], 0)["username"] == "alice"
@@ -174,7 +174,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
         })
 
       {:ok, resp} = Router.handle(req)
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["pagination"]["per_page"] == 100
       assert body["pagination"]["page"] == 1
     end
@@ -195,13 +195,13 @@ defmodule SukhiApi.Capabilities.AdminTest do
 
       req =
         authed("POST", "/api/admin/accounts/10/suspend", admin_fixture(), ["admin:write"], %{
-          body: Jason.encode!(%{"reason" => "spam"})
+          body: JSON.encode!(%{"reason" => "spam"})
         })
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["suspended"] == true
       assert body["suspension_reason"] == "spam"
       assert body["suspended_by_id"] == "1"
@@ -229,7 +229,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       req = authed("POST", "/api/admin/accounts/10/promote", admin_fixture(), ["admin:write"])
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["is_admin"] == true
+      assert JSON.decode!(resp.body)["is_admin"] == true
     end
 
     test "demote sets is_admin false" do
@@ -240,7 +240,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       req = authed("POST", "/api/admin/accounts/10/demote", admin_fixture(), ["admin:write"])
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["is_admin"] == false
+      assert JSON.decode!(resp.body)["is_admin"] == false
     end
   end
 
@@ -271,7 +271,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert [report] = body["items"]
       assert report["status"] == "open"
       assert report["reporter"]["username"] == "reporter"
@@ -302,7 +302,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["status"] == "resolved"
       assert body["resolved_by"]["username"] == "root"
     end
@@ -325,13 +325,13 @@ defmodule SukhiApi.Capabilities.AdminTest do
 
       req =
         authed("POST", "/api/admin/domain_blocks", admin_fixture(), ["admin:write"], %{
-          body: Jason.encode!(%{"domain" => "Evil.Example", "severity" => "suspend", "reason" => "spam"})
+          body: JSON.encode!(%{"domain" => "Evil.Example", "severity" => "suspend", "reason" => "spam"})
         })
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["domain"] == "evil.example"
       assert body["severity"] == "suspend"
     end
@@ -360,7 +360,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["domain"] == "evil.example"
+      assert JSON.decode!(resp.body)["domain"] == "evil.example"
     end
 
     test "missing domain → 422" do
@@ -406,7 +406,7 @@ defmodule SukhiApi.Capabilities.AdminTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["accounts"]["total"] == 100
       assert body["moderation"]["open_reports"] == 3
       assert body["federation"]["known_domains"] == 15

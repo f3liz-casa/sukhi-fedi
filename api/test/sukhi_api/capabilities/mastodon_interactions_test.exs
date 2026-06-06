@@ -94,7 +94,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["favourited"] == true
       assert body["favourites_count"] == 1
     end
@@ -133,7 +133,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["favourited"] == false
+      assert JSON.decode!(resp.body)["favourited"] == false
     end
   end
 
@@ -149,7 +149,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["reblogged"] == true
       assert body["reblogs_count"] == 1
     end
@@ -167,7 +167,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["bookmarked"] == true
+      assert JSON.decode!(resp.body)["bookmarked"] == true
     end
   end
 
@@ -182,7 +182,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       req = authed("POST", "/api/v1/statuses/100/pin", ["write:accounts"])
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["pinned"] == true
+      assert JSON.decode!(resp.body)["pinned"] == true
     end
 
     test "non-owner → 403" do
@@ -213,7 +213,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body) == 3
       assert Enum.all?(body, fn s -> s["bookmarked"] == true end)
     end
@@ -233,7 +233,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractionsTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      [s] = Jason.decode!(resp.body)
+      [s] = JSON.decode!(resp.body)
       assert s["id"] == "5"
       assert s["favourited"] == true
     end

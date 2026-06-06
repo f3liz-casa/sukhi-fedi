@@ -28,8 +28,6 @@ defmodule SukhiDelivery.Outbox.PullConsumer do
 
   use Gnat.Jetstream.PullConsumer
 
-  require Logger
-
   alias SukhiDelivery.Outbox.Consumer
 
   @stream_name "OUTBOX"

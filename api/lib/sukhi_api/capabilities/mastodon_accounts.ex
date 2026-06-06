@@ -98,7 +98,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
     cond do
       String.contains?(ct, "application/json") ->
-        case Jason.decode(req[:body] || "") do
+        case JSON.decode(req[:body] || "") do
           {:ok, %{} = m} -> m
           _ -> %{}
         end
@@ -183,7 +183,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
         decode_multipart(req[:body] || "", ct, account_id)
 
       String.contains?(ct, "application/json") ->
-        case Jason.decode(req[:body] || "") do
+        case JSON.decode(req[:body] || "") do
           {:ok, %{} = m} -> {:ok, m}
           _ -> {:ok, %{}}
         end
@@ -323,7 +323,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
           link -> [link | headers]
         end
 
-      {:ok, %{status: 200, body: Jason.encode!(body), headers: headers}}
+      {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
     else
       {:error, :bad_int} ->
         ok(400, %{error: "invalid_id"})
@@ -520,7 +520,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

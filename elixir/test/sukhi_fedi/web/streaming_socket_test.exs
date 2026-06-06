@@ -94,12 +94,12 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
       event = %{event: "update", payload: %{"id" => "9", "content" => "hi"}}
       assert {:push, {:text, json}, ^state} = StreamingSocket.handle_info({:stream_event, "public:local", event}, state)
 
-      decoded = Jason.decode!(json)
+      decoded = JSON.decode!(json)
       assert decoded["stream"] == ["public:local"]
       assert decoded["event"] == "update"
       # payload is itself a JSON string, per the Mastodon wire format
       assert is_binary(decoded["payload"])
-      assert Jason.decode!(decoded["payload"]) == %{"id" => "9", "content" => "hi"}
+      assert JSON.decode!(decoded["payload"]) == %{"id" => "9", "content" => "hi"}
     end
 
     test "ignores events for a stream the socket is not subscribed to" do
@@ -113,7 +113,7 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
       event = %{event: "delete", payload: "12345"}
 
       assert {:push, {:text, json}, _} = StreamingSocket.handle_info({:stream_event, "public:local", event}, state)
-      assert Jason.decode!(json)["payload"] == "12345"
+      assert JSON.decode!(json)["payload"] == "12345"
     end
 
     test "pushes a conversation frame on the direct stream" do
@@ -122,10 +122,10 @@ defmodule SukhiFedi.Web.StreamingSocketTest do
       event = %{event: "conversation", payload: %{"id" => "42", "unread" => true}}
       assert {:push, {:text, json}, ^state} = StreamingSocket.handle_info({:stream_event, "direct", event}, state)
 
-      decoded = Jason.decode!(json)
+      decoded = JSON.decode!(json)
       assert decoded["stream"] == ["direct"]
       assert decoded["event"] == "conversation"
-      assert Jason.decode!(decoded["payload"]) == %{"id" => "42", "unread" => true}
+      assert JSON.decode!(decoded["payload"]) == %{"id" => "42", "unread" => true}
     end
 
     test "heartbeat pings the client" do

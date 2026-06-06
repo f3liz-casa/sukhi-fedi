@@ -105,7 +105,7 @@ defmodule SukhiApi.Capabilities.NodeinfoMonitor do
         {:ok, %{}}
 
       body when is_binary(body) ->
-        case Jason.decode(body) do
+        case JSON.decode(body) do
           {:ok, %{} = map} -> {:ok, map}
           _ -> {:error, :bad_json}
         end
@@ -141,7 +141,7 @@ defmodule SukhiApi.Capabilities.NodeinfoMonitor do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

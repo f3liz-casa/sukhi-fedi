@@ -44,7 +44,7 @@ defmodule SukhiFedi.Web.RateLimitPlug do
         conn
         |> put_resp_header("retry-after", Integer.to_string(div(scale_ms, 1_000)))
         |> put_resp_content_type("application/json")
-        |> send_resp(429, Jason.encode!(%{error: "rate_limited"}))
+        |> send_resp(429, JSON.encode!(%{error: "rate_limited"}))
         |> halt()
     end
   end

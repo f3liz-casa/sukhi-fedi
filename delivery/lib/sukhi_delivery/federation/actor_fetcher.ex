@@ -63,7 +63,7 @@ defmodule SukhiDelivery.Federation.ActorFetcher do
         {:ok, body}
 
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        case Jason.decode(body) do
+        case JSON.decode(body) do
           {:ok, actor} ->
             Ets.put(:actor_remote, actor_uri, actor, @ttl_seconds)
             {:ok, actor}

@@ -71,7 +71,7 @@ defmodule SukhiApi.RouterAuthTest do
       })
 
     assert resp.status == 401
-    assert Jason.decode!(resp.body)["error"] == "invalid_token"
+    assert JSON.decode!(resp.body)["error"] == "invalid_token"
   end
 
   test "valid token with sufficient scope (read:accounts) returns 200" do
@@ -102,7 +102,7 @@ defmodule SukhiApi.RouterAuthTest do
       })
 
     assert resp.status == 200
-    body = Jason.decode!(resp.body)
+    body = JSON.decode!(resp.body)
     assert body["id"] == "42"
     assert body["username"] == "alice"
   end
@@ -160,7 +160,7 @@ defmodule SukhiApi.RouterAuthTest do
       })
 
     assert resp.status == 403
-    body = Jason.decode!(resp.body)
+    body = JSON.decode!(resp.body)
     assert body["error"] == "insufficient_scope"
     assert body["scope"] == "write:statuses"
   end
@@ -189,7 +189,7 @@ defmodule SukhiApi.RouterAuthTest do
       })
 
     assert resp.status == 503
-    assert Jason.decode!(resp.body)["error"] == "gateway_not_connected"
+    assert JSON.decode!(resp.body)["error"] == "gateway_not_connected"
   end
 
   test "missing Bearer scheme → 401" do

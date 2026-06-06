@@ -60,7 +60,7 @@ defmodule SukhiFedi.Federation.WebFinger do
         {:ok, body}
 
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        Jason.decode(body)
+        JSON.decode(body)
 
       {:ok, %{status: status}} ->
         Logger.warning("WebFinger #{handle}: HTTP #{status}")

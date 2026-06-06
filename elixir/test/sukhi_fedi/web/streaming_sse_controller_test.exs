@@ -9,7 +9,7 @@ defmodule SukhiFedi.Web.StreamingSseControllerTest do
       out = IO.iodata_to_binary(SSE.frame("notification", %{"type" => "follow", "id" => "9"}))
 
       assert ["event: notification", "data: " <> data, "", ""] = String.split(out, "\n")
-      assert Jason.decode!(data) == %{"type" => "follow", "id" => "9"}
+      assert JSON.decode!(data) == %{"type" => "follow", "id" => "9"}
     end
 
     test "passes a binary payload through unchanged" do

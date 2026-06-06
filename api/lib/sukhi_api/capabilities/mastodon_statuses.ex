@@ -83,7 +83,7 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
 
     cond do
       String.contains?(ct, "application/json") ->
-        case Jason.decode(req[:body] || "") do
+        case JSON.decode(req[:body] || "") do
           {:ok, %{} = m} -> m
           _ -> %{}
         end
@@ -203,7 +203,7 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

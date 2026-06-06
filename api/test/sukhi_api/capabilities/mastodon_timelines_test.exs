@@ -88,7 +88,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelinesTest do
       {:ok, resp} = Router.handle(authed_get("/api/v1/timelines/home", "limit=3"))
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body) == 3
       assert hd(body)["id"] == "3"
 
@@ -127,7 +127,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelinesTest do
         })
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body) == 2
       assert hd(body)["id"] == "2"
     end
@@ -143,7 +143,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelinesTest do
         })
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body) == []
+      assert JSON.decode!(resp.body) == []
       refute Enum.any?(resp.headers, fn {k, _} -> String.downcase(k) == "link" end)
     end
 

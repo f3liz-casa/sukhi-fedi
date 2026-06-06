@@ -128,7 +128,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractions do
                 link -> [link | headers]
               end
 
-            {:ok, %{status: 200, body: Jason.encode!(body), headers: headers}}
+            {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
 
           {:error, :not_connected} ->
             ok(503, %{error: "gateway_not_connected"})
@@ -168,7 +168,7 @@ defmodule SukhiApi.Capabilities.MastodonInteractions do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

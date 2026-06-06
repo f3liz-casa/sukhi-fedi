@@ -107,7 +107,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["id"] == "42"
       assert body["username"] == "alice"
       assert body["followers_count"] == 3
@@ -142,7 +142,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
         })
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["id"] == "7"
       assert body["username"] == "bob"
       refute Map.has_key?(body, "source")
@@ -182,7 +182,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
         })
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["username"] == "carol"
+      assert JSON.decode!(resp.body)["username"] == "carol"
     end
 
     test "returns 404 for unknown acct" do
@@ -232,7 +232,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
         })
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body) == 3
       assert hd(body)["id"] == "3"
 
@@ -284,7 +284,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      [rel] = Jason.decode!(resp.body)
+      [rel] = JSON.decode!(resp.body)
       assert rel["id"] == "2"
       assert rel["following"] == true
     end
@@ -318,12 +318,12 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
           "/api/v1/accounts/update_credentials",
           account,
           ["write:accounts"],
-          %{body: Jason.encode!(%{"display_name" => "Eve Updated"})}
+          %{body: JSON.encode!(%{"display_name" => "Eve Updated"})}
         )
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["display_name"] == "Eve Updated"
+      assert JSON.decode!(resp.body)["display_name"] == "Eve Updated"
     end
 
     test "validation_failed → 422 with details" do
@@ -339,12 +339,12 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
           "/api/v1/accounts/update_credentials",
           account,
           ["write:accounts"],
-          %{body: Jason.encode!(%{"display_name" => String.duplicate("x", 200)})}
+          %{body: JSON.encode!(%{"display_name" => String.duplicate("x", 200)})}
         )
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 422
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["error"] == "validation_failed"
       assert body["details"]["display_name"] == ["is too long"]
     end

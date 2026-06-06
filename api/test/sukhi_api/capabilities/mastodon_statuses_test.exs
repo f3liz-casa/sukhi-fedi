@@ -95,13 +95,13 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
           "POST",
           "/api/v1/statuses",
           ["write:statuses"],
-          %{body: Jason.encode!(%{"status" => "hello"})}
+          %{body: JSON.encode!(%{"status" => "hello"})}
         )
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["id"] == "100"
       assert body["content"] =~ "hello"
       assert body["visibility"] == "public"
@@ -119,12 +119,12 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
           "POST",
           "/api/v1/statuses",
           ["write:statuses"],
-          %{body: Jason.encode!(%{})}
+          %{body: JSON.encode!(%{})}
         )
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 422
-      assert Jason.decode!(resp.body)["error"] == "validation_failed"
+      assert JSON.decode!(resp.body)["error"] == "validation_failed"
     end
 
     test "media_not_owned → 422" do
@@ -137,7 +137,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
           "POST",
           "/api/v1/statuses",
           ["write:statuses"],
-          %{body: Jason.encode!(%{"status" => "x", "media_ids" => ["999"]})}
+          %{body: JSON.encode!(%{"status" => "x", "media_ids" => ["999"]})}
         )
 
       {:ok, resp} = Router.handle(req)
@@ -154,7 +154,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
           "POST",
           "/api/v1/statuses",
           ["write:statuses"],
-          %{body: Jason.encode!(%{"status" => "x", "visibility" => "direct"})}
+          %{body: JSON.encode!(%{"status" => "x", "visibility" => "direct"})}
         )
 
       {:ok, resp} = Router.handle(req)
@@ -167,7 +167,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
           method: "POST",
           path: "/api/v1/statuses",
           headers: [],
-          body: Jason.encode!(%{"status" => "x"})
+          body: JSON.encode!(%{"status" => "x"})
         })
 
       assert resp.status == 401
@@ -206,7 +206,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
       {:ok, resp} = Router.handle(%{method: "GET", path: "/api/v1/statuses/7", headers: []})
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["id"] == "7"
+      assert JSON.decode!(resp.body)["id"] == "7"
     end
 
     test "404 on unknown id" do
@@ -230,7 +230,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["id"] == "7"
+      assert JSON.decode!(resp.body)["id"] == "7"
     end
 
     test "non-owner → 403" do
@@ -266,7 +266,7 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
         Router.handle(%{method: "GET", path: "/api/v1/statuses/2/context", headers: []})
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert length(body["ancestors"]) == 1
       assert length(body["descendants"]) == 2
     end

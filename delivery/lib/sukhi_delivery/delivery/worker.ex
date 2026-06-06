@@ -169,15 +169,15 @@ defmodule SukhiDelivery.Delivery.Worker do
 
   defp resolve_body_and_actor(%{"object_id" => id}) do
     object = Repo.get!(Object, id)
-    {Jason.encode!(object.raw_json), object.actor_id}
+    {JSON.encode!(object.raw_json), object.actor_id}
   end
 
   defp resolve_body_and_actor(%{"raw_json" => raw_json, "actor_uri" => actor_uri}) do
-    {Jason.encode!(raw_json), actor_uri}
+    {JSON.encode!(raw_json), actor_uri}
   end
 
   defp resolve_body_and_actor(%{"raw_json" => raw_json}) do
-    {Jason.encode!(raw_json), nil}
+    {JSON.encode!(raw_json), nil}
   end
 
   defp resolve_sync_headers(%{"sync_header" => value}, _actor_uri) when is_binary(value) do

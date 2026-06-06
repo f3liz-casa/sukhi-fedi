@@ -35,7 +35,7 @@ defmodule SukhiFedi.Web.NodeinfoController do
 
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(body))
+    |> send_resp(200, JSON.encode!(body))
   end
 
   # mix.exs の :sukhi_fedi バージョンを単一の出どころにする。
@@ -83,7 +83,7 @@ defmodule SukhiFedi.Web.NodeinfoController do
 
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(body))
+    |> send_resp(200, JSON.encode!(body))
   end
 
   defp count_safe(queryable) do

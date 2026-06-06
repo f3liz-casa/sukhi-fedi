@@ -15,8 +15,6 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   origin server.
   """
 
-  require Logger
-
   alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}

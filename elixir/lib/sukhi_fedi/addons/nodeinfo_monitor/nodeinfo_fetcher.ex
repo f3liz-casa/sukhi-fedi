@@ -102,7 +102,7 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.NodeinfoFetcher do
         {:ok, body}
 
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        case Jason.decode(body) do
+        case JSON.decode(body) do
           {:ok, json} -> {:ok, json}
           {:error, reason} -> {:error, {:invalid_json, reason}}
         end

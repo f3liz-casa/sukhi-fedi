@@ -14,7 +14,7 @@ defmodule SukhiFedi.MixProject do
     [
       app: :sukhi_fedi,
       version: @version,
-      elixir: "~> 1.16",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -37,7 +37,9 @@ defmodule SukhiFedi.MixProject do
       {:bandit, "~> 1.5"},
       {:plug, "~> 1.16"},
 
-      # JSON
+      # JSON — our own code uses the stdlib `JSON` module (Elixir 1.18+);
+      # Jason is kept only because ex_aws's `json_codec` and Plug.Parsers'
+      # `json_decoder` reference it directly (see config + router.ex).
       {:jason, "~> 1.4"},
 
       # Database

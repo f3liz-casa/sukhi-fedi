@@ -50,6 +50,6 @@ defmodule SukhiFedi.Web.NoteController do
   defp send_json(conn, status, body) do
     conn
     |> put_resp_content_type("application/activity+json")
-    |> send_resp(status, Jason.encode!(body))
+    |> send_resp(status, JSON.encode!(body))
   end
 end

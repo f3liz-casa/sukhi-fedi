@@ -88,7 +88,7 @@ defmodule SukhiApi.Capabilities.OAuthApps do
       body when is_binary(body) ->
         cond do
           String.contains?(ct, "application/json") ->
-            case Jason.decode(body) do
+            case JSON.decode(body) do
               {:ok, %{} = m} -> {:ok, m}
               _ -> {:error, :bad_json}
             end
@@ -97,7 +97,7 @@ defmodule SukhiApi.Capabilities.OAuthApps do
             {:ok, URI.decode_query(body)}
 
           true ->
-            case Jason.decode(body) do
+            case JSON.decode(body) do
               {:ok, %{} = m} -> {:ok, m}
               _ -> {:ok, URI.decode_query(body)}
             end
@@ -109,7 +109,7 @@ defmodule SukhiApi.Capabilities.OAuthApps do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

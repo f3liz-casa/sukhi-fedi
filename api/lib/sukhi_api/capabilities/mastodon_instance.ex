@@ -111,7 +111,7 @@ defmodule SukhiApi.Capabilities.MastodonInstance do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

@@ -87,8 +87,12 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
               cond do
                 MapSet.member?(present, ap_id) -> :present
                 MapSet.member?(deleted, ap_id) -> :deleted
-                mode == :dry_run -> :would_recreate
-                true -> Instructions.reingest_for_rebuild(activity) && :recreated
+                mode == :dry_run ->
+                  :would_recreate
+
+                true ->
+                  Instructions.reingest_for_rebuild(activity)
+                  :recreated
               end
 
             _ ->
@@ -169,7 +173,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   # Announce's `actor` and `object`.
   defp fetch_activity(%InboundEvent{object_key: key}) do
     with {:ok, body} <- download(key) do
-      Jason.decode(body)
+      JSON.decode(body)
     end
   end
 
@@ -185,7 +189,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   # embedded note object.
   defp fetch_inner_note(%InboundEvent{object_key: key}) do
     with {:ok, body} <- download(key),
-         {:ok, json} <- Jason.decode(body),
+         {:ok, json} <- JSON.decode(body),
          %{} = note <- inner_note(json) do
       {:ok, note}
     else

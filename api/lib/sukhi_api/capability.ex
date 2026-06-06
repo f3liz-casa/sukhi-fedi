@@ -21,7 +21,7 @@ defmodule SukhiApi.Capability do
           {:ok,
            %{
              status: 200,
-             body: Jason.encode!(%{name: "anon"}),
+             body: JSON.encode!(%{name: "anon"}),
              headers: [{"content-type", "application/json"}]
            }}
         end

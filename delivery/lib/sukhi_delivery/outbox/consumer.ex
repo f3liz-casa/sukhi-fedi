@@ -59,7 +59,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   @doc false
   def handle_event(subject, body) when is_binary(subject) and is_binary(body) do
-    case Jason.decode(body) do
+    case JSON.decode(body) do
       {:ok, payload} when is_map(payload) ->
         try do
           dispatch(subject, payload)

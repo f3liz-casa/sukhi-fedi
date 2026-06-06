@@ -11,7 +11,7 @@ defmodule SukhiApi.MixProject do
     [
       app: :sukhi_api,
       version: @version,
-      elixir: "~> 1.16",
+      elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -21,16 +21,14 @@ defmodule SukhiApi.MixProject do
     [
       # `:crypto` を明示的に並べておかないと release に同梱されず、
       # SukhiApi.TokenRateLimit や OAuth view が呼ぶ `:crypto.hash/2`
-      # が UndefinedFunctionError で落ちる(api の deps が jason だけ
-      # で transitive に crypto が来ないため)。
+      # が UndefinedFunctionError で落ちる(api は外部 deps を持たないので
+      # transitive に crypto が来ないため)。
       extra_applications: [:logger, :crypto],
       mod: {SukhiApi.Application, []}
     ]
   end
 
   defp deps do
-    [
-      {:jason, "~> 1.4"}
-    ]
+    []
   end
 end

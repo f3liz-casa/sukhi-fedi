@@ -108,7 +108,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
         link -> [link | headers]
       end
 
-    {:ok, %{status: 200, body: Jason.encode!(body), headers: headers}}
+    {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
   end
 
   defp parse_query(nil), do: %{}
@@ -119,7 +119,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

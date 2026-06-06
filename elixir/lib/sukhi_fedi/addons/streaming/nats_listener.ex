@@ -15,7 +15,7 @@ defmodule SukhiFedi.Addons.Streaming.NatsListener do
 
   @impl true
   def handle_info({:msg, %{topic: "stream.new_post", body: body}}, state) do
-    case Jason.decode(body) do
+    case JSON.decode(body) do
       {:ok, %{"object" => object, "actor_id" => actor_id}} ->
         broadcast_to_feeds(object, actor_id)
 

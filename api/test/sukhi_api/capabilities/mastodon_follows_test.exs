@@ -77,7 +77,7 @@ defmodule SukhiApi.Capabilities.MastodonFollowsTest do
       {:ok, resp} = Router.handle(authed_post("/api/v1/accounts/2/follow"))
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["id"] == "2"
       assert body["following"] == true
     end
@@ -140,7 +140,7 @@ defmodule SukhiApi.Capabilities.MastodonFollowsTest do
       {:ok, resp} = Router.handle(authed_post("/api/v1/accounts/2/unfollow"))
       assert resp.status == 200
 
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["following"] == false
     end
 

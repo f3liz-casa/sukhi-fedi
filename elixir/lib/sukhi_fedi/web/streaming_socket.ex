@@ -44,7 +44,7 @@ defmodule SukhiFedi.Web.StreamingSocket do
 
   @impl true
   def handle_in({text, [opcode: :text]}, state) do
-    case Jason.decode(text) do
+    case JSON.decode(text) do
       {:ok, %{"type" => "subscribe", "stream" => stream}} ->
         {:ok, subscribe(state, stream)}
 
@@ -111,14 +111,14 @@ defmodule SukhiFedi.Web.StreamingSocket do
   defp stream_spec(_other, _account_id), do: :ignore
 
   defp frame(label, %{event: event, payload: payload}) do
-    Jason.encode!(%{stream: [label], event: event, payload: encode_payload(payload)})
+    JSON.encode!(%{stream: [label], event: event, payload: encode_payload(payload)})
   end
 
   # Mastodon double-encodes the payload: the status/notification is itself
   # a JSON string inside the frame. `delete` events already carry a plain
   # id string, so pass binaries through untouched.
   defp encode_payload(payload) when is_binary(payload), do: payload
-  defp encode_payload(payload), do: Jason.encode!(payload)
+  defp encode_payload(payload), do: JSON.encode!(payload)
 
   defp schedule_heartbeat, do: Process.send_after(self(), :heartbeat, @heartbeat_ms)
 end

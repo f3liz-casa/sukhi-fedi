@@ -16,7 +16,7 @@ defmodule SukhiFedi.Web.WebfingerController do
   def call(conn, _opts) do
     case conn.params["resource"] do
       nil ->
-        send_resp(conn, 400, Jason.encode!(%{error: "missing 'resource' query parameter"}))
+        send_resp(conn, 400, JSON.encode!(%{error: "missing 'resource' query parameter"}))
 
       resource ->
         handle_resource(conn, resource)
@@ -35,10 +35,10 @@ defmodule SukhiFedi.Web.WebfingerController do
             send_jrd(conn, 200, jrd)
 
           {:error, :not_found} ->
-            send_resp(conn, 404, Jason.encode!(%{error: "not_found"}))
+            send_resp(conn, 404, JSON.encode!(%{error: "not_found"}))
 
           {:error, reason} ->
-            send_resp(conn, 400, Jason.encode!(%{error: inspect(reason)}))
+            send_resp(conn, 400, JSON.encode!(%{error: inspect(reason)}))
         end
     end
   end
@@ -112,6 +112,6 @@ defmodule SukhiFedi.Web.WebfingerController do
   defp send_jrd(conn, status, jrd) do
     conn
     |> put_resp_content_type("application/jrd+json")
-    |> send_resp(status, Jason.encode!(jrd))
+    |> send_resp(status, JSON.encode!(jrd))
   end
 end

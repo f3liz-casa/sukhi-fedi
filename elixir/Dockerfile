@@ -15,7 +15,7 @@ COPY web/ ./
 RUN npm run build
 
 # ── Elixir release build ──────────────────────────────────────────────────
-FROM elixir:1.16-alpine AS build
+FROM elixir:1.20-alpine AS build
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ RUN mkdir -p priv/static priv/static/styles && \
 RUN MIX_ENV=prod mix release
 
 # ── Runtime ───────────────────────────────────────────────────────────────
-FROM elixir:1.16-alpine
+FROM elixir:1.20-alpine
 
 # Kamal asserts a `service` label matches `service:` in config/deploy.yml
 # before accepting the image. Baking it in here keeps Kamal happy when

@@ -321,7 +321,7 @@ defmodule SukhiApi.Capabilities.OAuth do
   defp decode_request_body(req) do
     raw = req[:body] || ""
 
-    case Jason.decode(raw) do
+    case JSON.decode(raw) do
       {:ok, %{} = m} -> m
       _ -> parse_form_body(raw)
     end
@@ -510,7 +510,7 @@ defmodule SukhiApi.Capabilities.OAuth do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

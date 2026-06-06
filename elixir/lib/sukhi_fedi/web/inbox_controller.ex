@@ -54,7 +54,7 @@ defmodule SukhiFedi.Web.InboxController do
       send_resp(conn, 202, "")
     else
       {:error, reason} ->
-        send_resp(conn, 400, Jason.encode!(%{error: inspect(reason)}))
+        send_resp(conn, 400, JSON.encode!(%{error: inspect(reason)}))
     end
   end
 

@@ -31,7 +31,7 @@ defmodule SukhiFedi.Integration.InboundArchiveTest do
       body =
         ~s({"type":"Follow","actor":"https://social.example/users/bob","id":"https://social.example/act/1","object":"https://localhost:4000/users/potato"})
 
-      raw_json = Jason.decode!(body)
+      raw_json = JSON.decode!(body)
       headers = %{"date" => "Fri, 29 May 2026 01:24:12 GMT", "digest" => "SHA-256=abc"}
 
       assert {:ok, _job} = InboundArchive.enqueue(body, raw_json, headers, "shared")
@@ -57,7 +57,7 @@ defmodule SukhiFedi.Integration.InboundArchiveTest do
       body =
         ~s({"type":"Like","actor":"https://social.example/users/carol","id":"https://social.example/like/9"})
 
-      raw_json = Jason.decode!(body)
+      raw_json = JSON.decode!(body)
 
       assert {:ok, _} = InboundArchive.enqueue(body, raw_json, %{}, "shared")
       assert {:ok, _} = InboundArchive.enqueue(body, raw_json, %{}, "shared")

@@ -31,6 +31,6 @@ defmodule SukhiFedi.Web.FeaturedController do
 
     conn
     |> put_resp_content_type("application/activity+json")
-    |> send_resp(200, Jason.encode!(collection))
+    |> send_resp(200, JSON.encode!(collection))
   end
 end

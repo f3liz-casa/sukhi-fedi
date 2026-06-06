@@ -151,7 +151,7 @@ defmodule SukhiApi.Capabilities.MastodonLists do
               link -> [link | headers]
             end
 
-          {:ok, %{status: 200, body: Jason.encode!(body), headers: headers}}
+          {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
 
         {:ok, {:error, :not_found}} ->
           ok(404, %{error: "not_found"})
@@ -176,7 +176,7 @@ defmodule SukhiApi.Capabilities.MastodonLists do
       nil -> %{}
       "" -> %{}
       body when is_binary(body) ->
-        case Jason.decode(body) do
+        case JSON.decode(body) do
           {:ok, m} when is_map(m) -> m
           _ -> URI.decode_query(body)
         end
@@ -203,7 +203,7 @@ defmodule SukhiApi.Capabilities.MastodonLists do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

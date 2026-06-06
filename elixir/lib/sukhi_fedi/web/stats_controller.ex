@@ -32,7 +32,7 @@ defmodule SukhiFedi.Web.StatsController do
     Process.sleep(@tick_ms)
 
     payload =
-      Jason.encode!(%{
+      JSON.encode!(%{
         cpu: cpu_util(),
         memory: memory_snapshot(),
         load: load_avg(),

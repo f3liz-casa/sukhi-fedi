@@ -69,7 +69,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           path: "/oauth/token",
           headers: [{"content-type", "application/json"}],
           body:
-            Jason.encode!(%{
+            JSON.encode!(%{
               "grant_type" => "authorization_code",
               "client_id" => "cid",
               "client_secret" => "sec",
@@ -79,7 +79,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
         })
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["access_token"] == "at_123"
       assert body["refresh_token"] == "rt_456"
       assert body["token_type"] == "Bearer"
@@ -105,7 +105,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           path: "/oauth/token",
           headers: [{"content-type", "application/json"}],
           body:
-            Jason.encode!(%{
+            JSON.encode!(%{
               "grant_type" => "client_credentials",
               "client_id" => "cid",
               "client_secret" => "sec",
@@ -114,7 +114,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
         })
 
       assert resp.status == 200
-      body = Jason.decode!(resp.body)
+      body = JSON.decode!(resp.body)
       assert body["access_token"] == "at_cc"
       refute Map.has_key?(body, "refresh_token")
     end
@@ -130,7 +130,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           path: "/oauth/token",
           headers: [{"content-type", "application/json"}],
           body:
-            Jason.encode!(%{
+            JSON.encode!(%{
               "grant_type" => "authorization_code",
               "client_id" => "cid",
               "client_secret" => "sec",
@@ -140,7 +140,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
         })
 
       assert resp.status == 400
-      assert Jason.decode!(resp.body)["error"] == "invalid_grant"
+      assert JSON.decode!(resp.body)["error"] == "invalid_grant"
     end
 
     test "unsupported grant type → 400 unsupported_grant_type" do
@@ -149,11 +149,11 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           method: "POST",
           path: "/oauth/token",
           headers: [{"content-type", "application/json"}],
-          body: Jason.encode!(%{"grant_type" => "password"})
+          body: JSON.encode!(%{"grant_type" => "password"})
         })
 
       assert resp.status == 400
-      assert Jason.decode!(resp.body)["error"] == "unsupported_grant_type"
+      assert JSON.decode!(resp.body)["error"] == "unsupported_grant_type"
     end
 
     test "form-encoded body is also accepted" do
@@ -190,7 +190,7 @@ defmodule SukhiApi.Capabilities.OAuthTest do
           method: "POST",
           path: "/oauth/revoke",
           headers: [{"content-type", "application/json"}],
-          body: Jason.encode!(%{"client_id" => "c", "client_secret" => "s", "token" => "t"})
+          body: JSON.encode!(%{"client_id" => "c", "client_secret" => "s", "token" => "t"})
         })
 
       assert resp.status == 200

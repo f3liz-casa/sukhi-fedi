@@ -219,7 +219,7 @@ defmodule SukhiApi.Router do
   defp json(status, body_map) do
     %{
       status: status,
-      body: Jason.encode!(body_map),
+      body: JSON.encode!(body_map),
       headers: [{"content-type", "application/json"}]
     }
   end

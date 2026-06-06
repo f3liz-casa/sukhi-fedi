@@ -7,7 +7,7 @@ defmodule SukhiFedi.Web.ActorController do
 
     case SukhiFedi.Accounts.by_local_username(username) do
       nil ->
-        send_resp(conn, 404, Jason.encode!(%{error: "not found"}))
+        send_resp(conn, 404, JSON.encode!(%{error: "not found"}))
 
       account ->
         # Use the single source of truth so icon / image / endpoints /
@@ -18,7 +18,7 @@ defmodule SukhiFedi.Web.ActorController do
 
         conn
         |> put_resp_content_type("application/activity+json")
-        |> send_resp(200, Jason.encode!(actor))
+        |> send_resp(200, JSON.encode!(actor))
     end
   end
 end

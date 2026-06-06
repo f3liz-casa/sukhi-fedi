@@ -112,7 +112,7 @@ defmodule SukhiApi.Capabilities.MastodonMediaTest do
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
 
-      json = Jason.decode!(resp.body)
+      json = JSON.decode!(resp.body)
       assert json["id"] == "42"
       assert json["type"] == "image"
       assert json["url"] =~ "uploads/"
@@ -219,7 +219,7 @@ defmodule SukhiApi.Capabilities.MastodonMediaTest do
       {:ok, resp} = Router.handle(req)
 
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["id"] == "9"
+      assert JSON.decode!(resp.body)["id"] == "9"
     end
 
     test "non-owner → 403" do
@@ -252,12 +252,12 @@ defmodule SukhiApi.Capabilities.MastodonMediaTest do
       req =
         authed("PUT", "/api/v1/media/7", ["write:media"], %{
           headers: [{"authorization", "Bearer t"}, {"content-type", "application/json"}],
-          body: Jason.encode!(%{"description" => "updated"})
+          body: JSON.encode!(%{"description" => "updated"})
         })
 
       {:ok, resp} = Router.handle(req)
       assert resp.status == 200
-      assert Jason.decode!(resp.body)["description"] == "updated"
+      assert JSON.decode!(resp.body)["description"] == "updated"
     end
 
     test "already_attached → 422" do
@@ -268,7 +268,7 @@ defmodule SukhiApi.Capabilities.MastodonMediaTest do
       req =
         authed("PUT", "/api/v1/media/7", ["write:media"], %{
           headers: [{"authorization", "Bearer t"}, {"content-type", "application/json"}],
-          body: Jason.encode!(%{"description" => "x"})
+          body: JSON.encode!(%{"description" => "x"})
         })
 
       {:ok, resp} = Router.handle(req)

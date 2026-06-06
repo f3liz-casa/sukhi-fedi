@@ -34,13 +34,6 @@ defmodule SukhiFedi.Addons.Media do
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.Media
 
-  @bucket System.get_env("S3_BUCKET") || "sukhi-media"
-  @region System.get_env("S3_REGION") || "auto"
-  @endpoint System.get_env("S3_ENDPOINT")
-  @access_key System.get_env("S3_ACCESS_KEY")
-  @secret_key System.get_env("S3_SECRET_KEY")
-  @public_url System.get_env("S3_PUBLIC_URL")
-
   @max_inline_bytes 8 * 1024 * 1024
 
   # ── server-side upload ───────────────────────────────────────────────────
@@ -233,40 +226,55 @@ defmodule SukhiFedi.Addons.Media do
     |> Repo.all()
   end
 
+  # S3 credentials are read at runtime (not as module attributes) so a
+  # release built without S3_* env still picks them up once the env is
+  # set in prod — module attributes would freeze the compile-time nil
+  # into the release.
+  defp s3_endpoint, do: System.get_env("S3_ENDPOINT")
+  defp s3_access_key, do: System.get_env("S3_ACCESS_KEY")
+  defp s3_secret_key, do: System.get_env("S3_SECRET_KEY")
+  defp s3_region, do: System.get_env("S3_REGION") || "auto"
+  defp s3_bucket_name, do: System.get_env("S3_BUCKET") || "sukhi-media"
+  defp s3_public_url, do: System.get_env("S3_PUBLIC_URL")
+
   defp presigned_put_url(key) do
-    if @endpoint && @access_key && @secret_key do
+    endpoint = s3_endpoint()
+    access_key = s3_access_key()
+    secret_key = s3_secret_key()
+
+    if endpoint && access_key && secret_key do
       timestamp = DateTime.utc_now() |> DateTime.to_iso8601(:basic)
       date = String.slice(timestamp, 0, 8)
 
-      url = "#{@endpoint}/#{@bucket}/#{key}"
+      url = "#{endpoint}/#{s3_bucket_name()}/#{key}"
 
       query =
         "X-Amz-Algorithm=AWS4-HMAC-SHA256" <>
-          "&X-Amz-Credential=#{@access_key}%2F#{date}%2F#{@region}%2Fs3%2Faws4_request" <>
+          "&X-Amz-Credential=#{access_key}%2F#{date}%2F#{s3_region()}%2Fs3%2Faws4_request" <>
           "&X-Amz-Date=#{timestamp}" <>
           "&X-Amz-Expires=900" <>
           "&X-Amz-SignedHeaders=host"
 
-      signature = sign_request("PUT", key, query, timestamp, date)
+      signature = sign_request("PUT", key, query, timestamp, date, endpoint, secret_key)
       "#{url}?#{query}&X-Amz-Signature=#{signature}"
     else
       "/uploads/#{key}"
     end
   end
 
-  defp sign_request(method, key, query, timestamp, date) do
-    host = URI.parse(@endpoint).host
+  defp sign_request(method, key, query, timestamp, date, endpoint, secret_key) do
+    host = URI.parse(endpoint).host
 
     canonical_request =
-      "#{method}\n/#{@bucket}/#{key}\n#{query}\nhost:#{host}\n\nhost\nUNSIGNED-PAYLOAD"
+      "#{method}\n/#{s3_bucket_name()}/#{key}\n#{query}\nhost:#{host}\n\nhost\nUNSIGNED-PAYLOAD"
 
     string_to_sign =
-      "AWS4-HMAC-SHA256\n#{timestamp}\n#{date}/#{@region}/s3/aws4_request\n" <>
+      "AWS4-HMAC-SHA256\n#{timestamp}\n#{date}/#{s3_region()}/s3/aws4_request\n" <>
         (:crypto.hash(:sha256, canonical_request) |> Base.encode16(case: :lower))
 
     signing_key =
-      hmac("AWS4#{@secret_key}", date)
-      |> hmac(@region)
+      hmac("AWS4#{secret_key}", date)
+      |> hmac(s3_region())
       |> hmac("s3")
       |> hmac("aws4_request")
 
@@ -276,10 +284,10 @@ defmodule SukhiFedi.Addons.Media do
   defp hmac(key, data), do: :crypto.mac(:hmac, :sha256, key, data)
 
   defp public_url(key) do
-    if @public_url do
-      "#{@public_url}/#{key}"
+    if base = s3_public_url() do
+      "#{base}/#{key}"
     else
-      "#{@endpoint}/#{@bucket}/#{key}"
+      "#{s3_endpoint()}/#{s3_bucket_name()}/#{key}"
     end
   end
 

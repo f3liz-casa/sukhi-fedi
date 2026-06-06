@@ -63,7 +63,7 @@ defmodule SukhiApi.Capabilities.OAuthAppsTest do
         path: "/api/v1/apps",
         headers: [{"content-type", "application/json"}],
         body:
-          Jason.encode!(%{
+          JSON.encode!(%{
             "client_name" => "smoke",
             "redirect_uris" => "urn:ietf:wg:oauth:2.0:oob",
             "scopes" => "read"
@@ -72,7 +72,7 @@ defmodule SukhiApi.Capabilities.OAuthAppsTest do
 
     assert resp.status == 200
 
-    body = Jason.decode!(resp.body)
+    body = JSON.decode!(resp.body)
     assert body["id"] == "7"
     assert body["name"] == "smoke"
     assert body["client_id"] == "cid_xyz"
@@ -90,11 +90,11 @@ defmodule SukhiApi.Capabilities.OAuthAppsTest do
         method: "POST",
         path: "/api/v1/apps",
         headers: [{"content-type", "application/json"}],
-        body: Jason.encode!(%{})
+        body: JSON.encode!(%{})
       })
 
     assert resp.status == 422
-    assert Jason.decode!(resp.body)["error"] == "validation_failed"
+    assert JSON.decode!(resp.body)["error"] == "validation_failed"
   end
 
   test "POST /api/v1/apps with bad JSON → 400" do
@@ -107,7 +107,7 @@ defmodule SukhiApi.Capabilities.OAuthAppsTest do
       })
 
     assert resp.status == 400
-    assert Jason.decode!(resp.body)["error"] == "invalid_json"
+    assert JSON.decode!(resp.body)["error"] == "invalid_json"
   end
 
   test "POST /api/v1/apps with gateway down → 503" do
@@ -118,7 +118,7 @@ defmodule SukhiApi.Capabilities.OAuthAppsTest do
         method: "POST",
         path: "/api/v1/apps",
         headers: [{"content-type", "application/json"}],
-        body: Jason.encode!(%{"client_name" => "x", "redirect_uris" => "y"})
+        body: JSON.encode!(%{"client_name" => "x", "redirect_uris" => "y"})
       })
 
     assert resp.status == 503

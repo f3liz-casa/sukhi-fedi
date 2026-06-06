@@ -289,7 +289,7 @@ defmodule SukhiApi.Capabilities.Admin do
 
     cond do
       String.contains?(ct, "application/json") ->
-        case Jason.decode(raw) do
+        case JSON.decode(raw) do
           {:ok, %{} = m} -> m
           _ -> %{}
         end
@@ -357,7 +357,7 @@ defmodule SukhiApi.Capabilities.Admin do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

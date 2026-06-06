@@ -40,11 +40,11 @@ defmodule SukhiDelivery.Delivery.FedifyClient do
   end
 
   defp request(subject, payload) do
-    body = Jason.encode!(payload)
+    body = JSON.encode!(payload)
 
     case Gnat.request(:gnat, subject, body, receive_timeout: @timeout) do
       {:ok, %{body: reply}} ->
-        case Jason.decode(reply) do
+        case JSON.decode(reply) do
           {:ok, %{"ok" => true, "data" => data}} -> {:ok, data}
           {:ok, %{"ok" => false, "error" => error}} -> {:error, error}
           {:ok, other} -> {:error, {:invalid_envelope, other}}

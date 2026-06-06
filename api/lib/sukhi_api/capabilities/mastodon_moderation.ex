@@ -195,7 +195,7 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
       nil -> %{}
       "" -> %{}
       body when is_binary(body) ->
-        case Jason.decode(body) do
+        case JSON.decode(body) do
           {:ok, m} when is_map(m) -> m
           _ -> URI.decode_query(body)
         end
@@ -232,7 +232,7 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

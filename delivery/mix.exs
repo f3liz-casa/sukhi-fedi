@@ -7,7 +7,7 @@ defmodule SukhiDelivery.MixProject do
     [
       app: :sukhi_delivery,
       version: "0.1.0",
-      elixir: "~> 1.16",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -26,9 +26,6 @@ defmodule SukhiDelivery.MixProject do
 
   defp deps do
     [
-      # JSON
-      {:jason, "~> 1.4"},
-
       # Database (reads outbox, writes delivery_receipts)
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.18"},

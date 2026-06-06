@@ -102,7 +102,7 @@ defmodule SukhiFedi.Web.PluginPlug do
         # Re-encode as JSON and normalise the Content-Type header so that
         # api-node capabilities always see consistent application/json here.
         conn = Plug.Conn.put_req_header(conn, "content-type", "application/json")
-        {:ok, request_map(conn, Jason.encode!(m)), conn}
+        {:ok, request_map(conn, JSON.encode!(m)), conn}
 
       other ->
         {:ok, request_map(conn, to_string(other)), conn}
@@ -178,7 +178,7 @@ defmodule SukhiFedi.Web.PluginPlug do
   defp send_err(conn, status, code) do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(%{error: code}))
+    |> send_resp(status, JSON.encode!(%{error: code}))
     |> halt()
   end
 end

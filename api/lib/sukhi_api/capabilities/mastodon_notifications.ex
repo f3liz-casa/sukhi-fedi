@@ -48,7 +48,7 @@ defmodule SukhiApi.Capabilities.MastodonNotifications do
                 link -> [link | headers]
               end
 
-            {:ok, %{status: 200, body: Jason.encode!(body), headers: headers}}
+            {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
 
           {:error, reason} ->
             rpc_error(reason)
@@ -124,7 +124,7 @@ defmodule SukhiApi.Capabilities.MastodonNotifications do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-FROM elixir:1.16-alpine AS build
+FROM elixir:1.20-alpine AS build
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY lib lib
 
 RUN MIX_ENV=prod mix release
 
-FROM elixir:1.16-alpine
+FROM elixir:1.20-alpine
 
 WORKDIR /app
 

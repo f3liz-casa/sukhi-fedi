@@ -47,7 +47,7 @@ defmodule SukhiApi.Capabilities.MastodonEmojis do
     {:ok,
      %{
        status: status,
-       body: Jason.encode!(body),
+       body: JSON.encode!(body),
        headers: [{"content-type", "application/json"}]
      }}
   end
