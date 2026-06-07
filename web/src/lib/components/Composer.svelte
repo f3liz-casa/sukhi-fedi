@@ -9,6 +9,7 @@
   } from '$lib/api';
   import { clearToken } from '$lib/auth';
   import { goto } from '$app/navigation';
+  import { t } from '$lib/i18n';
 
   let {
     replyTo = null,
@@ -41,12 +42,12 @@
   let error = $state<string | null>(null);
   let fileInput: HTMLInputElement | undefined = $state();
 
-  const visLabels: Record<Visibility, string> = {
-    public: 'みんなに',
-    unlisted: 'みんなに（タイムラインに載せず）',
-    private: 'フォロワーだけに',
-    direct: '指名した人だけに'
-  };
+  let visLabels: Record<Visibility, string> = $derived({
+    public: $t('compose.visPublic'),
+    unlisted: $t('compose.visUnlisted'),
+    private: $t('compose.visPrivate'),
+    direct: $t('compose.visDirect')
+  });
 
   let canPost = $derived(
     !posting &&
@@ -66,7 +67,7 @@
         media = [...media, m];
       }
     } catch (e) {
-      error = handleErr(e, '画像が、うまく上がりませんでした。');
+      error = handleErr(e, $t('compose.uploadFailed'));
     } finally {
       uploading = false;
       input.value = '';
@@ -98,7 +99,7 @@
       media = [];
       onposted?.(s);
     } catch (e) {
-      error = handleErr(e, 'うまく送れませんでした。もう一度、ためしますか?');
+      error = handleErr(e, $t('compose.postFailed'));
     } finally {
       posting = false;
     }
@@ -109,7 +110,7 @@
     if (msg === 'unauthorized') {
       clearToken();
       void goto('/');
-      return 'もう一度、入りなおしてください。';
+      return $t('compose.reauth');
     }
     return fallback;
   }
@@ -124,29 +125,29 @@
 >
   {#if replyTo}
     <p class="composer-reply">
-      <span>@{replyTo.account.acct} へ、返信</span>
-      <button type="button" class="chip" onclick={() => oncancel?.()}>やめる</button>
+      <span>{$t('compose.replyTo', { acct: replyTo.account.acct })}</span>
+      <button type="button" class="chip" onclick={() => oncancel?.()}>{$t('compose.cancel')}</button>
     </p>
   {/if}
 
   {#if useSpoiler}
     <label class="stack-tight">
-      <span>先に見せる一言（折りたたみの表）</span>
+      <span>{$t('compose.spoilerLabel')}</span>
       <input
         type="text"
         bind:value={spoiler}
-        placeholder="例: ねむい話"
+        placeholder={$t('compose.spoilerPlaceholder')}
         maxlength="80"
       />
     </label>
   {/if}
 
   <label class="stack-tight">
-    <span class="visually-hidden">本文</span>
+    <span class="visually-hidden">{$t('compose.bodyLabel')}</span>
     <textarea
       bind:value={text}
       rows={replyTo ? 3 : 4}
-      placeholder={replyTo ? '返事を書く…' : 'いま、思っていること…'}
+      placeholder={replyTo ? $t('compose.placeholderReply') : $t('compose.placeholderNew')}
     ></textarea>
   </label>
 
@@ -158,7 +159,7 @@
             <img src={m.preview_url || m.url} alt={m.description ?? ''} />
           {/if}
           <button type="button" class="chip" onclick={() => removeMedia(m.id)}>
-            はずす
+            {$t('compose.removeMedia')}
           </button>
         </li>
       {/each}
@@ -167,7 +168,7 @@
 
   <div class="composer-row">
     <label class="chip">
-      画像を足す
+      {$t('compose.addImage')}
       <input
         bind:this={fileInput}
         type="file"
@@ -180,16 +181,16 @@
 
     <label class="stack-tight">
       <input type="checkbox" bind:checked={useSpoiler} />
-      <span>折りたたむ</span>
+      <span>{$t('compose.fold')}</span>
     </label>
 
     <label class="stack-tight">
       <input type="checkbox" bind:checked={sensitive} />
-      <span>見せ注意</span>
+      <span>{$t('compose.sensitive')}</span>
     </label>
 
     <label class="stack-tight">
-      <span class="visually-hidden">公開の範囲</span>
+      <span class="visually-hidden">{$t('compose.visLabel')}</span>
       <select bind:value={visibility}>
         {#each Object.entries(visLabels) as [v, label] (v)}
           <option value={v}>{label}</option>
@@ -198,7 +199,7 @@
     </label>
 
     <button type="submit" disabled={!canPost}>
-      {posting ? '送っています…' : uploading ? '上がっています…' : '送る'}
+      {posting ? $t('common.sending') : uploading ? $t('compose.uploading') : $t('compose.submit')}
     </button>
   </div>
 

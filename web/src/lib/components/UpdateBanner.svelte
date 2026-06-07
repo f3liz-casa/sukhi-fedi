@@ -17,6 +17,7 @@
   // SvelteKit はリンクを踏んだ瞬間に invalidateAll してくれるので、
   // バナーを無視しても通常操作で必ず追いつく(壊れる前に)。
   import { updated } from '$app/stores';
+  import { t } from '$lib/i18n';
 
   function reload() {
     window.location.reload();
@@ -38,10 +39,10 @@
 
 {#if show}
   <aside class="update-banner" role="status" aria-live="polite">
-    <p>新しい版が、来ました。</p>
+    <p>{$t('update.available')}</p>
     <div class="actions">
-      <button type="button" onclick={reload}>読み込みなおす</button>
-      <button type="button" class="secondary" onclick={dismiss}>あとで</button>
+      <button type="button" onclick={reload}>{$t('update.reload')}</button>
+      <button type="button" class="secondary" onclick={dismiss}>{$t('update.later')}</button>
     </div>
   </aside>
 {/if}

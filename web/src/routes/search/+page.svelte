@@ -12,6 +12,7 @@
   } from '$lib/api';
   import { clearToken, isLoggedIn } from '$lib/auth';
   import AccountRow from '$lib/components/AccountRow.svelte';
+  import { t } from '$lib/i18n';
 
   let q = $state('');
   let pending = $state('');
@@ -74,8 +75,8 @@
         return;
       }
       error = looksRemote(q)
-        ? '遠くの人を、見つけられませんでした。サーバの綴りを、確かめてみてください。'
-        : 'うまく探せませんでした。';
+        ? $t('search.errorRemote')
+        : $t('search.errorLocal');
       result = { accounts: [], hashtags: [], statuses: [] };
     } finally {
       loading = false;
@@ -94,12 +95,9 @@
   }
 </script>
 
-<header
-  class="timeline"
-  style="display: flex; justify-content: space-between; align-items: baseline;"
->
-  <h1 style="font-size: var(--text-lg);">さがす</h1>
-  <a class="chip" href="/timeline">戻る</a>
+<header class="timeline page-head">
+  <h1>{$t('search.title')}</h1>
+  <a class="chip" href="/timeline">{$t('common.back')}</a>
 </header>
 
 <form
@@ -110,18 +108,18 @@
   }}
 >
   <label class="stack-tight">
-    <span>名前、ID、または <code>@user@host</code> / <code>#tag</code></span>
+    <span>{$t('search.labelPre')}<code>@user@host</code> / <code>#tag</code></span>
     <input
       type="text"
       bind:value={pending}
-      placeholder="例: alice / @alice@mastodon.social / #しずか"
+      placeholder={$t('search.placeholder')}
       autocapitalize="none"
       autocorrect="off"
       spellcheck="false"
     />
   </label>
   <button type="submit" disabled={loading || !pending.trim()}>
-    {loading ? (resolving ? '遠くまで、たずねています…' : '探しています…') : 'さがす'}
+    {loading ? (resolving ? $t('search.searchingRemote') : $t('search.searching')) : $t('search.submit')}
   </button>
 </form>
 
@@ -132,16 +130,16 @@
 {#if searched && !loading && !error}
   {#if result.accounts.length === 0 && result.hashtags.length === 0}
     <p class="prose-small">
-      「{q}」は、見つかりませんでした。
+      {$t('search.notFound', { q })}
       {#if !looksRemote(q)}
-        遠くの人なら、<code>@user@host</code> の形で書いてみてください。
+        {$t('search.remoteHintPre')}<code>@user@host</code>{$t('search.remoteHintPost')}
       {/if}
     </p>
   {:else}
     {#if result.accounts.length > 0}
       <section class="account-list">
         <h2 class="muted" style="font-size: var(--text-sm); margin: var(--space-4) 0 var(--space-2);">
-          ひと
+          {$t('search.sectionPeople')}
         </h2>
         {#each result.accounts as a (a.id)}
           <AccountRow account={a} relationship={relations.get(a.id) ?? null} />
@@ -155,7 +153,7 @@
         style="margin-top: var(--space-6);"
       >
         <h2 class="muted" style="font-size: var(--text-sm); margin: var(--space-4) 0 var(--space-2);">
-          タグ
+          {$t('search.sectionTags')}
         </h2>
         {#each result.hashtags as t (t.name)}
           <article class="account-row">

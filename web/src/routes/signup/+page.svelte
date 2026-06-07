@@ -5,6 +5,8 @@
     saveSignupDraft,
     loadSignupDraft
   } from '$lib/auth';
+  import { t } from '$lib/i18n';
+  import LangSwitch from '$lib/components/LangSwitch.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -20,7 +22,7 @@
       username = d.username ?? '';
       invite_code = d.invite_code ?? '';
       if (!d.password) {
-        error = '合言葉だけ、もう一度入れてください。';
+        error = $t('signup.pwAgain');
       }
     }
   });
@@ -37,8 +39,8 @@
 </script>
 
 <section class="hero">
-  <h1>はじめる</h1>
-  <p class="tagline">招待コードと、なまえと、あいことばを、おしえてください。</p>
+  <h1>{$t('signup.title')}</h1>
+  <p class="tagline">{$t('signup.tagline')}</p>
 </section>
 
 {#if error}
@@ -53,20 +55,20 @@
   }}
 >
   <label class="stack-tight">
-    <span>ID</span>
+    <span>{$t('signup.id')}</span>
     <input
       type="text"
       bind:value={username}
       autocomplete="username"
       pattern="[a-z0-9_]{'{1,30}'}"
-      title="小文字英字、数字、アンダースコアだけ。30字まで。"
+      title={$t('signup.idTitle')}
       required
     />
-    <span class="help">小文字英字、数字、_（アンダースコア）。30字まで。例: <code>usagi_05</code></span>
+    <span class="help">{$t('signup.idHelpPre')}<code>usagi_05</code></span>
   </label>
 
   <label class="stack-tight">
-    <span>あいことば</span>
+    <span>{$t('signup.password')}</span>
     <input
       type="password"
       bind:value={password}
@@ -74,18 +76,22 @@
       minlength="8"
       required
     />
-    <span class="help">8字以上。</span>
+    <span class="help">{$t('signup.passwordHelp')}</span>
   </label>
 
   <label class="stack-tight">
-    <span>招待コード</span>
+    <span>{$t('signup.inviteCode')}</span>
     <input type="text" bind:value={invite_code} autocomplete="off" required />
   </label>
 
-  <button type="submit">作る</button>
+  <button type="submit">{$t('signup.create')}</button>
 </form>
 
 <p class="prose-small">
-  すでに住んでいる人は、<a href="/login" data-sveltekit-reload>こちらから入れます</a>。
+  {$t('signup.haveAccountPre')}<a href="/login">{$t('signup.haveAccountLink')}</a>{$t('signup.haveAccountPost')}
 </p>
-<p class="prose-small"><a href="/">表のページに戻る</a></p>
+<p class="prose-small"><a href="/">{$t('signup.backToFront')}</a></p>
+
+<section class="section" style="text-align: center; margin-top: var(--space-5);">
+  <LangSwitch />
+</section>

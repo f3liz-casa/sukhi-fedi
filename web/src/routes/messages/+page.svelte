@@ -10,6 +10,7 @@
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
+  import { t } from '$lib/i18n';
 
   let items = $state<Conversation[]>([]);
   let nextMaxId = $state<string | null>(null);
@@ -46,7 +47,7 @@
         goto('/');
         return;
       }
-      error = 'うまく届きませんでした。もう一度、ためしますか?';
+      error = $t('common.deliverFailedRetry');
     } finally {
       loading = false;
       initial = false;
@@ -70,16 +71,16 @@
 
   function withLabel(c: Conversation): string {
     const names = c.accounts.map((a) => a.display_name || a.username);
-    if (names.length === 0) return '自分';
-    return names.join('、');
+    if (names.length === 0) return $t('messages.self');
+    return names.join($t('messages.nameSep'));
   }
 </script>
 
-<header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);">
-  <h1 style="font-size: var(--text-lg);">メッセージ</h1>
-  <span style="display: flex; gap: var(--space-2);">
-    <a class="chip" href="/timeline">タイムライン</a>
-    <a class="chip" href="/search">さがす</a>
+<header class="timeline page-head">
+  <h1>{$t('messages.title')}</h1>
+  <span class="page-nav">
+    <a class="chip" href="/timeline">{$t('common.timeline')}</a>
+    <a class="chip" href="/search">{$t('nav.search')}</a>
   </span>
 </header>
 
@@ -87,10 +88,10 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {:else if items.length === 0 && !loading}
     <p class="prose-small">
-      まだ、だれとも、やりとりはありません。指名した相手にだけ届く投稿が、ここに集まります。
+      {$t('messages.empty')}
     </p>
   {/if}
 
@@ -110,7 +111,7 @@
           <span class="display-name">{@html renderEmojis(phrase(withLabel(c)), c.accounts[0]?.emojis)}</span>
         </span>
         {#if c.unread}
-          <span class="unread-dot" aria-label="未読"></span>
+          <span class="unread-dot" aria-label={$t('messages.unread')}></span>
         {/if}
       </header>
 
@@ -118,22 +119,22 @@
         <StatusCard status={c.last_status} />
       {/if}
 
-      <button class="chip open-thread" onclick={() => open(c)}>スレッドをひらく</button>
+      <button class="chip open-thread" onclick={() => open(c)}>{$t('messages.openThread')}</button>
     </article>
   {/each}
 
   {#if !initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {/if}
 
   {#if nextMaxId && !loading}
-    <button class="load-more" onclick={() => load(false)}>もっと読む</button>
+    <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>
 
 <style>
   .conversation {
-    border-top: 1px solid var(--border, #e5e5e5);
+    border-top: 1px solid var(--color-border);
     padding-top: var(--space-3);
   }
   .conversation-with {
@@ -148,15 +149,11 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .avatar-sm {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
   .unread-dot {
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
-    background: var(--accent, #4a7);
+    background: var(--color-build);
     flex: none;
   }
   .open-thread {

@@ -22,6 +22,7 @@
   import Twemoji from '$lib/components/Twemoji.svelte';
   import { phrase } from '$lib/phrase';
   import { renderEmojis } from '$lib/emoji';
+  import { t } from '$lib/i18n';
 
   let account = $state<Account | null>(null);
   let me = $state<Account | null>(null);
@@ -135,9 +136,9 @@
         return;
       }
       if (msg === 'not_found') {
-        error = `「@${acct}」さんは、見つかりませんでした。`;
+        error = $t('common.acctNotFound', { acct });
       } else {
-        error = 'うまく届きませんでした。';
+        error = $t('common.deliverFailed');
       }
     } finally {
       loading = false;
@@ -162,9 +163,9 @@
 
 {#if error}
   <p class="error">{error}</p>
-  <p><a class="chip" href="/timeline">タイムラインへ戻る</a></p>
+  <p><a class="chip" href="/timeline">{$t('common.backToTimeline')}</a></p>
 {:else if initial && loading}
-  <p class="loading">読んでいます…</p>
+  <p class="loading">{$t('common.loading')}</p>
 {:else if account}
   <header class="profile-head">
     {#if account.header}
@@ -183,7 +184,7 @@
         <p class="muted">@{account.acct}</p>
       </div>
       {#if isSelf}
-        <a class="chip" href="/settings">編集</a>
+        <a class="chip" href="/settings">{$t('profile.edit')}</a>
       {:else}
         <FollowButton accountId={account.id} relationship={rel} onchange={(r) => (rel = r)} />
         {#if rel}
@@ -198,7 +199,7 @@
             {#if menuOpen}
               <div class="mod-menu-pop" role="menu">
                 <button type="button" role="menuitem" onclick={toggleMute} disabled={modPending}>
-                  {rel.muting ? 'ミュートを解く' : 'ミュートする'}
+                  {rel.muting ? $t('profile.unmute') : $t('profile.mute')}
                 </button>
                 <button
                   type="button"
@@ -207,7 +208,7 @@
                   onclick={toggleBlock}
                   disabled={modPending}
                 >
-                  {rel.blocking ? 'ブロックを解く' : 'ブロックする'}
+                  {rel.blocking ? $t('profile.unblock') : $t('profile.block')}
                 </button>
               </div>
             {/if}
@@ -222,12 +223,12 @@
 
     <p class="profile-counts">
       <a href={`/@${account.acct}/following`}>
-        <strong>{account.following_count ?? 0}</strong> フォロー中
+        <strong>{account.following_count ?? 0}</strong> {$t('profile.followingSuffix')}
       </a>
       <a href={`/@${account.acct}/followers`}>
-        <strong>{account.followers_count ?? 0}</strong> フォロワー
+        <strong>{account.followers_count ?? 0}</strong> {$t('profile.followersSuffix')}
       </a>
-      <span><strong>{account.statuses_count ?? 0}</strong> 投稿</span>
+      <span><strong>{account.statuses_count ?? 0}</strong> {$t('profile.postsSuffix')}</span>
     </p>
   </header>
 
@@ -237,7 +238,7 @@
 
   {#if pinnedItems.length > 0}
     <section class="timeline pinned">
-      <p class="pinned-label"><Twemoji emoji="📌" /> ピン留め</p>
+      <p class="pinned-label"><Twemoji emoji="📌" /> {$t('profile.pinned')}</p>
       {#each pinnedItems as s (s.id)}
         <StatusCard
           status={s}
@@ -252,7 +253,7 @@
 
   <section class="timeline">
     {#if items.length === 0 && !loading}
-      <p class="prose-small">まだ、投稿は、ありません。</p>
+      <p class="prose-small">{$t('profile.empty')}</p>
     {/if}
 
     {#each items as s (s.id)}
@@ -265,11 +266,11 @@
     {/each}
 
     {#if !initial && loading}
-      <p class="loading">読んでいます…</p>
+      <p class="loading">{$t('common.loading')}</p>
     {/if}
 
     {#if nextMaxId && !loading}
-      <button class="load-more" onclick={loadMore}>もっと読む</button>
+      <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
     {/if}
   </section>
 {/if}
@@ -290,8 +291,7 @@
     padding: 0.25rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    background: var(--color-bg, #fff);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    background: var(--color-surface);
   }
   .mod-menu-pop button {
     text-align: left;
@@ -302,13 +302,13 @@
     cursor: pointer;
   }
   .mod-menu-pop button:hover:not(:disabled) {
-    background: rgba(127, 127, 127, 0.12);
+    background: var(--fill-hover);
   }
   .mod-menu-pop button.danger {
     color: #dc2626;
   }
   .pinned-label {
     font-size: var(--text-sm);
-    color: var(--color-text-muted, #888);
+    color: var(--color-text-muted);
   }
 </style>

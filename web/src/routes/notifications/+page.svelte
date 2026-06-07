@@ -11,6 +11,7 @@
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
+  import { t } from '$lib/i18n';
 
   let items = $state<Notification[]>([]);
   let nextMaxId = $state<string | null>(null);
@@ -47,7 +48,7 @@
         goto('/');
         return;
       }
-      error = 'うまく届きませんでした。もう一度、ためしますか?';
+      error = $t('common.deliverFailedRetry');
     } finally {
       loading = false;
       initial = false;
@@ -66,7 +67,7 @@
 
   async function clearAll() {
     if (items.length === 0) return;
-    if (!confirm('通知を、すべて消しますか？')) return;
+    if (!confirm($t('notif.confirmClear'))) return;
     try {
       await clearNotifications();
       items = [];
@@ -79,38 +80,35 @@
   function summary(n: Notification): string {
     switch (n.type) {
       case 'favourite':
-        return 'がお気に入りにしました';
+        return $t('notif.favourited');
       case 'reblog':
-        return 'がブーストしました';
+        return $t('notif.reblogged');
       case 'follow':
-        return 'にフォローされました';
+        return $t('notif.followed');
       case 'follow_request':
-        return 'からフォロー申請がきました';
+        return $t('notif.followRequest');
       case 'mention':
-        return 'から返信がきました';
+        return $t('notif.mentioned');
       case 'status':
-        return 'が投稿しました';
+        return $t('notif.posted');
       case 'poll':
-        return 'の投票が締め切られました';
+        return $t('notif.pollEnded');
       case 'update':
-        return 'が投稿を編集しました';
+        return $t('notif.updated');
       case 'reaction':
-        return 'がリアクションしました';
+        return $t('notif.reacted');
       default:
-        return 'からの通知';
+        return $t('notif.generic');
     }
   }
 </script>
 
-<header
-  class="timeline"
-  style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);"
->
-  <h1 style="font-size: var(--text-lg);">通知</h1>
-  <span style="display: flex; gap: var(--space-2);">
-    <a class="chip" href="/timeline">タイムライン</a>
+<header class="timeline page-head">
+  <h1>{$t('notif.title')}</h1>
+  <span class="page-nav">
+    <a class="chip" href="/timeline">{$t('common.timeline')}</a>
     {#if items.length > 0}
-      <button class="chip" onclick={clearAll}>すべて消す</button>
+      <button class="chip" onclick={clearAll}>{$t('notif.clearAll')}</button>
     {/if}
   </span>
 </header>
@@ -119,9 +117,9 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {:else if items.length === 0 && !loading}
-    <p class="prose-small">まだ、通知は、ありません。</p>
+    <p class="prose-small">{$t('notif.empty')}</p>
   {/if}
 
   {#each items as n (n.id)}
@@ -141,7 +139,7 @@
           >
         </a>
         <span class="notif-summary">{summary(n)}</span>
-        <button class="chip notif-dismiss" onclick={() => dismiss(n)} aria-label="この通知を消す">
+        <button class="chip notif-dismiss" onclick={() => dismiss(n)} aria-label={$t('notif.dismiss')}>
           ×
         </button>
       </header>
@@ -153,17 +151,17 @@
   {/each}
 
   {#if !initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {/if}
 
   {#if nextMaxId && !loading}
-    <button class="load-more" onclick={() => load(false)}>もっと読む</button>
+    <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>
 
 <style>
   .notif {
-    border-top: 1px solid var(--border, #e5e5e5);
+    border-top: 1px solid var(--color-border);
     padding-top: var(--space-3);
   }
   .notif-head {
@@ -179,12 +177,8 @@
     text-decoration: none;
     color: inherit;
   }
-  .avatar-sm {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
   .notif-summary {
-    color: var(--color-text-muted, #666);
+    color: var(--color-text-muted);
     font-size: var(--text-sm);
   }
   .notif-dismiss {

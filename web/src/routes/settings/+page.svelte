@@ -12,6 +12,8 @@
   } from '$lib/api';
   import { clearToken, isLoggedIn, loadToken } from '$lib/auth';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
+  import LangSwitch from '$lib/components/LangSwitch.svelte';
+  import { t } from '$lib/i18n';
 
   let me = $state<Account | null>(null);
   // admin の「管理ページへ」ボタンが /admin/login に POST する bearer。
@@ -80,7 +82,7 @@
         void goto('/');
         return;
       }
-      error = 'うまく読めませんでした。';
+      error = $t('common.readFailed');
     } finally {
       loading = false;
     }
@@ -136,7 +138,7 @@
         void goto('/');
         return;
       }
-      relError = 'うまく読めませんでした。';
+      relError = $t('common.readFailed');
     } finally {
       relLoading = false;
     }
@@ -184,20 +186,25 @@
         void goto('/');
         return;
       }
-      error = 'うまく保存できませんでした。';
+      error = $t('settings.saveFailed');
     } finally {
       saving = false;
     }
   }
 </script>
 
-<header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline;">
-  <h1 style="font-size: var(--text-lg);">設定</h1>
-  <a class="chip" href="/timeline">戻る</a>
+<header class="timeline page-head">
+  <h1>{$t('settings.title')}</h1>
+  <a class="chip" href="/timeline">{$t('common.back')}</a>
 </header>
 
+<section style="margin: var(--space-4) 0;">
+  <p class="muted" style="margin-bottom: var(--space-2);">{$t('settings.language')}</p>
+  <LangSwitch />
+</section>
+
 {#if loading}
-  <p class="loading">読んでいます…</p>
+  <p class="loading">{$t('common.loading')}</p>
 {:else if me}
   <form
     class="settings-form"
@@ -209,17 +216,17 @@
     <p class="muted">@{me.acct}</p>
 
     <label class="stack-tight">
-      <span>表示名</span>
+      <span>{$t('settings.displayName')}</span>
       <input type="text" bind:value={displayName} maxlength="30" />
     </label>
 
     <label class="stack-tight">
-      <span>自己紹介</span>
+      <span>{$t('settings.bio')}</span>
       <textarea bind:value={note} rows="4" maxlength="500"></textarea>
     </label>
 
     <label class="stack-tight">
-      <span>{avatarPreview ? '新しいアイコン（保存前）' : 'いまのアイコン'}</span>
+      <span>{avatarPreview ? $t('settings.avatarNew') : $t('settings.avatarNow')}</span>
       {#if avatarPreview}
         <img class="avatar avatar-lg" src={avatarPreview} alt="" />
       {:else if me.avatar}
@@ -229,7 +236,7 @@
     </label>
 
     <label class="stack-tight">
-      <span>{headerPreview ? '新しいヘッダ画像（保存前）' : 'いまのヘッダ画像'}</span>
+      <span>{headerPreview ? $t('settings.headerNew') : $t('settings.headerNow')}</span>
       {#if headerPreview}
         <img class="profile-header" src={headerPreview} alt="" />
       {:else if me.header}
@@ -240,15 +247,15 @@
 
     <label class="stack-tight">
       <input type="checkbox" bind:checked={locked} />
-      <span>フォローを、承認してから受ける（鍵）</span>
+      <span>{$t('settings.locked')}</span>
     </label>
 
     <div style="display: flex; gap: var(--space-3); align-items: center;">
       <button type="submit" disabled={saving}>
-        {saving ? '保存しています…' : '保存'}
+        {saving ? $t('settings.saving') : $t('settings.save')}
       </button>
       {#if saved}
-        <span class="muted">保存しました。</span>
+        <span class="muted">{$t('settings.saved')}</span>
       {/if}
     </div>
 
@@ -257,29 +264,33 @@
     {/if}
   </form>
 
+  <p class="prose-small" style="margin-top: var(--space-4);">
+    <a class="chip" href="/settings/password">{$t('settings.changePassword')}</a>
+  </p>
+
   <details class="rel-manage" style="margin-top: var(--space-5);" ontoggle={onRelToggle}>
-    <summary style="font-size: var(--text-md); cursor: pointer;">ブロック・ミュート</summary>
+    <summary style="font-size: var(--text-base); cursor: pointer;">{$t('settings.blockMute')}</summary>
 
     {#if relLoading}
-      <p class="loading">読んでいます…</p>
+      <p class="loading">{$t('common.loading')}</p>
     {:else if relError}
       <p class="error">{relError}</p>
     {:else if relLoaded}
-      <h2 style="font-size: var(--text-sm); margin-top: var(--space-3);">ブロック中</h2>
+      <h2 style="font-size: var(--text-sm); margin-top: var(--space-3);">{$t('settings.blocking')}</h2>
       {#if blocks.length === 0}
-        <p class="prose-small">いません。</p>
+        <p class="prose-small">{$t('settings.noneHere')}</p>
       {:else}
         {#each blocks as a (a.id)}
-          <AccountActionRow account={a} actionLabel="解除" onaction={doUnblock} />
+          <AccountActionRow account={a} actionLabel={$t('settings.release')} onaction={doUnblock} />
         {/each}
       {/if}
 
-      <h2 style="font-size: var(--text-sm); margin-top: var(--space-4);">ミュート中</h2>
+      <h2 style="font-size: var(--text-sm); margin-top: var(--space-4);">{$t('settings.muting')}</h2>
       {#if mutes.length === 0}
-        <p class="prose-small">いません。</p>
+        <p class="prose-small">{$t('settings.noneHere')}</p>
       {:else}
         {#each mutes as a (a.id)}
-          <AccountActionRow account={a} actionLabel="解除" onaction={doUnmute} />
+          <AccountActionRow account={a} actionLabel={$t('settings.release')} onaction={doUnmute} />
         {/each}
       {/if}
     {/if}
@@ -291,20 +302,20 @@
          通常のリンクではなく form なのは、/admin/login が token を
          body で受けて session cookie を立てて 302 する作りだから。 -->
     <section class="admin-entry" style="margin-top: var(--space-5);">
-      <h2 style="font-size: var(--text-md);">管理</h2>
-      <p class="muted">このインスタンスの管理ページに入れます。</p>
+      <h2 style="font-size: var(--text-base);">{$t('settings.admin')}</h2>
+      <p class="muted">{$t('settings.adminDesc')}</p>
       <form method="post" action="/admin/login">
         <input type="hidden" name="token" value={adminToken} />
-        <button type="submit" class="chip">管理ページへ</button>
+        <button type="submit" class="chip">{$t('settings.adminEnter')}</button>
       </form>
     </section>
   {/if}
 {/if}
 
 <footer class="muted" style="margin-top: var(--space-6); font-size: var(--text-sm);">
-  絵文字は <a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer">Twemoji</a>（<a
+  {$t('settings.emojiCreditPre')}<a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer">Twemoji</a>{$t('settings.emojiCreditParenOpen')}<a
     href="https://creativecommons.org/licenses/by/4.0/"
     target="_blank"
     rel="noopener noreferrer">CC-BY 4.0</a
-  >）。
+  >{$t('settings.emojiCreditParenClose')}
 </footer>

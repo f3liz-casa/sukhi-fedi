@@ -50,9 +50,12 @@ defmodule SukhiFedi.Web.Router do
   forward("/admin", to: SukhiFedi.Web.Admin.Router)
 
   # ── User-facing login (session_token cookie minter) ────────────────────
+  # The form lives in the SPA (`web/src/routes/login`); GET serves the
+  # shell, POST is the JSON endpoint that validates credentials and mints
+  # the session_token cookie `/oauth/authorize` consumes.
 
   get "/login" do
-    LoginController.show(conn)
+    serve_spa(conn)
   end
 
   post "/login" do
@@ -64,11 +67,11 @@ defmodule SukhiFedi.Web.Router do
   end
 
   # ── Password change (session_token cookie required) ────────────────────
-  # Server-rendered, same auth surface as /login. Distinct path from the
-  # SPA-owned `/settings`, so no route conflict.
+  # Form in the SPA (`web/src/routes/settings/password`), POST is JSON.
+  # Same cookie auth surface as /login (not the OAuth bearer).
 
   get "/settings/password" do
-    PasswordController.show(conn)
+    serve_spa(conn)
   end
 
   post "/settings/password" do

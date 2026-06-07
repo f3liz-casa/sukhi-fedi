@@ -1,4 +1,4 @@
-/* Base — framework-agnostic. Reset, element defaults, layout helpers. */
+/* Base — reset, element defaults, layout helpers. */
 
 *,
 *::before,
@@ -47,8 +47,8 @@ main {
 
 /* CJK line breaking.
  * Korean: break at word boundaries (어절), never mid-word.
- * Japanese: break only at the <wbr> points BudouX inserts at build time
- *   (see i18n/budoux.ts) — keep-all stops the browser breaking between kana.
+ * Japanese: break only at the <wbr> points BudouX inserts
+ *   (see lib/phrase.ts) — keep-all stops the browser breaking between kana.
  * overflow-wrap is the safety net for long unbreakable runs. */
 html[lang='ko'],
 html[lang='ja'] {

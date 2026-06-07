@@ -3,6 +3,8 @@
   import { isLoggedIn } from '$lib/auth';
   import { goto } from '$app/navigation';
   import LaneDoor from '$lib/components/LaneDoor.svelte';
+  import LangSwitch from '$lib/components/LangSwitch.svelte';
+  import { t } from '$lib/i18n';
 
   onMount(() => {
     if (isLoggedIn()) {
@@ -10,16 +12,15 @@
     }
   });
 
-  // 「入る」は /login (server-rendered, PoW なし) に直接飛ばす。
-  // ログイン form 送信後に /check?intent=login に redirect されて、
-  // そこで初めて Anubis の PoW が走る ─ ユーザが何もしないうちに
-  // 確認を要求しない作り。
+  // 「入る」は SPA の /login へ。資格情報を POST してセッションが立つと、
+  // /login ページが /check?intent=login へ送り、そこで初めて Anubis の
+  // PoW が走る ─ ユーザが何もしないうちに確認を要求しない作り。
 </script>
 
 <section class="hero">
-  <h1>ここは、しずかな Fediverse のお家です。</h1>
+  <h1>{$t('landing.heroTitle')}</h1>
   <p class="tagline">
-    すぐとなりに、ちょこんとすわって、人の話をきいたり、ときどき、自分のことを言ったりする場所。
+    {$t('landing.tagline')}
   </p>
 </section>
 
@@ -28,21 +29,23 @@
     <LaneDoor
       href="/signup"
       lane="use"
-      title="はじめる"
-      description="招待コードを持っていれば、ここで作れます。"
+      title={$t('landing.startTitle')}
+      description={$t('landing.startDesc')}
     />
-    <a class="lane-door" data-lane="build" href="/login" data-sveltekit-reload>
-      <h3>入る</h3>
-      <p>もう住んでいる人は、こちらから。</p>
+    <a class="lane-door" data-lane="build" href="/login">
+      <h3>{$t('landing.enterTitle')}</h3>
+      <p>{$t('landing.enterDesc')}</p>
     </a>
   </div>
 </section>
 
 <section class="section">
   <p class="prose-small">
-    sukhi-fedi は、ActivityPub に話せる Fediverse のサーバ。Mastodon や Misskey と
-    つながっています。ここで作ったアカウントから、遠くの人の言葉をきいて、近くにいる
-    人と話せます。
+    {$t('landing.about')}
   </p>
+</section>
+
+<section class="section" style="text-align: center;">
+  <LangSwitch />
 </section>
 

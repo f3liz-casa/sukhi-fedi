@@ -6,6 +6,7 @@
   import { clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
+  import { t } from '$lib/i18n';
 
   let status = $state<Status | null>(null);
   let ancestors = $state<Status[]>([]);
@@ -40,8 +41,8 @@
       }
       error =
         msg === 'not_found'
-          ? 'そのノートは、見つかりませんでした。'
-          : 'うまく届きませんでした。';
+          ? $t('thread.noteNotFound')
+          : $t('common.deliverFailed');
     } finally {
       loading = false;
     }
@@ -83,9 +84,9 @@
 
 {#if error}
   <p class="error">{error}</p>
-  <p><a class="chip" href="/timeline">タイムラインへ戻る</a></p>
+  <p><a class="chip" href="/timeline">{$t('common.backToTimeline')}</a></p>
 {:else if loading}
-  <p class="loading">読んでいます…</p>
+  <p class="loading">{$t('common.loading')}</p>
 {:else if status}
   <section class="timeline thread">
     {#each ancestors as s (s.id)}
@@ -104,14 +105,14 @@
   {#if composerOpen}
     <Composer {replyTo} prefillMention onposted={onPosted} oncancel={onCancel} />
   {:else}
-    <button class="chip reply-open" onclick={openReply}>返信する</button>
+    <button class="chip reply-open" onclick={openReply}>{$t('thread.reply')}</button>
   {/if}
 {/if}
 
 <style>
   /* スレッドの中で、いま見ているノートだけ、そっと際立たせる。 */
   .focused {
-    border-left: 3px solid var(--accent, #6366f1);
+    border-left: 3px solid var(--color-text);
   }
   .reply-open {
     margin-top: var(--space-3);

@@ -12,7 +12,7 @@
 </script>
 
 {#if url}
-  <img class="twemoji ui-emoji" src={url} alt={label || emoji} title={label || undefined} draggable="false" />
+  <img class="twemoji" src={url} alt={label || emoji} title={label || undefined} draggable="false" />
 {:else}
   {emoji}
 {/if}

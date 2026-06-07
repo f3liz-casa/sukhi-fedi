@@ -1,0 +1,321 @@
+// 画面に出ることば、日本語。ここが「正本」で、ko.ts は同じ鍵を
+// 全部もっていないと型で叱られる(Dict 型)。`{n}` `{acct}` のような
+// 中括弧は t() が差し込む場所。
+export const ja = {
+  // ── 共有 ─────────────────────────────────────────────
+  'common.loading': '読んでいます…',
+  'common.loadMore': 'もっと読む',
+  'common.backToTimeline': 'タイムラインへ戻る',
+  'common.timeline': 'タイムライン',
+  'common.back': '戻る',
+  'common.backToTop': 'トップにもどる',
+  'common.sending': '送っています…',
+  'common.deliverFailed': 'うまく届きませんでした。',
+  'common.deliverFailedRetry': 'うまく届きませんでした。もう一度、ためしますか?',
+  'common.readFailed': 'うまく読めませんでした。',
+  'common.acctNotFound': '「@{acct}」さんは、見つかりませんでした。',
+
+  // ── ことば切替 ───────────────────────────────────────
+  'lang.switch': 'ことばを選ぶ',
+
+  // ── タイムライン上のナビ ─────────────────────────────
+  'nav.notifications': '通知',
+  'nav.messages': 'メッセージ',
+  'nav.bookmarks': 'ブックマーク',
+  'nav.favourites': 'お気に入り',
+  'nav.lists': 'リスト',
+  'nav.search': 'さがす',
+  'nav.settings': '設定',
+  'nav.compose': '書く',
+  'nav.logout': 'ログアウト',
+
+  // ── 表のページ ───────────────────────────────────────
+  'landing.heroTitle': 'ここは、しずかな Fediverse のお家です。',
+  'landing.tagline':
+    'すぐとなりに、ちょこんとすわって、人の話をきいたり、ときどき、自分のことを言ったりする場所。',
+  'landing.startTitle': 'はじめる',
+  'landing.startDesc': '招待コードを持っていれば、ここで作れます。',
+  'landing.enterTitle': '入る',
+  'landing.enterDesc': 'もう住んでいる人は、こちらから。',
+  'landing.about':
+    'sukhi-fedi は、ActivityPub に話せる Fediverse のサーバ。Mastodon や Misskey とつながっています。ここで作ったアカウントから、遠くの人の言葉をきいて、近くにいる人と話せます。',
+
+  // ── 書くところ ───────────────────────────────────────
+  'compose.visPublic': 'みんなに',
+  'compose.visUnlisted': 'みんなに（タイムラインに載せず）',
+  'compose.visPrivate': 'フォロワーだけに',
+  'compose.visDirect': '指名した人だけに',
+  'compose.uploadFailed': '画像が、うまく上がりませんでした。',
+  'compose.postFailed': 'うまく送れませんでした。もう一度、ためしますか?',
+  'compose.reauth': 'もう一度、入りなおしてください。',
+  'compose.replyTo': '@{acct} へ、返信',
+  'compose.cancel': 'やめる',
+  'compose.spoilerLabel': '先に見せる一言（折りたたみの表）',
+  'compose.spoilerPlaceholder': '例: ねむい話',
+  'compose.bodyLabel': '本文',
+  'compose.placeholderReply': '返事を書く…',
+  'compose.placeholderNew': 'いま、思っていること…',
+  'compose.removeMedia': 'はずす',
+  'compose.addImage': '画像を足す',
+  'compose.fold': '折りたたむ',
+  'compose.sensitive': '見せ注意',
+  'compose.visLabel': '公開の範囲',
+  'compose.uploading': '上がっています…',
+  'compose.submit': '送る',
+
+  // ── ノート（投稿）─────────────────────────────────────
+  'status.boostedBy': 'がブースト',
+  'status.now': 'いま',
+  'status.minutesAgo': '{n} 分前',
+  'status.hoursAgo': '{n} 時間前',
+  'status.daysAgo': '{n} 日前',
+  'status.tapToShow': 'タップで表示',
+  'status.imageZoom': '画像を拡大',
+  'status.openAttachment': '添付ファイルを開く',
+  'status.close': '閉じる',
+  'status.poll': '投票',
+  'status.vote': '投票する',
+  'status.votes': '{n} 票',
+  'status.pollClosed': '・締め切りました',
+  'status.reactions': 'リアクション',
+  'status.favourite': 'お気に入り',
+  'status.boost': 'ブースト',
+  'status.bookmarkAdd': 'ブックマーク',
+  'status.bookmarkRemove': 'ブックマークを外す',
+  'status.reply': '返信',
+  'status.more': 'その他の操作',
+  'status.unpin': 'ピン留めを外す',
+  'status.pin': 'ピン留め',
+  'status.delete': '削除',
+  'status.reported': '通報しました',
+  'status.report': '通報',
+  'status.confirmDelete': 'このノートを削除しますか？ この操作は取り消せません。',
+  'status.reportPrompt': '通報の理由があれば書いてください（任意）',
+
+  // ── リアクション選び ─────────────────────────────────
+  'reaction.pick': 'リアクションを選ぶ',
+
+  // ── フォローボタン ───────────────────────────────────
+  'follow.following': 'フォロー中',
+  'follow.requested': '承認まち',
+  'follow.follow': 'フォロー',
+
+  // ── フォロー一覧 ─────────────────────────────────────
+  'accountList.possFollowers': 'の フォロワー',
+  'accountList.possFollowing': 'の フォロー中',
+  'accountList.empty': 'まだ、いません。',
+
+  // ── 新版バナー ───────────────────────────────────────
+  'update.available': '新しい版が、来ました。',
+  'update.reload': '読み込みなおす',
+  'update.later': 'あとで',
+
+  // ── 設定 ─────────────────────────────────────────────
+  'settings.title': '設定',
+  'settings.displayName': '表示名',
+  'settings.bio': '自己紹介',
+  'settings.avatarNew': '新しいアイコン（保存前）',
+  'settings.avatarNow': 'いまのアイコン',
+  'settings.headerNew': '新しいヘッダ画像（保存前）',
+  'settings.headerNow': 'いまのヘッダ画像',
+  'settings.locked': 'フォローを、承認してから受ける（鍵）',
+  'settings.saving': '保存しています…',
+  'settings.save': '保存',
+  'settings.saved': '保存しました。',
+  'settings.saveFailed': 'うまく保存できませんでした。',
+  'settings.blockMute': 'ブロック・ミュート',
+  'settings.blocking': 'ブロック中',
+  'settings.muting': 'ミュート中',
+  'settings.noneHere': 'いません。',
+  'settings.release': '解除',
+  'settings.admin': '管理',
+  'settings.adminDesc': 'このインスタンスの管理ページに入れます。',
+  'settings.adminEnter': '管理ページへ',
+  'settings.language': 'ことば',
+  'settings.changePassword': '合言葉を変える',
+  'settings.emojiCreditPre': '絵文字は ',
+  'settings.emojiCreditParenOpen': '（',
+  'settings.emojiCreditParenClose': '）。',
+
+  // ── はじめる（signup）────────────────────────────────
+  'signup.title': 'はじめる',
+  'signup.tagline': '招待コードと、なまえと、あいことばを、おしえてください。',
+  'signup.pwAgain': '合言葉だけ、もう一度入れてください。',
+  'signup.id': 'ID',
+  'signup.idTitle': '小文字英字、数字、アンダースコアだけ。30字まで。',
+  'signup.idHelpPre': '小文字英字、数字、_（アンダースコア）。30字まで。例: ',
+  'signup.password': 'あいことば',
+  'signup.passwordHelp': '8字以上。',
+  'signup.inviteCode': '招待コード',
+  'signup.create': '作る',
+  'signup.haveAccountPre': 'すでに住んでいる人は、',
+  'signup.haveAccountLink': 'こちらから入れます',
+  'signup.haveAccountPost': '。',
+  'signup.backToFront': '表のページに戻る',
+
+  // ── 入る（login）─────────────────────────────────────
+  'login.title': '入る',
+  'login.tagline': 'あなたの ID と、合言葉を、おしえてください。',
+  'login.id': 'ID（@のあとの名前）',
+  'login.password': 'あいことば',
+  'login.submit': '入る',
+  'login.invalid': '名前か合言葉が、見つかりませんでした。',
+  'login.failed': 'うまく入れませんでした。もう一度。',
+  'login.toSignup': 'まだはじめての人は、こちらへ。',
+
+  // ── 合言葉を変える（password）────────────────────────
+  'password.title': '合言葉を変える',
+  'password.tagline': '@{username} の合言葉を、あたらしくします。',
+  'password.current': 'いまの合言葉',
+  'password.new': 'あたらしい合言葉（8文字以上）',
+  'password.confirm': 'もういちど、あたらしい合言葉',
+  'password.submit': '変える',
+  'password.back': 'もどる',
+  'password.errCurrent': 'いまの合言葉が、ちがうみたいです。',
+  'password.errMismatch': '新しい合言葉が、二つで揃っていません。',
+  'password.errShort': '合言葉は、8文字以上にしてください。',
+  'password.errAuth': 'もう一度、入りなおしてください。',
+  'password.failed': 'うまく変えられませんでした。もう一度。',
+  'password.doneTitle': '変わりました',
+  'password.doneNotice': 'いちど、ぜんぶの端末からログアウトしました。あたらしい合言葉で、もういちど入ってください。',
+
+  // ── 通り道（check）───────────────────────────────────
+  'check.err.invite_code_required': '招待コードを入れてください。',
+  'check.err.invite_invalid': 'その招待コードは、見つかりませんでした。',
+  'check.err.invite_used': 'その招待コードは、もう使われています。',
+  'check.err.invite_expired': 'その招待コードは、もう古くなっています。',
+  'check.err.password_too_short': 'あいことばは、8 文字以上で。',
+  'check.err.validation_failed': '入れた中で、なにかひとつ、見直してみてください。',
+  'check.err.client_credentials_required': 'サーバとの最初の握手が、できていませんでした。',
+  'check.err.token_mint_failed': 'アカウントは作れたのに、入れる札が出ませんでした。',
+  'check.err.gateway_not_connected': 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
+  'check.err.gateway_rpc_failed': 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
+  'check.err.internal_error': 'サーバの中で、なにかが転びました。',
+  'check.err.no_draft': '下書きが見つかりませんでした。もう一度はじめからお願いします。',
+  'check.err.password_missing': '合言葉を、もう一度入れてください。',
+  'check.field.username': 'ID',
+  'check.field.password': 'あいことば',
+  'check.field.email': 'メール',
+  'check.field.invite_code': '招待コード',
+  'check.unknownIntent': 'なにをするか、分からなくなってしまいました。',
+  'check.creatingAccount': 'アカウントを作っています…',
+  'check.guidingLogin': 'ログイン画面に、ご案内しています…',
+  'check.pleaseWaitTitle': 'すこし待ってください…',
+  'check.pleaseWait': 'ちょっと待っていてください。',
+  'check.failedTitle': 'うまく進めませんでした。',
+  'check.failedGeneric': 'うまく進めませんでした。もう一度ためしますか?',
+  'check.retry': 'もう一度',
+  'check.signupDraftKeptPre': '入力した内容は、まだ残っています。',
+  'check.signupDraftKeptLink': 'フォームに戻る',
+  'check.signupDraftKeptPost': 'こともできます。',
+
+  // ── タイムライン ─────────────────────────────────────
+  'timeline.tabsLabel': 'タイムラインの選び方',
+  'timeline.tabHome': 'ホーム',
+  'timeline.tabPublic': 'みんな',
+  'timeline.tabTag': 'タグ',
+  'timeline.tagLabel': 'タグ（#は要りません）',
+  'timeline.tagPlaceholder': '例: しずか',
+  'timeline.emptyHome':
+    'まだ、ホームに、なにも届いていません。だれかをフォローすると、ここに集まります。',
+  'timeline.emptyTagPrompt': '上の入力に、見たいタグを入れてください。',
+  'timeline.emptyTag': '「#{tag}」を持つ投稿は、まだ見つかりません。',
+  'timeline.emptyGeneric': 'まだ、なにも届いていません。',
+
+  // ── 通知 ─────────────────────────────────────────────
+  'notif.title': '通知',
+  'notif.clearAll': 'すべて消す',
+  'notif.confirmClear': '通知を、すべて消しますか？',
+  'notif.empty': 'まだ、通知は、ありません。',
+  'notif.dismiss': 'この通知を消す',
+  'notif.favourited': 'がお気に入りにしました',
+  'notif.reblogged': 'がブーストしました',
+  'notif.followed': 'にフォローされました',
+  'notif.followRequest': 'からフォロー申請がきました',
+  'notif.mentioned': 'から返信がきました',
+  'notif.posted': 'が投稿しました',
+  'notif.pollEnded': 'の投票が締め切られました',
+  'notif.updated': 'が投稿を編集しました',
+  'notif.reacted': 'がリアクションしました',
+  'notif.generic': 'からの通知',
+
+  // ── メッセージ ───────────────────────────────────────
+  'messages.title': 'メッセージ',
+  'messages.empty':
+    'まだ、だれとも、やりとりはありません。指名した相手にだけ届く投稿が、ここに集まります。',
+  'messages.self': '自分',
+  'messages.nameSep': '、',
+  'messages.unread': '未読',
+  'messages.openThread': 'スレッドをひらく',
+
+  // ── さがす ───────────────────────────────────────────
+  'search.title': 'さがす',
+  'search.labelPre': '名前、ID、または ',
+  'search.placeholder': '例: alice / @alice@mastodon.social / #しずか',
+  'search.searchingRemote': '遠くまで、たずねています…',
+  'search.searching': '探しています…',
+  'search.submit': 'さがす',
+  'search.errorRemote': '遠くの人を、見つけられませんでした。サーバの綴りを、確かめてみてください。',
+  'search.errorLocal': 'うまく探せませんでした。',
+  'search.notFound': '「{q}」は、見つかりませんでした。',
+  'search.remoteHintPre': '遠くの人なら、',
+  'search.remoteHintPost': ' の形で書いてみてください。',
+  'search.sectionPeople': 'ひと',
+  'search.sectionTags': 'タグ',
+
+  // ── リスト一覧 ───────────────────────────────────────
+  'lists.title': 'リスト',
+  'lists.newPlaceholder': '新しいリストの名前',
+  'lists.create': '作る',
+  'lists.empty': 'まだ、リストは、ありません。上で作れます。',
+  'lists.delete': '削除',
+  'lists.confirmDelete': '「{title}」を削除しますか？',
+
+  // ── リストの中身 ─────────────────────────────────────
+  'listDetail.fallbackTitle': 'リスト',
+  'listDetail.listIndex': 'リスト一覧',
+  'listDetail.notFound': 'このリストは、見つかりませんでした。',
+  'listDetail.toListIndex': 'リスト一覧へ',
+  'listDetail.members': 'メンバー',
+  'listDetail.addPlaceholder': '@user または @user@host',
+  'listDetail.add': '加える',
+  'listDetail.notFoundPerson': 'その人は、見つかりませんでした。',
+  'listDetail.addFailed': '追加できませんでした。',
+  'listDetail.noMembers': 'まだ、だれも入っていません。',
+  'listDetail.removeMember': '外す',
+  'listDetail.empty':
+    'このリストには、まだ何も流れていません。メンバーを加えると、ここに集まります。',
+
+  // ── お気に入り ───────────────────────────────────────
+  'favourites.title': 'お気に入り',
+  'favourites.empty': 'まだ、お気に入りは、ありません。',
+
+  // ── ブックマーク ─────────────────────────────────────
+  'bookmarks.title': 'ブックマーク',
+  'bookmarks.empty': 'まだ、しおりは、はさんでいません。',
+
+  // ── OAuth コールバック ───────────────────────────────
+  'callback.serverError': 'サーバから「{err}」と返ってきました。',
+  'callback.urlMissing': 'urlに、足りないものがあるみたいです。',
+  'callback.failedTitle': 'うまく入れませんでした。',
+  'callback.entering': '入っています…',
+
+  // ── プロフィール ─────────────────────────────────────
+  'profile.edit': '編集',
+  'profile.unmute': 'ミュートを解く',
+  'profile.mute': 'ミュートする',
+  'profile.unblock': 'ブロックを解く',
+  'profile.block': 'ブロックする',
+  'profile.followingSuffix': 'フォロー中',
+  'profile.followersSuffix': 'フォロワー',
+  'profile.postsSuffix': '投稿',
+  'profile.pinned': 'ピン留め',
+  'profile.empty': 'まだ、投稿は、ありません。',
+
+  // ── スレッド ─────────────────────────────────────────
+  'thread.noteNotFound': 'そのノートは、見つかりませんでした。',
+  'thread.reply': '返信する'
+} as const;
+
+export type TranslationKey = keyof typeof ja;
+export type Dict = Record<TranslationKey, string>;

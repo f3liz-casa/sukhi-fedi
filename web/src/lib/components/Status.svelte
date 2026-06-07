@@ -6,6 +6,7 @@
   import Twemoji from './Twemoji.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
+  import { t, locale, type Locale, type TranslationKey } from '$lib/i18n';
 
   let {
     status,
@@ -28,7 +29,7 @@
   // sometimes does for fresh actors).
   let name = $derived(status.account.display_name || status.account.username);
   let avatar = $derived(status.account.avatar || null);
-  let ts = $derived(formatTime(status.created_at));
+  let ts = $derived(formatTime(status.created_at, $t, $locale));
 
   // ローカル state は楽観更新用。prop が差し替わったら sync する。
   let reactions = $state<Reaction[]>([]);
@@ -75,16 +76,20 @@
     });
   });
 
-  function formatTime(iso: string): string {
+  function formatTime(
+    iso: string,
+    tr: (key: TranslationKey, params?: Record<string, string | number>) => string,
+    loc: Locale
+  ): string {
     try {
       const d = new Date(iso);
       const now = Date.now();
       const diff = (now - d.getTime()) / 1000;
-      if (diff < 60) return 'いま';
-      if (diff < 3600) return Math.floor(diff / 60) + ' 分前';
-      if (diff < 86_400) return Math.floor(diff / 3600) + ' 時間前';
-      if (diff < 86_400 * 7) return Math.floor(diff / 86_400) + ' 日前';
-      return d.toLocaleDateString('ja-JP');
+      if (diff < 60) return tr('status.now');
+      if (diff < 3600) return tr('status.minutesAgo', { n: Math.floor(diff / 60) });
+      if (diff < 86_400) return tr('status.hoursAgo', { n: Math.floor(diff / 3600) });
+      if (diff < 86_400 * 7) return tr('status.daysAgo', { n: Math.floor(diff / 86_400) });
+      return d.toLocaleDateString(loc === 'ko' ? 'ko-KR' : 'ja-JP');
     } catch {
       return iso;
     }
@@ -133,7 +138,7 @@
 
   async function remove() {
     if (deleting) return;
-    if (!confirm('このノートを削除しますか？ この操作は取り消せません。')) return;
+    if (!confirm($t('status.confirmDelete'))) return;
     deleting = true;
     try {
       await api.deleteStatus(status.id);
@@ -201,7 +206,7 @@
   // 通報。理由は任意（プロンプトをキャンセルしたら何もしない）。送れたら
   // メニューを「通報しました」に変えて二度押しを防ぐ。
   async function doReport() {
-    const comment = prompt('通報の理由があれば書いてください（任意）');
+    const comment = prompt($t('status.reportPrompt'));
     if (comment === null) return;
     menuOpen = false;
     try {
@@ -260,7 +265,7 @@
        返信・ブースト等のアクションは入れ子側（本物のノート）に効く。 -->
   <div class="boost">
     <a class="boost-by" href={`/@${status.account.acct}`}>
-      <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} がブースト
+      <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} {$t('status.boostedBy')}
     </a>
     <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
   </div>
@@ -315,7 +320,7 @@
       <div class="media" class:sensitive={blurMedia}>
         {#if blurMedia}
           <button type="button" class="media-reveal" onclick={() => (mediaShown = true)}>
-            タップで表示
+            {$t('status.tapToShow')}
           </button>
         {/if}
         {#each status.media_attachments as m (m.id)}
@@ -324,7 +329,7 @@
               type="button"
               class="media-zoom"
               onclick={() => (lightbox = m.url)}
-              aria-label={m.description || '画像を拡大'}
+              aria-label={m.description || $t('status.imageZoom')}
             >
               <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
             </button>
@@ -346,7 +351,7 @@
           {:else}
             <!-- 未知の型でも黙って捨てず、せめてリンクで残す。 -->
             <a class="media-fallback" href={m.url} target="_blank" rel="noopener noreferrer">
-              {m.description || '添付ファイルを開く'}
+              {m.description || $t('status.openAttachment')}
             </a>
           {/if}
         {/each}
@@ -358,7 +363,7 @@
       <button
         type="button"
         class="lightbox"
-        aria-label="閉じる"
+        aria-label={$t('status.close')}
         onclick={() => (lightbox = null)}
         onkeydown={(e) => e.key === 'Escape' && (lightbox = null)}
       >
@@ -367,7 +372,7 @@
     {/if}
 
     {#if poll}
-      <div class="poll" aria-label="投票">
+      <div class="poll" aria-label={$t('status.poll')}>
         {#if pollClosed}
           {#each poll.options as opt, i (i)}
             {@const votes = opt.votes_count ?? 0}
@@ -396,17 +401,17 @@
             disabled={pollVoting || pollChoices.length === 0}
             onclick={submitVote}
           >
-            {pollVoting ? '送っています…' : '投票する'}
+            {pollVoting ? $t('common.sending') : $t('status.vote')}
           </button>
         {/if}
         <p class="poll-meta">
-          {poll.votes_count} 票{poll.expired ? '・締め切りました' : ''}
+          {$t('status.votes', { n: poll.votes_count })}{poll.expired ? $t('status.pollClosed') : ''}
         </p>
       </div>
     {/if}
 
     {#if reactions.length > 0}
-      <div class="reactions" aria-label="リアクション">
+      <div class="reactions" aria-label={$t('status.reactions')}>
         {#each reactions as r (r.name)}
           <button
             type="button"
@@ -437,7 +442,7 @@
         onclick={toggleFavourite}
         aria-pressed={favourited}
       >
-        <Twemoji emoji="⭐" label="お気に入り" /> {favCount > 0 ? favCount : ''}
+        <Twemoji emoji="⭐" label={$t('status.favourite')} /> {favCount > 0 ? favCount : ''}
       </button>
       <button
         type="button"
@@ -445,7 +450,7 @@
         class:active={reblogged}
         onclick={toggleReblog}
         aria-pressed={reblogged}
-        aria-label="ブースト"
+        aria-label={$t('status.boost')}
       >
         <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
       </button>
@@ -455,13 +460,13 @@
         class:active={bookmarked}
         onclick={toggleBookmark}
         aria-pressed={bookmarked}
-        aria-label={bookmarked ? 'ブックマークを外す' : 'ブックマーク'}
+        aria-label={bookmarked ? $t('status.bookmarkRemove') : $t('status.bookmarkAdd')}
       >
         <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
       </button>
       {#if canReply}
         <button type="button" class="chip" onclick={() => onreply?.(status)}>
-          返信
+          {$t('status.reply')}
         </button>
       {/if}
       {#if mine || loggedIn}
@@ -471,7 +476,7 @@
           onclick={() => (menuOpen = !menuOpen)}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          aria-label="その他の操作"
+          aria-label={$t('status.more')}
         >
           ⋯
         </button>
@@ -488,7 +493,7 @@
       <div class="menu" role="menu">
         {#if mine}
           <button type="button" class="menu-item" role="menuitem" onclick={togglePin}>
-            <Twemoji emoji="📌" /> {pinned ? 'ピン留めを外す' : 'ピン留め'}
+            <Twemoji emoji="📌" /> {pinned ? $t('status.unpin') : $t('status.pin')}
           </button>
           <button
             type="button"
@@ -497,7 +502,7 @@
             onclick={remove}
             disabled={deleting}
           >
-            <Twemoji emoji="🗑" /> 削除
+            <Twemoji emoji="🗑" /> {$t('status.delete')}
           </button>
         {:else}
           <button
@@ -507,7 +512,7 @@
             onclick={doReport}
             disabled={reported}
           >
-            <Twemoji emoji="🚩" /> {reported ? '通報しました' : '通報'}
+            <Twemoji emoji="🚩" /> {reported ? $t('status.reported') : $t('status.report')}
           </button>
         {/if}
       </div>
@@ -521,7 +526,7 @@
     display: block;
     padding: 0.25rem 1rem 0;
     font-size: 0.8rem;
-    color: var(--color-text-muted, #888);
+    color: var(--color-text-muted);
     text-decoration: none;
   }
 
@@ -539,7 +544,7 @@
     color: inherit;
   }
   .quote-card:hover {
-    background: rgba(127, 127, 127, 0.08);
+    background: var(--fill-soft);
   }
   .quote-head {
     display: flex;
@@ -576,18 +581,18 @@
     gap: 0.25rem;
     padding: 0.125rem 0.5rem;
     border-radius: 999px;
-    background: var(--reaction-bg, rgba(127, 127, 127, 0.12));
+    background: var(--fill-soft);
     border: 1px solid transparent;
     font-size: 0.875rem;
     line-height: 1.4;
     cursor: pointer;
   }
   .reaction-chip:hover {
-    background: var(--reaction-bg-hover, rgba(127, 127, 127, 0.2));
+    background: var(--fill-hover);
   }
   .reaction-chip.me {
-    background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
-    border-color: var(--reaction-border-me, rgba(99, 102, 241, 0.5));
+    background: var(--fill-active);
+    border-color: var(--fill-active-edge);
   }
   .reaction-chip .emoji {
     font-size: 1rem;
@@ -599,10 +604,10 @@
   }
   .reaction-chip .count {
     font-variant-numeric: tabular-nums;
-    color: var(--muted, #666);
+    color: var(--color-text-muted);
   }
   .status-actions .chip.active {
-    background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
+    background: var(--fill-active);
   }
   .picker-anchor {
     position: relative;
@@ -619,7 +624,7 @@
     width: max-content;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    background: var(--color-bg, #fff);
+    background: var(--color-surface);
   }
   .menu-item {
     padding: 0.375rem 0.5rem;
@@ -632,7 +637,7 @@
     cursor: pointer;
   }
   .menu-item:hover:not(:disabled) {
-    background: rgba(127, 127, 127, 0.12);
+    background: var(--fill-hover);
   }
   .menu-item.danger:hover:not(:disabled) {
     background: rgba(220, 38, 38, 0.14);
@@ -736,16 +741,16 @@
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
     overflow: hidden;
-    background: rgba(127, 127, 127, 0.08);
+    background: var(--fill-soft);
   }
   .poll-bar {
     position: absolute;
     inset: 0 auto 0 0;
-    background: var(--reaction-bg-me, rgba(99, 102, 241, 0.18));
+    background: var(--fill-active);
     z-index: 0;
   }
   .poll-result.mine .poll-bar {
-    background: var(--reaction-border-me, rgba(99, 102, 241, 0.5));
+    background: var(--fill-active-edge);
   }
   .poll-label,
   .poll-pct {
@@ -760,6 +765,6 @@
   }
   .poll-meta {
     font-size: var(--text-sm);
-    color: var(--color-text-muted, #666);
+    color: var(--color-text-muted);
   }
 </style>

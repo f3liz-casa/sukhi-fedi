@@ -18,6 +18,7 @@
     clearSignupDraft,
     clearSignupPassword
   } from '$lib/auth';
+  import { t, type TranslationKey } from '$lib/i18n';
 
   let phase = $state<'working' | 'error'>('working');
   let intent = $state<'login' | 'signup' | null>(null);
@@ -26,29 +27,31 @@
   // API (api/lib/sukhi_api/capabilities/mastodon_accounts.ex) が
   // 実際に返すキーに揃える。新しいキーをサーバに足したら、ここも
   // 一緒に書く。
-  const errorText: Record<string, string> = {
-    invite_code_required: '招待コードを入れてください。',
-    invite_invalid: 'その招待コードは、見つかりませんでした。',
-    invite_used: 'その招待コードは、もう使われています。',
-    invite_expired: 'その招待コードは、もう古くなっています。',
-    password_too_short: 'あいことばは、8 文字以上で。',
-    validation_failed: '入れた中で、なにかひとつ、見直してみてください。',
-    client_credentials_required: 'サーバとの最初の握手が、できていませんでした。',
-    token_mint_failed: 'アカウントは作れたのに、入れる札が出ませんでした。',
-    gateway_not_connected: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
-    gateway_rpc_failed: 'サーバに、まだ届いていません。すこし待ってみて、もう一度。',
-    internal_error: 'サーバの中で、なにかが転びました。',
-    no_draft: '下書きが見つかりませんでした。もう一度はじめからお願いします。',
-    password_missing: '合言葉を、もう一度入れてください。'
+  // サーバが返すエラーコード → 辞書の鍵。文言じたいは $t で引くので、
+  // 表示の瞬間の locale に従う。
+  const ERROR_KEYS: Record<string, TranslationKey> = {
+    invite_code_required: 'check.err.invite_code_required',
+    invite_invalid: 'check.err.invite_invalid',
+    invite_used: 'check.err.invite_used',
+    invite_expired: 'check.err.invite_expired',
+    password_too_short: 'check.err.password_too_short',
+    validation_failed: 'check.err.validation_failed',
+    client_credentials_required: 'check.err.client_credentials_required',
+    token_mint_failed: 'check.err.token_mint_failed',
+    gateway_not_connected: 'check.err.gateway_not_connected',
+    gateway_rpc_failed: 'check.err.gateway_rpc_failed',
+    internal_error: 'check.err.internal_error',
+    no_draft: 'check.err.no_draft',
+    password_missing: 'check.err.password_missing'
   };
 
-  // changeset の details: {username: ["...", ...]} を日本語に。
+  // changeset の details: {username: ["...", ...]} の field を言語へ。
   // 一個目だけ拾えば十分(複数あっても見せると目が散る)。
-  const fieldName: Record<string, string> = {
-    username: 'ID',
-    password: 'あいことば',
-    email: 'メール',
-    invite_code: '招待コード'
+  const FIELD_KEYS: Record<string, TranslationKey> = {
+    username: 'check.field.username',
+    password: 'check.field.password',
+    email: 'check.field.email',
+    invite_code: 'check.field.invite_code'
   };
 
   function formatValidation(details: Record<string, string[]> | undefined): string | null {
@@ -56,7 +59,7 @@
     const first = Object.entries(details)[0];
     if (!first) return null;
     const [field, msgs] = first;
-    const label = fieldName[field] ?? field;
+    const label = FIELD_KEYS[field] ? $t(FIELD_KEYS[field]) : field;
     const msg = msgs?.[0] ?? '';
     return `${label}${msg}`;
   }
@@ -66,7 +69,7 @@
     const i = params.get('intent');
 
     if (i !== 'login' && i !== 'signup') {
-      error = 'なにをするか、分からなくなってしまいました。';
+      error = $t('check.unknownIntent');
       phase = 'error';
       return;
     }
@@ -103,7 +106,7 @@
       const msg = e instanceof Error ? e.message : 'unknown';
       const details = (e as Error & { details?: Record<string, string[]> })?.details;
       const fieldHint = msg === 'validation_failed' ? formatValidation(details) : null;
-      error = fieldHint ?? errorText[msg] ?? 'うまく進めませんでした。もう一度ためしますか?';
+      error = fieldHint ?? (ERROR_KEYS[msg] ? $t(ERROR_KEYS[msg]) : null) ?? $t('check.failedGeneric');
       phase = 'error';
     }
   });
@@ -117,30 +120,30 @@
   <section class="hero">
     <h1>
       {#if intent === 'signup'}
-        アカウントを作っています…
+        {$t('check.creatingAccount')}
       {:else if intent === 'login'}
-        ログイン画面に、ご案内しています…
+        {$t('check.guidingLogin')}
       {:else}
-        すこし待ってください…
+        {$t('check.pleaseWaitTitle')}
       {/if}
     </h1>
   </section>
-  <p class="loading">ちょっと待っていてください。</p>
+  <p class="loading">{$t('check.pleaseWait')}</p>
 {:else if phase === 'error'}
   <section class="hero">
-    <h1>うまく進めませんでした。</h1>
+    <h1>{$t('check.failedTitle')}</h1>
   </section>
   <p class="error">{error}</p>
   <div class="stack">
     <button class="lane-door" onclick={retry} style="max-width: 16rem;">
-      <h3>もう一度</h3>
+      <h3>{$t('check.retry')}</h3>
     </button>
     {#if intent === 'signup'}
       <p class="prose-small">
-        入力した内容は、まだ残っています。<a href="/signup">フォームに戻る</a>こともできます。
+        {$t('check.signupDraftKeptPre')}<a href="/signup">{$t('check.signupDraftKeptLink')}</a>{$t('check.signupDraftKeptPost')}
       </p>
     {:else}
-      <p class="prose-small"><a href="/">トップにもどる</a></p>
+      <p class="prose-small"><a href="/">{$t('common.backToTop')}</a></p>
     {/if}
   </div>
 {/if}

@@ -1,8 +1,8 @@
-/* Design tokens — framework-agnostic.
+/* Design tokens — plain CSS custom properties, nothing framework-specific.
  *
- * Plain CSS custom properties only. Astro components, the Svelte islands, and
- * a future standalone Svelte / SvelteKit app can all import this file as-is.
- * Keep it free of any framework-specific syntax. */
+ * The whole web client (the SvelteKit app under src/) reads from here, so a
+ * colour, size or font lives in exactly one place. Keep it to :root variables
+ * and the per-locale html[lang] overrides at the bottom. */
 
 :root {
   /* color — ink on warm paper.
@@ -22,6 +22,15 @@
   --color-use: #2f6d5a;
   --color-build: #a85a29;
   --color-lane: var(--color-text);
+
+  /* soft fills — ink at low opacity. Hover washes, the result bars on a poll,
+   * and the "you reacted / your vote" highlight all stay in the warm paper
+   * family this way, instead of pulling in a separate grey or accent hue.
+   * (There is no decorative accent colour — see the note above.) */
+  --fill-soft: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --fill-hover: color-mix(in srgb, var(--color-text) 11%, transparent);
+  --fill-active: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --fill-active-edge: color-mix(in srgb, var(--color-text) 34%, transparent);
 
   /* type — Source Sans 3 is listed first, so Latin text (English, tool
    * names, URLs) always renders in it, even on Japanese / Korean pages.

@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { getLists, createList, deleteList, type List } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { t } from '$lib/i18n';
 
   let lists = $state<List[]>([]);
   let loading = $state(true);
@@ -30,7 +31,7 @@
         goto('/');
         return;
       }
-      error = 'うまく読めませんでした。';
+      error = $t('common.readFailed');
     } finally {
       loading = false;
     }
@@ -52,7 +53,7 @@
   }
 
   async function remove(l: List) {
-    if (!confirm(`「${l.title}」を削除しますか？`)) return;
+    if (!confirm($t('lists.confirmDelete', { title: l.title }))) return;
     try {
       await deleteList(l.id);
       lists = lists.filter((x) => x.id !== l.id);
@@ -62,12 +63,9 @@
   }
 </script>
 
-<header
-  class="timeline"
-  style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);"
->
-  <h1 style="font-size: var(--text-lg);">リスト</h1>
-  <a class="chip" href="/timeline">タイムライン</a>
+<header class="timeline page-head">
+  <h1>{$t('lists.title')}</h1>
+  <a class="chip" href="/timeline">{$t('common.timeline')}</a>
 </header>
 
 <section class="timeline">
@@ -82,24 +80,24 @@
     <input
       type="text"
       bind:value={newTitle}
-      placeholder="新しいリストの名前"
+      placeholder={$t('lists.newPlaceholder')}
       maxlength="60"
       style="flex: 1;"
     />
-    <button type="submit" disabled={creating || !newTitle.trim()}>作る</button>
+    <button type="submit" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
   </form>
 
   {#if error}
     <p class="error">{error}</p>
   {:else if loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {:else if lists.length === 0}
-    <p class="prose-small">まだ、リストは、ありません。上で作れます。</p>
+    <p class="prose-small">{$t('lists.empty')}</p>
   {:else}
     {#each lists as l (l.id)}
       <article class="list-row">
         <a class="list-link" href={`/lists/${l.id}`}>{l.title}</a>
-        <button type="button" class="chip" onclick={() => remove(l)}>削除</button>
+        <button type="button" class="chip" onclick={() => remove(l)}>{$t('lists.delete')}</button>
       </article>
     {/each}
   {/if}

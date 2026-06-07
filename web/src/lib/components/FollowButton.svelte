@@ -6,6 +6,7 @@
   } from '$lib/api';
   import { clearToken, isLoggedIn } from '$lib/auth';
   import { goto } from '$app/navigation';
+  import { t } from '$lib/i18n';
 
   let {
     accountId,
@@ -43,10 +44,10 @@
 
   let label = $derived(
     currentState === 'following'
-      ? 'フォロー中'
+      ? $t('follow.following')
       : currentState === 'requested'
-        ? '承認まち'
-        : 'フォロー'
+        ? $t('follow.requested')
+        : $t('follow.follow')
   );
 
   async function toggle() {
@@ -71,7 +72,7 @@
         void goto('/');
         return;
       }
-      error = 'うまく届きませんでした。';
+      error = $t('common.deliverFailed');
     } finally {
       pending = false;
     }

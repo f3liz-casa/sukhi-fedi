@@ -4,6 +4,7 @@
   import { getBookmarks, type Status } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
+  import { t } from '$lib/i18n';
 
   let items = $state<Status[]>([]);
   let nextMaxId = $state<string | null>(null);
@@ -40,7 +41,7 @@
         goto('/');
         return;
       }
-      error = 'うまく届きませんでした。もう一度、ためしますか?';
+      error = $t('common.deliverFailedRetry');
     } finally {
       loading = false;
       initial = false;
@@ -53,13 +54,10 @@
   }
 </script>
 
-<header
-  class="timeline"
-  style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);"
->
-  <h1 style="font-size: var(--text-lg);">ブックマーク</h1>
-  <span style="display: flex; gap: var(--space-2);">
-    <a class="chip" href="/timeline">タイムライン</a>
+<header class="timeline page-head">
+  <h1>{$t('bookmarks.title')}</h1>
+  <span class="page-nav">
+    <a class="chip" href="/timeline">{$t('common.timeline')}</a>
   </span>
 </header>
 
@@ -67,9 +65,9 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {:else if items.length === 0 && !loading}
-    <p class="prose-small">まだ、しおりは、はさんでいません。</p>
+    <p class="prose-small">{$t('bookmarks.empty')}</p>
   {/if}
 
   {#each items as s (s.id)}
@@ -81,10 +79,10 @@
   {/each}
 
   {#if !initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {/if}
 
   {#if nextMaxId && !loading}
-    <button class="load-more" onclick={() => load(false)}>もっと読む</button>
+    <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>

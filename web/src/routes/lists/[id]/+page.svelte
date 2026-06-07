@@ -16,6 +16,7 @@
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
+  import { t } from '$lib/i18n';
 
   let id = $derived($page.params.id ?? '');
 
@@ -56,7 +57,7 @@
         goto('/');
         return;
       }
-      error = msg === 'not_found' ? 'このリストは、見つかりませんでした。' : 'うまく届きませんでした。';
+      error = msg === 'not_found' ? $t('listDetail.notFound') : $t('common.deliverFailed');
     } finally {
       loading = false;
       initial = false;
@@ -102,7 +103,7 @@
       addAcct = '';
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
-      addError = msg === 'not_found' ? 'その人は、見つかりませんでした。' : '追加できませんでした。';
+      addError = msg === 'not_found' ? $t('listDetail.notFoundPerson') : $t('listDetail.addFailed');
     } finally {
       addPending = false;
     }
@@ -118,20 +119,17 @@
   }
 </script>
 
-<header
-  class="timeline"
-  style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);"
->
-  <h1 style="font-size: var(--text-lg);">{list?.title ?? 'リスト'}</h1>
-  <a class="chip" href="/lists">リスト一覧</a>
+<header class="timeline page-head">
+  <h1>{list?.title ?? $t('listDetail.fallbackTitle')}</h1>
+  <a class="chip" href="/lists">{$t('listDetail.listIndex')}</a>
 </header>
 
 {#if error}
   <p class="error timeline">{error}</p>
-  <p class="timeline"><a class="chip" href="/lists">リスト一覧へ</a></p>
+  <p class="timeline"><a class="chip" href="/lists">{$t('listDetail.toListIndex')}</a></p>
 {:else}
   <details class="timeline" ontoggle={onMembersToggle} style="margin-bottom: var(--space-4);">
-    <summary style="cursor: pointer;">メンバー</summary>
+    <summary style="cursor: pointer;">{$t('listDetail.members')}</summary>
 
     <form
       onsubmit={(e) => {
@@ -143,10 +141,10 @@
       <input
         type="text"
         bind:value={addAcct}
-        placeholder="@user または @user@host"
+        placeholder={$t('listDetail.addPlaceholder')}
         style="flex: 1;"
       />
-      <button type="submit" disabled={addPending || !addAcct.trim()}>加える</button>
+      <button type="submit" disabled={addPending || !addAcct.trim()}>{$t('listDetail.add')}</button>
     </form>
 
     {#if addError}
@@ -154,19 +152,19 @@
     {/if}
 
     {#if membersLoaded && members.length === 0}
-      <p class="prose-small">まだ、だれも入っていません。</p>
+      <p class="prose-small">{$t('listDetail.noMembers')}</p>
     {/if}
     {#each members as a (a.id)}
-      <AccountActionRow account={a} actionLabel="外す" onaction={removeMember} />
+      <AccountActionRow account={a} actionLabel={$t('listDetail.removeMember')} onaction={removeMember} />
     {/each}
   </details>
 
   <section class="timeline">
     {#if initial && loading}
-      <p class="loading">読んでいます…</p>
+      <p class="loading">{$t('common.loading')}</p>
     {:else if items.length === 0 && !loading}
       <p class="prose-small">
-        このリストには、まだ何も流れていません。メンバーを加えると、ここに集まります。
+        {$t('listDetail.empty')}
       </p>
     {/if}
 
@@ -179,11 +177,11 @@
     {/each}
 
     {#if !initial && loading}
-      <p class="loading">読んでいます…</p>
+      <p class="loading">{$t('common.loading')}</p>
     {/if}
 
     {#if nextMaxId && !loading}
-      <button class="load-more" onclick={loadMore}>もっと読む</button>
+      <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
     {/if}
   </section>
 {/if}

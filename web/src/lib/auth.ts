@@ -268,6 +268,46 @@ export async function signup(input: Required<Pick<SignupDraft, 'username' | 'pas
   return body as TokenSet;
 }
 
+// First-party credential login. POSTs username + password to `/login`,
+// which validates them and sets the `session_token` cookie that
+// `/oauth/authorize` later consumes. Cookie-based, NOT the OAuth bearer
+// the rest of the SPA uses ─ this only opens the door; the caller then
+// walks through `/check` (Anubis) → `/oauth/authorize` to get a token.
+export async function loginWithPassword(username: string, password: string): Promise<void> {
+  const res = await fetch('/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ username, password })
+  });
+  if (res.status === 401) throw new Error('invalid');
+  if (!res.ok) throw new Error(`login_failed_${res.status}`);
+}
+
+// Change the signed-in account's password. Cookie-gated like /login (the
+// session_token minted at login), not the bearer. On success the server
+// revokes every session, so the caller should clearToken() and bounce to
+// /login. Throws 'current' | 'mismatch' | 'short' | 'unauthorized'.
+export async function changePassword(
+  current: string,
+  newPassword: string,
+  confirm: string
+): Promise<void> {
+  const res = await fetch('/settings/password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      current_password: current,
+      new_password: newPassword,
+      confirm_password: confirm
+    })
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body?.error ?? `password_failed_${res.status}`);
+}
+
 // Navigate to the shared check page. Anubis challenges this path; the
 // page picks up `intent` and finishes the flow on the other side.
 //

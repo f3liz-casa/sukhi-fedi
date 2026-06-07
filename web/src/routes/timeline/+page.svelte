@@ -5,6 +5,7 @@
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
+  import { t } from '$lib/i18n';
 
   let replyTo = $state<Status | null>(null);
   let composerOpen = $state(false);
@@ -81,7 +82,7 @@
         goto('/');
         return;
       }
-      error = 'うまく届きませんでした。もう一度、ためしますか?';
+      error = $t('common.deliverFailedRetry');
     } finally {
       loading = false;
       initial = false;
@@ -117,18 +118,18 @@
   }
 </script>
 
-<header class="timeline" style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);">
-  <h1 style="font-size: var(--text-lg);">sukhi-fedi</h1>
-  <span style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
-    <a class="chip" href="/notifications">通知</a>
-    <a class="chip" href="/messages">メッセージ</a>
-    <a class="chip" href="/bookmarks">ブックマーク</a>
-    <a class="chip" href="/favourites">お気に入り</a>
-    <a class="chip" href="/lists">リスト</a>
-    <a class="chip" href="/search">さがす</a>
-    <a class="chip" href="/settings">設定</a>
-    <button class="chip" onclick={openCompose}>書く</button>
-    <button class="chip" onclick={signOut}>ログアウト</button>
+<header class="timeline page-head">
+  <h1>sukhi-fedi</h1>
+  <span class="page-nav">
+    <a class="chip" href="/notifications">{$t('nav.notifications')}</a>
+    <a class="chip" href="/messages">{$t('nav.messages')}</a>
+    <a class="chip" href="/bookmarks">{$t('nav.bookmarks')}</a>
+    <a class="chip" href="/favourites">{$t('nav.favourites')}</a>
+    <a class="chip" href="/lists">{$t('nav.lists')}</a>
+    <a class="chip" href="/search">{$t('nav.search')}</a>
+    <a class="chip" href="/settings">{$t('nav.settings')}</a>
+    <button class="chip" onclick={openCompose}>{$t('nav.compose')}</button>
+    <button class="chip" onclick={signOut}>{$t('nav.logout')}</button>
   </span>
 </header>
 
@@ -141,22 +142,22 @@
   />
 {/if}
 
-<nav class="tabs timeline" aria-label="タイムラインの選び方">
+<nav class="tabs timeline" aria-label={$t('timeline.tabsLabel')}>
   <button
     type="button"
     aria-pressed={kind === 'home'}
     onclick={() => selectKind('home')}
-  >ホーム</button>
+  >{$t('timeline.tabHome')}</button>
   <button
     type="button"
     aria-pressed={kind === 'public'}
     onclick={() => selectKind('public')}
-  >みんな</button>
+  >{$t('timeline.tabPublic')}</button>
   <button
     type="button"
     aria-pressed={kind === 'tag'}
     onclick={() => selectKind('tag')}
-  >タグ</button>
+  >{$t('timeline.tabTag')}</button>
 </nav>
 
 {#if kind === 'tag'}
@@ -169,8 +170,8 @@
     style="margin-bottom: var(--space-4);"
   >
     <label class="stack-tight">
-      <span>タグ（#は要りません）</span>
-      <input type="text" bind:value={pendingTag} placeholder="例: しずか" />
+      <span>{$t('timeline.tagLabel')}</span>
+      <input type="text" bind:value={pendingTag} placeholder={$t('timeline.tagPlaceholder')} />
     </label>
   </form>
 {/if}
@@ -179,17 +180,17 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {:else if items.length === 0 && !loading}
     <p class="prose-small">
       {#if kind === 'home'}
-        まだ、ホームに、なにも届いていません。だれかをフォローすると、ここに集まります。
+        {$t('timeline.emptyHome')}
       {:else if kind === 'tag' && !tag}
-        上の入力に、見たいタグを入れてください。
+        {$t('timeline.emptyTagPrompt')}
       {:else if kind === 'tag'}
-        「#{tag}」を持つ投稿は、まだ見つかりません。
+        {$t('timeline.emptyTag', { tag })}
       {:else}
-        まだ、なにも届いていません。
+        {$t('timeline.emptyGeneric')}
       {/if}
     </p>
   {/if}
@@ -199,10 +200,10 @@
   {/each}
 
   {#if !initial && loading}
-    <p class="loading">読んでいます…</p>
+    <p class="loading">{$t('common.loading')}</p>
   {/if}
 
   {#if nextMaxId && !loading}
-    <button class="load-more" onclick={() => load(false)}>もっと読む</button>
+    <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>

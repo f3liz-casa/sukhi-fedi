@@ -1,12 +1,13 @@
-/* sukhi-fedi 専用 — atfedi-de から引いてきた基本の上にだけ書く。
+/* sukhi-fedi web クライアントのスタイル。
  *
- * 「読むだけ」のタイムライン、サインアップフォーム、Status カードに必要な
- * 最小限のものだけを足す。lane-door, stack, wrap, chip などはそのまま
- * components.css のを使う。 */
+ * tokens + base(リセット)の上に、見た目をぜんぶここに置く。まず画面を
+ * またいで使い回す共有の部品(ホームの hero/lane-door、どこにでも出る
+ * chip ピル、本文に差し込む絵文字)、そのあとに各画面ごとのレイアウト
+ * (タイムライン、Status カード、フォーム、プロフィール…)。コンポーネント
+ * 固有の細部は各 .svelte の scoped <style> に置く。 */
 
 @import './tokens.css';
 @import './base.css';
-@import './components.css';
 
 /* どのページも上にひと呼吸ぶん余白を持たせる。homepage の hero
  * などはこの上に自前の padding を重ねるので、視覚的にはほんの
@@ -16,10 +17,159 @@ main.wrap {
   padding-block-start: var(--space-8);
 }
 
+/* ── 共有の見た目 ──────────────────────────────────────────────────
+   ホーム(landing)と各画面で使い回す部品。chip はどの画面にも出るピル、
+   hero / section / doors / lane-door はホームの入口、custom-emoji /
+   twemoji は本文・名前に差し込む絵文字。 */
+
+.hero {
+  padding-block: var(--space-12) var(--space-8);
+}
+
+.hero h1 {
+  font-size: var(--text-2xl);
+  letter-spacing: -0.015em;
+  line-height: 1.18;
+  max-width: 34rem;
+  text-wrap: balance;
+}
+
+.hero .tagline {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+  max-width: var(--measure);
+}
+
+.section {
+  margin-top: var(--space-12);
+}
+
+.doors {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 40rem) {
+  .doors {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lane-door {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-decoration: none;
+  color: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  transition: border-color 0.12s ease;
+}
+
+.lane-door[data-lane='use'] {
+  --door: var(--color-use);
+}
+
+.lane-door[data-lane='build'] {
+  --door: var(--color-build);
+}
+
+.lane-door:hover {
+  border-color: var(--door);
+}
+
+.lane-door h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  color: var(--door);
+}
+
+.lane-door h3::after {
+  content: '\2192'; /* → */
+  color: var(--door);
+}
+
+.lane-door p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* chip — どの画面にも出る小さなピル。ナビにもボタンにも使う。 */
+.chip {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 3px var(--space-3);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  transition:
+    color 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text);
+}
+
+.chip[aria-pressed='true'] {
+  color: var(--color-surface);
+  background: var(--color-lane);
+  border-color: var(--color-lane);
+}
+
+/* 本文・名前に差し込む絵文字。サーバの emojis[] 由来のカスタム絵文字
+   (lib/emoji.ts)と、self-host Twemoji。どちらも文字に乗る大きさにする。 */
+img.custom-emoji {
+  height: 1.3em;
+  width: auto;
+  vertical-align: text-bottom;
+  object-fit: contain;
+  display: inline-block;
+}
+
+/* Twemoji は本文中の unicode 絵文字({@html} 経由なので global 必須)と、
+   Twemoji コンポーネント経由の UI アイコン(ブースト・お気に入り…)の両方。 */
+img.twemoji {
+  height: 1.2em;
+  width: 1.2em;
+  margin: 0 0.05em;
+  vertical-align: middle;
+  object-fit: contain;
+  display: inline-block;
+}
+
 /* タイムラインの一本道。中央寄せ、measure に揃える。 */
 .timeline {
   max-width: var(--measure);
   margin-inline: auto;
+}
+
+/* 各ページの上の見出し帯。タイトルを左に、ナビ(chip 群)を右に。
+   .timeline と併用して measure 幅・中央寄せにそろえる。 */
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.page-head h1 {
+  font-size: var(--text-lg);
+}
+
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .tabs {
@@ -58,15 +208,6 @@ main.wrap {
 
 .status:last-child {
   border-bottom: 0;
-}
-
-.status .avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--color-border);
-  flex-shrink: 0;
-  object-fit: cover;
 }
 
 .status .meta {
@@ -218,15 +359,6 @@ main.wrap {
   border-color: var(--color-text);
 }
 
-/* lane-door の中身を少し書きやすく。 */
-.lane-door h3 {
-  /* 既定の "→" を保ったまま使う */
-}
-
-.lane-door p {
-  margin: 0;
-}
-
 /* ── 小さい共通 ──────────────────────────────────────────────────── */
 
 .muted {
@@ -247,6 +379,12 @@ main.wrap {
 .avatar-lg {
   width: 72px;
   height: 72px;
+}
+
+/* 小さいアバター (会話一覧・通知の見出しなど)。.avatar と併用する。 */
+.avatar-sm {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 /* form 要素を最低限揃える。.composer や .settings-form など、.form

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { completeLogin } from '$lib/auth';
+  import { t } from '$lib/i18n';
 
   let error = $state<string | null>(null);
 
@@ -12,12 +13,12 @@
     const err = params.get('error');
 
     if (err) {
-      error = 'サーバから「' + err + '」と返ってきました。';
+      error = $t('callback.serverError', { err });
       return;
     }
 
     if (!code || !state) {
-      error = 'urlに、足りないものがあるみたいです。';
+      error = $t('callback.urlMissing');
       return;
     }
 
@@ -32,10 +33,10 @@
 
 {#if error}
   <section class="hero">
-    <h1>うまく入れませんでした。</h1>
+    <h1>{$t('callback.failedTitle')}</h1>
     <p class="tagline">{error}</p>
   </section>
-  <p class="prose-small"><a href="/">トップにもどる</a></p>
+  <p class="prose-small"><a href="/">{$t('common.backToTop')}</a></p>
 {:else}
-  <p class="loading">入っています…</p>
+  <p class="loading">{$t('callback.entering')}</p>
 {/if}
