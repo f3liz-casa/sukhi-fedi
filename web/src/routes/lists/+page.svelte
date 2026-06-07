@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getLists, createList, deleteList, type List } from '$lib/api';
+  import { getLists, createList, updateList, deleteList, type List } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import { t } from '$lib/i18n';
   import { refreshCircles } from '$lib/circles';
@@ -65,6 +65,19 @@
       // 失敗時はそのまま。
     }
   }
+
+  // 既存リストの「ホームに出さない」を切替。成功で state を差し替え、失敗時は
+  // 何もしない（checkbox は l.exclusive に描き戻る）。バッジ対象も変わるので
+  // refreshCircles する。
+  async function toggleExclusive(l: List, value: boolean) {
+    try {
+      const updated = await updateList(l.id, { exclusive: value });
+      lists = lists.map((x) => (x.id === l.id ? updated : x));
+      void refreshCircles();
+    } catch {
+      // 失敗時はそのまま。
+    }
+  }
 </script>
 
 <p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
@@ -107,6 +120,14 @@
     {#each lists as l (l.id)}
       <article class="list-row">
         <a class="list-link" href={`/lists/${l.id}`}>{l.title}</a>
+        <label class="excl" title={$t('lists.exclusiveLabel')}>
+          <input
+            type="checkbox"
+            checked={l.exclusive}
+            onchange={(e) => toggleExclusive(l, e.currentTarget.checked)}
+          />
+          <span class="prose-small">{$t('lists.exclusiveShort')}</span>
+        </label>
         <button type="button" class="chip" onclick={() => remove(l)}>{$t('lists.delete')}</button>
       </article>
     {/each}
@@ -130,5 +151,11 @@
   }
   .list-link:hover {
     text-decoration: underline;
+  }
+  .excl {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    white-space: nowrap;
   }
 </style>

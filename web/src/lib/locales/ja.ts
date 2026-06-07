@@ -270,6 +270,8 @@ export const ja = {
   'lists.delete': '削除',
   'lists.confirmDelete': '「{title}」を削除しますか？',
   'lists.exclusiveLabel': 'ホームには出さない（サークルとして使う）',
+  'lists.exclusiveShort': 'ホームに出さない',
+  'lists.addTo': 'リストに追加',
 
   // ── リストの中身 ─────────────────────────────────────
   'listDetail.fallbackTitle': 'リスト',

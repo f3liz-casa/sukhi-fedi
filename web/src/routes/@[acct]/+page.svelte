@@ -18,6 +18,7 @@
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import FollowButton from '$lib/components/FollowButton.svelte';
+  import AddToListButton from '$lib/components/AddToListButton.svelte';
   import Composer from '$lib/components/Composer.svelte';
   import Twemoji from '$lib/components/Twemoji.svelte';
   import { phrase } from '$lib/phrase';
@@ -187,6 +188,9 @@
         <a class="chip" href="/settings">{$t('profile.edit')}</a>
       {:else}
         <FollowButton accountId={account.id} relationship={rel} onchange={(r) => (rel = r)} />
+        {#if rel}
+          <AddToListButton accountId={account.id} />
+        {/if}
         {#if rel}
           <div class="mod-menu">
             <button

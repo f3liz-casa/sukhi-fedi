@@ -273,6 +273,8 @@ export const ko: Dict = {
   'lists.delete': '삭제',
   'lists.confirmDelete': '「{title}」를 삭제할까요?',
   'lists.exclusiveLabel': '홈에 표시하지 않기 (서클로 사용)',
+  'lists.exclusiveShort': '홈에 표시 안 함',
+  'lists.addTo': '리스트에 추가',
 
   // ── 리스트 안 ────────────────────────────────────────
   'listDetail.fallbackTitle': '리스트',
