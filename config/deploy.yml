@@ -34,8 +34,9 @@
 #    succeeds → ready.
 # 2. Set the env vars referenced in `.kamal/secrets` in your shell or
 #    in a tool like direnv / 1Password CLI before running deploy.
-# 3. Create a GitHub PAT with **read:packages only** (no write needed —
-#    CI does all builds + pushes) and export as KAMAL_REGISTRY_PASSWORD.
+# 3. No registry PAT needed ─ images are built on the box (bin/build-on-box.sh)
+#    and pushed to the box-local registry (127.0.0.1:5000). Put its basic-auth
+#    pass in `.kamal/secrets` as `REGISTRY_PASSWORD=` (htpasswd user `sukhi`).
 # 4. Generate the Anubis cookie-signing key once and put it in
 #    `.kamal/secrets` as `ANUBIS_ED25519_KEY=`:
 #       openssl rand -hex 32
@@ -46,7 +47,7 @@
 #       kamal accessory boot all       # postgres, nats, bun, delivery, api, gateway
 #       kamal accessory boot nats-bootstrap   # one-shot: creates OUTBOX stream
 #       kamal deploy --skip-push       # Anubis (web role)
-# 7. Roll a new gateway version after a CI tag:
+# 7. Roll a new gateway version (after `bin/build-on-box.sh gateway`):
 #       kamal accessory reboot gateway     # picks up the new `:v0` digest
 #    Roll Anubis (rare):
 #       kamal deploy --skip-push           # pulls techarohq/anubis:latest
@@ -73,18 +74,25 @@ service: sukhi-fedi
 #   kamal deploy --version=<tag>
 # Anubis itself is pinned to `:latest`; bump rarely via
 #   kamal deploy --skip-push   # no --version, pulls the latest anubis
-image: f3liz-casa/sukhi-fedi-anubis
+image: sukhi-fedi-anubis
 
+# kamal は build しない(bin/build-on-box.sh が箱で焼く → deploy は --skip-push /
+# accessory reboot)。config 検証で arch だけ要求されるので置く。箱は arm64。
 builder:
-  arch:
-    - amd64
-    - arm64
+  arch: arm64
 
+# 箱の private registry に相乗り(techo が立てた 127.0.0.1:5000 の registry:2)。
+# user は sukhi で分ける ─ htpasswd に techo とは別エントリ。registry:2 の
+# basic-auth に repo 単位の ACL は無いので、分離は「資格情報を分ける」意味。
+# 127.0.0.1 は docker が既定で insecure 許可するので daemon 設定は不要。kamal は
+# pull 前に docker login するので basic-auth を渡す。
+# 公開 multi-arch image は引き続き release.yml が ghcr に出す ─ こっちは
+# 「自分の箱に出す」専用(bin/build-on-box.sh で arm64 単一を焼く)。
 registry:
-  server: ghcr.io
-  username: f3liz-casa
+  server: 127.0.0.1:5000
+  username: sukhi
   password:
-    - KAMAL_REGISTRY_PASSWORD
+    - REGISTRY_PASSWORD
 
 # Rocky Linux box; cloud-init provisions the `rocky` user with sudo
 # + docker group. Kamal defaults to root — override here.
@@ -173,7 +181,7 @@ accessories:
   # with `kamal accessory reboot gateway` — the image tag is `:v0`
   # rolling, so the latest semver-tagged release picks up.
   gateway:
-    image: ghcr.io/f3liz-casa/sukhi-fedi-gateway:v0
+    image: 127.0.0.1:5000/sukhi-fedi-gateway:v0
     host: 217.142.242.103
     env:
       clear:
@@ -269,7 +277,7 @@ accessories:
   #   kamal accessory boot nats-bootstrap
   #   kamal accessory remove nats-bootstrap   # optional cleanup
   nats-bootstrap:
-    image: ghcr.io/f3liz-casa/sukhi-fedi-nats-bootstrap:v0
+    image: 127.0.0.1:5000/sukhi-fedi-nats-bootstrap:v0
     host: 217.142.242.103
     env:
       clear:
@@ -307,7 +315,7 @@ accessories:
       cpus: "0.5"
 
   bun:
-    image: ghcr.io/f3liz-casa/sukhi-fedi-bun:v0
+    image: 127.0.0.1:5000/sukhi-fedi-bun:v0
     host: 217.142.242.103
     env:
       clear:
@@ -322,7 +330,7 @@ accessories:
   # First service to scale horizontally when delivery queue lag is
   # consistently >0 — change `host:` to a list of multiple hosts.
   delivery:
-    image: ghcr.io/f3liz-casa/sukhi-fedi-delivery:v0
+    image: 127.0.0.1:5000/sukhi-fedi-delivery:v0
     host: 217.142.242.103
     env:
       clear:
@@ -349,7 +357,7 @@ accessories:
   # Distributed-Erlang plugin node. Hostname MUST be `api` so the
   # node name `api@api` resolves from the gateway via `PLUGIN_NODES`.
   api:
-    image: ghcr.io/f3liz-casa/sukhi-fedi-api:v0
+    image: 127.0.0.1:5000/sukhi-fedi-api:v0
     host: 217.142.242.103
     env:
       clear:
