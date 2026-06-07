@@ -275,7 +275,8 @@ img.twemoji {
 
 /* フォーム要素 — atfedi-de には無いので最小限を足す。 */
 .form {
-  max-width: 24rem;
+  max-width: var(--measure);
+  margin-inline: auto;
 }
 
 .form label {
@@ -340,6 +341,7 @@ img.twemoji {
 
 .prose-small {
   max-width: var(--measure);
+  margin-inline: auto;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }

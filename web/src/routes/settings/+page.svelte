@@ -198,7 +198,7 @@
   <h1>{$t('settings.title')}</h1>
 </header>
 
-<section style="margin: var(--space-4) 0;">
+<section class="timeline" style="margin: var(--space-4) 0;">
   <p class="muted" style="margin-bottom: var(--space-2);">{$t('settings.language')}</p>
   <LangSwitch />
 </section>
@@ -268,7 +268,7 @@
     <a class="chip" href="/settings/password">{$t('settings.changePassword')}</a>
   </p>
 
-  <details class="rel-manage" style="margin-top: var(--space-5);" ontoggle={onRelToggle}>
+  <details class="rel-manage timeline" style="margin-top: var(--space-5);" ontoggle={onRelToggle}>
     <summary style="font-size: var(--text-base); cursor: pointer;">{$t('settings.blockMute')}</summary>
 
     {#if relLoading}
@@ -301,7 +301,7 @@
          トークンをそのまま POST して、貼り直しなしで入れるようにする。
          通常のリンクではなく form なのは、/admin/login が token を
          body で受けて session cookie を立てて 302 する作りだから。 -->
-    <section class="admin-entry" style="margin-top: var(--space-5);">
+    <section class="admin-entry timeline" style="margin-top: var(--space-5);">
       <h2 style="font-size: var(--text-base);">{$t('settings.admin')}</h2>
       <p class="muted">{$t('settings.adminDesc')}</p>
       <form method="post" action="/admin/login">
@@ -312,7 +312,7 @@
   {/if}
 {/if}
 
-<footer class="muted" style="margin-top: var(--space-6); font-size: var(--text-sm);">
+<footer class="muted timeline" style="margin-top: var(--space-6); font-size: var(--text-sm);">
   {$t('settings.emojiCreditPre')}<a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer">Twemoji</a>{$t('settings.emojiCreditParenOpen')}<a
     href="https://creativecommons.org/licenses/by/4.0/"
     target="_blank"
