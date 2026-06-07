@@ -10,7 +10,6 @@ export const ko: Dict = {
   'common.loadMore': '더 보기',
   'common.backToTimeline': '타임라인으로 돌아가기',
   'common.timeline': '타임라인',
-  'common.back': '돌아가기',
   'common.backToTop': '처음으로 돌아가기',
   'common.sending': '보내고 있어요…',
   'common.deliverFailed': '잘 닿지 않았어요.',

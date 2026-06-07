@@ -119,9 +119,9 @@
   }
 </script>
 
+<p class="back-row timeline"><a class="back-link" href="/lists">← {$t('listDetail.listIndex')}</a></p>
 <header class="timeline page-head">
   <h1>{list?.title ?? $t('listDetail.fallbackTitle')}</h1>
-  <a class="chip" href="/lists">{$t('listDetail.listIndex')}</a>
 </header>
 
 {#if error}

@@ -7,7 +7,6 @@ export const ja = {
   'common.loadMore': 'もっと読む',
   'common.backToTimeline': 'タイムラインへ戻る',
   'common.timeline': 'タイムライン',
-  'common.back': '戻る',
   'common.backToTop': 'トップにもどる',
   'common.sending': '送っています…',
   'common.deliverFailed': 'うまく届きませんでした。',

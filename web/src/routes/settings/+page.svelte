@@ -193,9 +193,9 @@
   }
 </script>
 
+<p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
 <header class="timeline page-head">
   <h1>{$t('settings.title')}</h1>
-  <a class="chip" href="/timeline">{$t('common.back')}</a>
 </header>
 
 <section style="margin: var(--space-4) 0;">

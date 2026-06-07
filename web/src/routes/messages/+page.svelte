@@ -76,10 +76,10 @@
   }
 </script>
 
+<p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
 <header class="timeline page-head">
   <h1>{$t('messages.title')}</h1>
   <span class="page-nav">
-    <a class="chip" href="/timeline">{$t('common.timeline')}</a>
     <a class="chip" href="/search">{$t('nav.search')}</a>
   </span>
 </header>

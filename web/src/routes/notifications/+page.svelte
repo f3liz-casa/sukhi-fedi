@@ -103,14 +103,14 @@
   }
 </script>
 
+<p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
 <header class="timeline page-head">
   <h1>{$t('notif.title')}</h1>
-  <span class="page-nav">
-    <a class="chip" href="/timeline">{$t('common.timeline')}</a>
-    {#if items.length > 0}
+  {#if items.length > 0}
+    <span class="page-nav">
       <button class="chip" onclick={clearAll}>{$t('notif.clearAll')}</button>
-    {/if}
-  </span>
+    </span>
+  {/if}
 </header>
 
 <section class="timeline">
