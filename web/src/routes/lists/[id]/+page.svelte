@@ -6,17 +6,20 @@
     getList,
     fetchListTimeline,
     getListAccounts,
+    getRelationships,
     addToList,
     removeFromList,
     lookupAccount,
     type List,
     type Status,
-    type Account
+    type Account,
+    type Relationship
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
   import { t } from '$lib/i18n';
+  import { refreshCircles } from '$lib/circles';
 
   let id = $derived($page.params.id ?? '');
 
@@ -30,6 +33,16 @@
   // メンバー（<details> を開いたとき一度だけ読む）。
   let members = $state<Account[]>([]);
   let membersLoaded = $state(false);
+  // メンバーごとの relationship（フォロー状態）。取れなくても表示は進める。
+  let rels = $state<Record<string, Relationship>>({});
+
+  // 未フォローのメンバーが居たら「フォローすると流れる」ヒントを一度出す。
+  let hasUnfollowed = $derived(
+    members.some((m) => {
+      const r = rels[m.id];
+      return r && !r.following && !r.requested;
+    })
+  );
   let addAcct = $state('');
   let addPending = $state(false);
   let addError = $state<string | null>(null);
@@ -85,10 +98,30 @@
   async function loadMembers() {
     try {
       members = await getListAccounts(id);
+      await loadRels(members.map((m) => m.id));
       membersLoaded = true;
     } catch {
       // 静かに止める。開き直せばまた試す。
     }
+  }
+
+  // メンバーの relationship をまとめて引いて rels に重ねる。フォロー状態が
+  // 取れなくても（失敗しても）名簿としての表示は止めない。
+  async function loadRels(ids: string[]) {
+    if (ids.length === 0) return;
+    try {
+      const rs = await getRelationships(ids);
+      const next = { ...rels };
+      for (const r of rs) next[r.id] = r;
+      rels = next;
+    } catch {
+      // フォロー状態が無くても、サークルは成立する。
+    }
+  }
+
+  // FollowButton が返した最新の relationship を反映（ヒントの出し分けに効く）。
+  function onFollowChange(r: Relationship) {
+    rels = { ...rels, [r.id]: r };
   }
 
   async function addMember() {
@@ -100,6 +133,8 @@
       const a = await lookupAccount(acct);
       await addToList(id, [a.id]);
       if (!members.some((m) => m.id === a.id)) members = [...members, a];
+      await loadRels([a.id]);
+      void refreshCircles();
       addAcct = '';
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
@@ -113,6 +148,7 @@
     try {
       await removeFromList(id, [a.id]);
       members = members.filter((m) => m.id !== a.id);
+      void refreshCircles();
     } catch {
       // 失敗時はそのまま。
     }
@@ -154,8 +190,17 @@
     {#if membersLoaded && members.length === 0}
       <p class="prose-small">{$t('listDetail.noMembers')}</p>
     {/if}
+    {#if hasUnfollowed}
+      <p class="prose-small">{$t('listDetail.followHint')}</p>
+    {/if}
     {#each members as a (a.id)}
-      <AccountActionRow account={a} actionLabel={$t('listDetail.removeMember')} onaction={removeMember} />
+      <AccountActionRow
+        account={a}
+        actionLabel={$t('listDetail.removeMember')}
+        onaction={removeMember}
+        relationship={rels[a.id] ?? null}
+        onfollowchange={onFollowChange}
+      />
     {/each}
   </details>
 

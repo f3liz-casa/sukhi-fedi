@@ -4,6 +4,7 @@
   import Self from './Status.svelte';
   import ReactionPicker from './ReactionPicker.svelte';
   import Twemoji from './Twemoji.svelte';
+  import CircleBadge from './CircleBadge.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import { t, locale, type Locale, type TranslationKey } from '$lib/i18n';
@@ -282,6 +283,7 @@
       <a class="display-name" href={`/@${status.account.acct}`}
         >{@html renderEmojis(phrase(name), status.account.emojis)}</a
       >
+      <CircleBadge accountId={status.account.id} />
       <a href={`/@${status.account.acct}`}>@{status.account.acct}</a>
       <span>·</span>
       <a class="timestamp" href={`/@${status.account.acct}/${status.id}`} title={status.created_at}>{ts}</a>

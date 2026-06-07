@@ -272,6 +272,7 @@ export const ko: Dict = {
   'lists.empty': '아직 리스트가 없어요. 위에서 만들 수 있어요.',
   'lists.delete': '삭제',
   'lists.confirmDelete': '「{title}」를 삭제할까요?',
+  'lists.exclusiveLabel': '홈에 표시하지 않기 (서클로 사용)',
 
   // ── 리스트 안 ────────────────────────────────────────
   'listDetail.fallbackTitle': '리스트',
@@ -287,6 +288,7 @@ export const ko: Dict = {
   'listDetail.empty':
     '이 리스트에는 아직 아무것도 흐르지 않았어요. 멤버를 더하면 여기에 모여요.',
   'listDetail.removeMember': '빼기',
+  'listDetail.followHint': '팔로우하면 이 사람의 글이 여기에 흘러요.',
 
   // ── 즐겨찾기 ─────────────────────────────────────────
   'favourites.title': '즐겨찾기',

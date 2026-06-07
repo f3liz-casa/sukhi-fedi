@@ -16,6 +16,7 @@ defmodule SukhiFedi.Timelines do
   import Ecto.Query
 
   alias SukhiFedi.{Repo, Snowflake}
+  alias SukhiFedi.Lists
   alias SukhiFedi.Schema.{Account, Boost, Follow, Note, Tag}
 
   @default_limit 20
@@ -44,18 +45,29 @@ defmodule SukhiFedi.Timelines do
     actor_uri = local_actor_uri(username)
     following_account_ids = following_local_account_ids(actor_uri)
 
-    visible_account_ids = [id | following_account_ids]
+    # Members of an *exclusive* circle are followed (so their posts arrive)
+    # but kept out of home — you read them in the circle's own feed. One
+    # exception: their *replies to a post on this server* (in_reply_to points
+    # back here, ≈ to you) still surface, so a circle member talking to you is
+    # never silently dropped from home. Boosts have no reply notion, so circle
+    # members stay fully quiet there (boost_account_ids keeps the subtraction).
+    excluded = Lists.excluded_account_ids(id)
+    reply_here = "https://#{SukhiFedi.Config.domain!()}/%"
+
+    note_account_ids = [id | following_account_ids]
+    boost_account_ids = [id | following_account_ids -- excluded]
 
     notes =
       Note
-      |> where([n], n.account_id in ^visible_account_ids)
+      |> where([n], n.account_id in ^note_account_ids)
+      |> where([n], n.account_id not in ^excluded or like(n.in_reply_to_ap_id, ^reply_here))
       |> where([n], n.visibility in ["public", "unlisted", "followers"])
       |> apply_paging(opts)
       |> Repo.all()
       |> Repo.preload([:account, :media, :tags])
       |> SukhiFedi.Notes.with_refs(id)
 
-    boosts = home_boosts(visible_account_ids, opts, limit, id)
+    boosts = home_boosts(boost_account_ids, opts, limit, id)
 
     # Both notes (id) and boost wrappers (synthesized id) share one
     # time-sortable id space, so a plain id-desc merge is chronological.

@@ -41,6 +41,12 @@ defmodule SukhiFedi.Addons.Streaming.NatsListener do
       {:ok, account_id} ->
         followers = get_follower_account_ids(account_id)
 
+        # NOTE(circles): no `stream.new_post` producer drives this path yet
+        # (see TODO.md). Whoever adds one must exclude followers who placed
+        # this author in an *exclusive* circle — skip `follower_id` where
+        # `account_id in SukhiFedi.Lists.excluded_account_ids(follower_id)`.
+        # Otherwise circle members' posts would leak into the home stream,
+        # bypassing the `Timelines.home/2` filter.
         Enum.each(followers, fn follower_id ->
           Registry.broadcast(:home, event, follower_id)
         end)

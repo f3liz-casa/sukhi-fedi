@@ -22,20 +22,25 @@ defmodule SukhiFedi.Integration.ListsTest do
   end
 
   describe "membership" do
-    test "only accepts members the owner already follows" do
+    test "adds any existing account regardless of follow; skips non-existent ids" do
       alice = create_account!("alice_mem")
       bob = create_account!("bob_mem")
-      _carol = create_account!("carol_mem")
+      carol = create_account!("carol_mem")
 
+      # alice follows bob but NOT carol
       {:ok, _} = Social.request_follow(alice, bob.id)
-      # local follow lands as accepted automatically
       {:ok, list} = Lists.create(alice.id, %{title: "Inner circle"})
 
-      # bob is followed → accepted into the list
-      # carol is not followed → silently dropped
-      assert :ok = Lists.add_accounts(alice.id, list.id, [bob.id, 99_999_999])
-      assert {:ok, [%{id: m_id}]} = Lists.list_accounts(alice.id, list.id)
-      assert m_id == bob.id
+      # A circle is a roster, not a subscription: both the followed (bob) and
+      # the un-followed (carol) go in. The non-existent id is skipped (FK).
+      assert :ok = Lists.add_accounts(alice.id, list.id, [bob.id, carol.id, 99_999_999])
+      assert {:ok, members} = Lists.list_accounts(alice.id, list.id)
+      ids = members |> Enum.map(& &1.id) |> Enum.sort()
+      assert ids == Enum.sort([bob.id, carol.id])
+
+      # adding to a circle never changes who alice follows: carol stays unfollowed
+      [rel] = Social.list_relationships(alice, [carol.id])
+      refute rel.following
     end
 
     test "remove_accounts is idempotent" do
@@ -48,6 +53,29 @@ defmodule SukhiFedi.Integration.ListsTest do
       assert :ok = Lists.remove_accounts(alice.id, list.id, [bob.id])
       assert :ok = Lists.remove_accounts(alice.id, list.id, [bob.id])
       assert {:ok, []} = Lists.list_accounts(alice.id, list.id)
+    end
+  end
+
+  describe "excluded_account_ids/1" do
+    test "returns members of exclusive lists only, never the viewer" do
+      alice = create_account!("alice_excl")
+      bob = create_account!("bob_excl")
+      carol = create_account!("carol_excl")
+
+      {:ok, circle} = Lists.create(alice.id, %{title: "circle", exclusive: true})
+      {:ok, plain} = Lists.create(alice.id, %{title: "plain", exclusive: false})
+
+      :ok = Lists.add_accounts(alice.id, circle.id, [bob.id])
+      :ok = Lists.add_accounts(alice.id, plain.id, [carol.id])
+
+      excluded = Lists.excluded_account_ids(alice.id)
+
+      # bob is in an exclusive circle → kept out of home
+      assert bob.id in excluded
+      # carol is only in a plain list → still shown in home
+      refute carol.id in excluded
+      # the viewer is never excluded from their own home
+      refute alice.id in excluded
     end
   end
 

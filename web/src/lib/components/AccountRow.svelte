@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Account, Relationship } from '$lib/api';
   import FollowButton from './FollowButton.svelte';
+  import CircleBadge from './CircleBadge.svelte';
   import { phrase } from '$lib/phrase';
   import { renderEmojis } from '$lib/emoji';
 
@@ -24,7 +25,7 @@
       <span class="avatar" aria-hidden="true"></span>
     {/if}
     <span class="stack-tight">
-      <span class="display-name">{@html renderEmojis(phrase(name), account.emojis)}</span>
+      <span class="display-name">{@html renderEmojis(phrase(name), account.emojis)}<CircleBadge accountId={account.id} /></span>
       <span class="muted">@{account.acct}</span>
     </span>
   </a>

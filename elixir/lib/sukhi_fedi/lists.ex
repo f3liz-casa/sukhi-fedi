@@ -1,23 +1,29 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Lists do
   @moduledoc """
-  Mastodon lists context.
+  Lists / circles context.
 
   Lists are private to the owner: every read / write is scoped to a
-  `viewer` account id. Membership is restricted to accounts the owner
-  already follows in `accepted` state — the Mastodon spec is "any
-  account you follow," and enforcing it here keeps the list-timeline
-  query honest.
+  `viewer` account id. Membership is **independent of following** — a
+  list is a roster (a "circle"), not a subscription, so any existing
+  account can be added regardless of follow state. Following is a
+  separate, explicit action; this module never touches `follows`
+  (adding nor removing a member changes who you follow).
 
-  All write helpers return either `{:ok, ...}` or `{:error, :not_found
-  | :not_following}`. `:not_found` covers both "no such list" and
-  "list belongs to someone else" so we don't leak existence.
+  An *exclusive* list's members are kept out of the owner's home
+  timeline (see `excluded_account_ids/1` + `Timelines.home/2`); they
+  surface only in the list's own feed. That is how you follow someone
+  for the circle without their posts crowding home.
+
+  All write helpers return either `{:ok, ...}` or `{:error,
+  :not_found}`. `:not_found` covers both "no such list" and "list
+  belongs to someone else" so we don't leak existence.
   """
 
   import Ecto.Query
 
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Follow, List, Note}
+  alias SukhiFedi.Schema.{Account, List, Note}
 
   # ── lists CRUD ──────────────────────────────────────────────────────────
 
@@ -99,19 +105,20 @@ defmodule SukhiFedi.Lists do
   end
 
   @doc """
-  Add members. Silently skips ids the viewer doesn't follow (we
-  *don't* return `:not_following` for partials — Mastodon clients
-  re-list immediately after).
+  Add members to a circle. Membership is independent of following:
+  any *existing* account may be added (a circle is a roster, not a
+  subscription). Ids with no matching account are skipped — they'd
+  violate the `list_accounts.account_id` FK otherwise. This never
+  follows anyone; following stays a separate, explicit action.
   """
   @spec add_accounts(integer(), integer() | String.t(), [integer() | String.t()]) ::
           :ok | {:error, :not_found}
   def add_accounts(viewer_id, id, account_ids) do
     with {:ok, %List{id: lid}} <- get(viewer_id, id) do
       ids = Enum.map(account_ids, &SukhiFedi.Coercion.parse_id/1) |> Enum.reject(&is_nil/1)
-      viewer_uri = viewer_actor_uri(viewer_id)
-      followed = followed_ids(viewer_uri, ids)
+      existing = Repo.all(from a in Account, where: a.id in ^ids, select: a.id)
 
-      rows = Enum.map(followed, fn aid -> %{list_id: lid, account_id: aid} end)
+      rows = Enum.map(existing, fn aid -> %{list_id: lid, account_id: aid} end)
 
       Repo.insert_all("list_accounts", rows,
         on_conflict: :nothing,
@@ -170,29 +177,26 @@ defmodule SukhiFedi.Lists do
     end
   end
 
-  # ── helpers ─────────────────────────────────────────────────────────────
-
-  defp followed_ids(_viewer_uri, []), do: []
-
-  defp followed_ids(viewer_uri, ids) do
+  @doc """
+  Account ids whose posts are kept out of the owner's home timeline:
+  members of any *exclusive* circle the viewer owns. The viewer's own
+  id is never included, so home can subtract this set freely. See
+  `Timelines.home/2`.
+  """
+  @spec excluded_account_ids(integer()) :: [integer()]
+  def excluded_account_ids(viewer_id) when is_integer(viewer_id) do
     Repo.all(
-      from f in Follow,
-        where:
-          f.follower_uri == ^viewer_uri and f.followee_id in ^ids and f.state == "accepted",
-        select: f.followee_id
+      from la in "list_accounts",
+        join: l in List,
+        on: l.id == la.list_id,
+        where: l.account_id == ^viewer_id and l.exclusive == true,
+        where: la.account_id != ^viewer_id,
+        select: la.account_id,
+        distinct: true
     )
   end
 
-  defp viewer_actor_uri(viewer_id) when is_integer(viewer_id) do
-    case Repo.get(SukhiFedi.Schema.Account, viewer_id) do
-      nil ->
-        nil
-
-      %SukhiFedi.Schema.Account{username: u} ->
-        domain = SukhiFedi.Config.domain!()
-        "https://#{domain}/users/#{u}"
-    end
-  end
+  # ── helpers ─────────────────────────────────────────────────────────────
 
   defp stringify(attrs) when is_map(attrs) do
     Map.new(attrs, fn {k, v} -> {to_string(k), v} end)

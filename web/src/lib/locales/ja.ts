@@ -269,6 +269,7 @@ export const ja = {
   'lists.empty': 'まだ、リストは、ありません。上で作れます。',
   'lists.delete': '削除',
   'lists.confirmDelete': '「{title}」を削除しますか？',
+  'lists.exclusiveLabel': 'ホームには出さない（サークルとして使う）',
 
   // ── リストの中身 ─────────────────────────────────────
   'listDetail.fallbackTitle': 'リスト',
@@ -282,6 +283,7 @@ export const ja = {
   'listDetail.addFailed': '追加できませんでした。',
   'listDetail.noMembers': 'まだ、だれも入っていません。',
   'listDetail.removeMember': '外す',
+  'listDetail.followHint': 'フォローすると、この人の投稿がここに流れます。',
   'listDetail.empty':
     'このリストには、まだ何も流れていません。メンバーを加えると、ここに集まります。',
 

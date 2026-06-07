@@ -4,11 +4,14 @@
   import { getLists, createList, deleteList, type List } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import { t } from '$lib/i18n';
+  import { refreshCircles } from '$lib/circles';
 
   let lists = $state<List[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let newTitle = $state('');
+  // 既定 ON: ここで作るのは主に「ホームに出さない」サークル用途だから。
+  let exclusive = $state(true);
   let creating = $state(false);
 
   onMount(() => {
@@ -42,7 +45,7 @@
     if (!title || creating) return;
     creating = true;
     try {
-      const l = await createList(title);
+      const l = await createList(title, { exclusive });
       lists = [...lists, l];
       newTitle = '';
     } catch {
@@ -57,6 +60,7 @@
     try {
       await deleteList(l.id);
       lists = lists.filter((x) => x.id !== l.id);
+      void refreshCircles();
     } catch {
       // 失敗時はそのまま。
     }
@@ -75,16 +79,22 @@
       e.preventDefault();
       void create();
     }}
-    style="display: flex; gap: var(--space-2); margin-bottom: var(--space-4);"
+    style="margin-bottom: var(--space-4);"
   >
-    <input
-      type="text"
-      bind:value={newTitle}
-      placeholder={$t('lists.newPlaceholder')}
-      maxlength="60"
-      style="flex: 1;"
-    />
-    <button type="submit" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
+    <div style="display: flex; gap: var(--space-2);">
+      <input
+        type="text"
+        bind:value={newTitle}
+        placeholder={$t('lists.newPlaceholder')}
+        maxlength="60"
+        style="flex: 1;"
+      />
+      <button type="submit" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
+    </div>
+    <label style="display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2);">
+      <input type="checkbox" bind:checked={exclusive} />
+      <span class="prose-small">{$t('lists.exclusiveLabel')}</span>
+    </label>
   </form>
 
   {#if error}
