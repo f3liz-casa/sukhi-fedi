@@ -26,7 +26,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
 
   def home(req) do
     %{current_account: viewer} = req[:assigns]
-    opts = Pagination.parse_opts(req[:query])
+    opts = Pagination.parse_opts(req[:query]) |> with_filters(req[:query])
 
     case viewer do
       nil ->
@@ -55,7 +55,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
 
     opts =
       base_opts
-      |> Map.put(:only_media, parsed["only_media"] in ["true", "1"])
+      |> with_filters(req[:query])
       |> Map.put(:local, parsed["local"] in ["true", "1", nil])
       |> Map.put(:remote, parsed["remote"] in ["true", "1"])
 
@@ -81,6 +81,7 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
 
     opts =
       base_opts
+      |> with_filters(req[:query])
       |> Map.put(:local, parsed["local"] in ["true", "1", nil])
 
     case GatewayRpc.call(SukhiFedi.Timelines, :tag, [hashtag, Map.to_list(opts)]) do
@@ -109,6 +110,17 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
       end
 
     {:ok, %{status: 200, body: JSON.encode!(body), headers: headers}}
+  end
+
+  # only_media / hide_boosts / hide_sensitive をクエリから opts に畳む。
+  # hide_boosts が効くのは home だけ(public/tag はブーストを混ぜない)。
+  defp with_filters(opts, query) do
+    parsed = parse_query(query)
+
+    opts
+    |> Map.put(:only_media, parsed["only_media"] in ["true", "1"])
+    |> Map.put(:hide_boosts, parsed["hide_boosts"] in ["true", "1"])
+    |> Map.put(:hide_sensitive, parsed["hide_sensitive"] in ["true", "1"])
   end
 
   defp parse_query(nil), do: %{}

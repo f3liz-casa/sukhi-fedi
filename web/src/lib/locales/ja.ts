@@ -213,6 +213,10 @@ export const ja = {
   'timeline.tabHome': 'ホーム',
   'timeline.tabPublic': 'みんな',
   'timeline.tabTag': 'タグ',
+  'timeline.filter': 'フィルター',
+  'timeline.onlyMedia': '画像・メディアのみ',
+  'timeline.hideBoosts': 'RT（ブースト）を隠す',
+  'timeline.hideSensitive': 'センシティブ・CWを隠す',
   'timeline.tagLabel': 'タグ（#は要りません）',
   'timeline.tagPlaceholder': '例: しずか',
   'timeline.emptyHome':

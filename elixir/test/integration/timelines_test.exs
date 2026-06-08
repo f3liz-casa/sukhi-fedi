@@ -66,6 +66,42 @@ defmodule SukhiFedi.Integration.TimelinesTest do
     end
   end
 
+  describe "home/2 filters" do
+    test "hide_sensitive drops sensitive and CW posts" do
+      alice = create_account!("alice_filt")
+      {:ok, plain} = Notes.create_status(alice, %{"status" => "plain"})
+
+      sens =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: alice.id,
+          content: "nsfw",
+          visibility: "public",
+          sensitive: true
+        })
+        |> Repo.insert!()
+
+      cw =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: alice.id,
+          content: "spoiler",
+          visibility: "public",
+          cw: "warning"
+        })
+        |> Repo.insert!()
+
+      all_ids = alice |> Timelines.home() |> Enum.map(&Map.get(&1, :id))
+      assert sens.id in all_ids
+      assert cw.id in all_ids
+
+      kept = alice |> Timelines.home(hide_sensitive: true) |> Enum.map(&Map.get(&1, :id))
+      assert plain.id in kept
+      refute sens.id in kept
+      refute cw.id in kept
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()

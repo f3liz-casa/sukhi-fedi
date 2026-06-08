@@ -62,12 +62,16 @@ defmodule SukhiFedi.Timelines do
       |> where([n], n.account_id in ^note_account_ids)
       |> where([n], n.account_id not in ^excluded or like(n.in_reply_to_ap_id, ^reply_here))
       |> where([n], n.visibility in ["public", "unlisted", "followers"])
+      |> maybe_only_media(opts[:only_media])
+      |> maybe_hide_sensitive(opts[:hide_sensitive])
       |> apply_paging(opts)
       |> Repo.all()
       |> Repo.preload([:account, :media, :tags])
       |> SukhiFedi.Notes.with_refs(id)
 
-    boosts = home_boosts(boost_account_ids, opts, limit, id)
+    # RT(ブースト)を隠すフィルタ。home だけがブーストを混ぜるので、ここで止める。
+    boosts =
+      if opts[:hide_boosts], do: [], else: home_boosts(boost_account_ids, opts, limit, id)
 
     # Both notes (id) and boost wrappers (synthesized id) share one
     # time-sortable id space, so a plain id-desc merge is chronological.
@@ -170,6 +174,7 @@ defmodule SukhiFedi.Timelines do
     |> maybe_local_only(local?)
     |> apply_paging(opts)
     |> maybe_only_media(opts[:only_media])
+    |> maybe_hide_sensitive(opts[:hide_sensitive])
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
     |> SukhiFedi.Notes.with_refs()
@@ -206,6 +211,8 @@ defmodule SukhiFedi.Timelines do
 
     base
     |> maybe_local_only(local?)
+    |> maybe_only_media(opts[:only_media])
+    |> maybe_hide_sensitive(opts[:hide_sensitive])
     |> apply_paging(opts)
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
@@ -241,6 +248,13 @@ defmodule SukhiFedi.Timelines do
     do: where(q, [n], fragment("EXISTS (SELECT 1 FROM note_media nm WHERE nm.note_id = ?)", n.id))
 
   defp maybe_only_media(q, _), do: q
+
+  # センシティブ / CW 付きを隠す。sensitive フラグと cw(spoiler)どちらも無い
+  # ものだけ残す。
+  defp maybe_hide_sensitive(q, true),
+    do: where(q, [n], n.sensitive == false and is_nil(n.cw))
+
+  defp maybe_hide_sensitive(q, _), do: q
 
   defp clamp_limit(n) when is_integer(n) and n > 0 and n <= @max_limit, do: n
   defp clamp_limit(_), do: @default_limit

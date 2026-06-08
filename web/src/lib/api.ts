@@ -209,9 +209,19 @@ function pageQs(opts: { maxId?: string | null; limit?: number }, defaultLimit: n
 
 export async function fetchTimeline(
   kind: TimelineKind,
-  opts: { tag?: string; maxId?: string | null; limit?: number } = {}
+  opts: {
+    tag?: string;
+    maxId?: string | null;
+    limit?: number;
+    onlyMedia?: boolean;
+    hideBoosts?: boolean;
+    hideSensitive?: boolean;
+  } = {}
 ): Promise<Page<Status>> {
   const qs = pageQs(opts, 20);
+  if (opts.onlyMedia) qs.set('only_media', '1');
+  if (opts.hideBoosts) qs.set('hide_boosts', '1');
+  if (opts.hideSensitive) qs.set('hide_sensitive', '1');
 
   let path: string;
   let auth = false;

@@ -50,6 +50,16 @@
   let error = $state<string | null>(null);
   let initial = $state(true);
 
+  // 表示フィルター（home/public/tag タブとは別軸）。変えたら頭から読み直す。
+  // RT を隠すのは home だけ実効（public/tag はブーストを混ぜない）。
+  let onlyMedia = $state(false);
+  let hideBoosts = $state(false);
+  let hideSensitive = $state(false);
+  let filterOpen = $state(false);
+  let activeFilters = $derived(
+    [onlyMedia, kind === 'home' && hideBoosts, hideSensitive].filter(Boolean).length
+  );
+
   onMount(() => {
     if (!isLoggedIn()) {
       goto('/');
@@ -71,7 +81,10 @@
     try {
       const page = await fetchTimeline(kind, {
         tag: kind === 'tag' ? tag : undefined,
-        maxId: reset ? null : nextMaxId
+        maxId: reset ? null : nextMaxId,
+        onlyMedia,
+        hideBoosts,
+        hideSensitive
       });
       items = reset ? page.items : [...items, ...page.items];
       nextMaxId = page.nextMaxId;
@@ -116,6 +129,11 @@
     clearToken();
     goto('/');
   }
+
+  // フィルターを変えたら先頭から読み直す。
+  function applyFilters() {
+    void load(true);
+  }
 </script>
 
 <header class="timeline page-head">
@@ -159,6 +177,36 @@
     onclick={() => selectKind('tag')}
   >{$t('timeline.tabTag')}</button>
 </nav>
+
+<div class="filter-bar timeline">
+  <button
+    type="button"
+    class="chip"
+    aria-expanded={filterOpen}
+    aria-haspopup="menu"
+    onclick={() => (filterOpen = !filterOpen)}
+  >
+    {$t('timeline.filter')}{activeFilters > 0 ? ` (${activeFilters})` : ''}
+  </button>
+  {#if filterOpen}
+    <div class="filter-menu" role="menu">
+      <label class="filter-row">
+        <input type="checkbox" bind:checked={onlyMedia} onchange={applyFilters} />
+        <span>{$t('timeline.onlyMedia')}</span>
+      </label>
+      {#if kind === 'home'}
+        <label class="filter-row">
+          <input type="checkbox" bind:checked={hideBoosts} onchange={applyFilters} />
+          <span>{$t('timeline.hideBoosts')}</span>
+        </label>
+      {/if}
+      <label class="filter-row">
+        <input type="checkbox" bind:checked={hideSensitive} onchange={applyFilters} />
+        <span>{$t('timeline.hideSensitive')}</span>
+      </label>
+    </div>
+  {/if}
+</div>
 
 {#if kind === 'tag'}
   <form
@@ -207,3 +255,31 @@
     <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>
+
+<style>
+  .filter-bar {
+    position: relative;
+    margin-bottom: var(--space-3);
+  }
+  .filter-menu {
+    position: absolute;
+    z-index: 10;
+    margin-top: 0.25rem;
+    min-width: 14rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    cursor: pointer;
+  }
+  .filter-row:hover {
+    background: var(--fill-hover);
+  }
+</style>

@@ -216,6 +216,10 @@ export const ko: Dict = {
   'timeline.tabHome': '홈',
   'timeline.tabPublic': '모두',
   'timeline.tabTag': '태그',
+  'timeline.filter': '필터',
+  'timeline.onlyMedia': '이미지·미디어만',
+  'timeline.hideBoosts': 'RT(부스트) 숨기기',
+  'timeline.hideSensitive': '민감함·CW 숨기기',
   'timeline.tagLabel': '태그 (#은 필요 없어요)',
   'timeline.tagPlaceholder': '예: 고요',
   'timeline.emptyHome':
