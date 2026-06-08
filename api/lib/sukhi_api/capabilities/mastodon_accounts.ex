@@ -435,8 +435,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
   def relationships(req) do
     %{current_account: viewer} = req[:assigns]
-    q = parse_query(req[:query])
-    ids = extract_ids(q)
+    ids = extract_ids(req[:query])
 
     case viewer do
       nil ->
@@ -459,18 +458,22 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     end
   end
 
-  defp extract_ids(query_map) do
-    # Mastodon allows id[]=1&id[]=2 or id=1,2,3
-    bracket = Map.get(query_map, "id[]", "")
-    plain = Map.get(query_map, "id", "")
-
-    raw =
-      [bracket, plain]
-      |> Enum.flat_map(fn s -> String.split(s || "", ",", trim: true) end)
-      |> Enum.map(&String.trim/1)
-      |> Enum.reject(&(&1 == ""))
-
-    raw
+  # Mastodon allows id[]=1&id[]=2 or id=1,2,3. We must decode the raw
+  # query string ourselves: `URI.decode_query` folds repeated keys into
+  # one map entry, so `id[]=1&id[]=2&id[]=3` would collapse to just "3"
+  # and only the last account in a followers/following list would get a
+  # relationship (→ the follow button showed on the last row only).
+  # `URI.query_decoder` preserves every pair.
+  defp extract_ids(query) when is_binary(query) do
+    query
+    |> URI.query_decoder()
+    |> Enum.flat_map(fn
+      {"id[]", v} -> String.split(v || "", ",", trim: true)
+      {"id", v} -> String.split(v || "", ",", trim: true)
+      _ -> []
+    end)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
     |> Enum.take(40)
     |> Enum.map(fn s ->
@@ -481,6 +484,8 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     end)
     |> Enum.reject(&is_nil/1)
   end
+
+  defp extract_ids(_), do: []
 
   # ── helpers ──────────────────────────────────────────────────────────────
 
