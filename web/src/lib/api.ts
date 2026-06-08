@@ -571,9 +571,19 @@ export type List = {
   title: string;
   replies_policy: RepliesPolicy;
   exclusive: boolean;
+  filter_only_media: boolean;
+  filter_hide_boosts: boolean;
+  filter_hide_sensitive: boolean;
 };
 
-export type ListAttrs = { title?: string; repliesPolicy?: RepliesPolicy; exclusive?: boolean };
+export type ListAttrs = {
+  title?: string;
+  repliesPolicy?: RepliesPolicy;
+  exclusive?: boolean;
+  filterOnlyMedia?: boolean;
+  filterHideBoosts?: boolean;
+  filterHideSensitive?: boolean;
+};
 
 // title 以外は省略可（サーバ既定に委ねる）。camelCase → snake_case はここで。
 function listBody(attrs: ListAttrs): Record<string, unknown> {
@@ -581,6 +591,9 @@ function listBody(attrs: ListAttrs): Record<string, unknown> {
   if (attrs.title !== undefined) body.title = attrs.title;
   if (attrs.repliesPolicy) body.replies_policy = attrs.repliesPolicy;
   if (attrs.exclusive !== undefined) body.exclusive = attrs.exclusive;
+  if (attrs.filterOnlyMedia !== undefined) body.filter_only_media = attrs.filterOnlyMedia;
+  if (attrs.filterHideBoosts !== undefined) body.filter_hide_boosts = attrs.filterHideBoosts;
+  if (attrs.filterHideSensitive !== undefined) body.filter_hide_sensitive = attrs.filterHideSensitive;
   return body;
 }
 

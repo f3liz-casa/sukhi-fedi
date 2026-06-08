@@ -9,6 +9,11 @@ defmodule SukhiFedi.Schema.List do
     field :title, :string
     field :replies_policy, :string, default: "list"
     field :exclusive, :boolean, default: false
+    # Per-list home filters (apply to members' posts in the home timeline;
+    # ignored for exclusive lists, which drop members from home entirely).
+    field :filter_only_media, :boolean, default: false
+    field :filter_hide_boosts, :boolean, default: false
+    field :filter_hide_sensitive, :boolean, default: false
     belongs_to :account, SukhiFedi.Schema.Account
 
     many_to_many :accounts, SukhiFedi.Schema.Account, join_through: "list_accounts"
@@ -18,7 +23,15 @@ defmodule SukhiFedi.Schema.List do
 
   def changeset(list, attrs) do
     list
-    |> cast(attrs, [:account_id, :title, :replies_policy, :exclusive])
+    |> cast(attrs, [
+      :account_id,
+      :title,
+      :replies_policy,
+      :exclusive,
+      :filter_only_media,
+      :filter_hide_boosts,
+      :filter_hide_sensitive
+    ])
     |> validate_required([:account_id, :title])
     |> validate_length(:title, min: 1, max: 100)
     |> validate_inclusion(:replies_policy, @replies_policies)

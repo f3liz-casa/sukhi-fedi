@@ -100,6 +100,35 @@ defmodule SukhiFedi.Integration.TimelinesTest do
       refute sens.id in kept
       refute cw.id in kept
     end
+
+    test "a non-exclusive list's hide_sensitive filter narrows its members in home" do
+      alice = create_account!("alice_pl")
+      bob = create_account!("bob_pl")
+
+      {:ok, _} = Social.request_follow(alice, bob.id)
+
+      {:ok, list} =
+        Lists.create(alice.id, %{title: "filtered", exclusive: false, filter_hide_sensitive: true})
+
+      :ok = Lists.add_accounts(alice.id, list.id, [bob.id])
+
+      {:ok, plain} = Notes.create_status(bob, %{"status" => "ok"})
+
+      sens =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: bob.id,
+          content: "nsfw",
+          visibility: "public",
+          sensitive: true
+        })
+        |> Repo.insert!()
+
+      ids = alice |> Timelines.home() |> Enum.map(&Map.get(&1, :id))
+      # 通常投稿は出る。sensitive は per-list filter(hide_sensitive)で消える。
+      assert plain.id in ids
+      refute sens.id in ids
+    end
   end
 
   defp create_account!(username) do

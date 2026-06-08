@@ -20,7 +20,10 @@ defmodule SukhiApi.Views.MastodonList do
       id: Id.encode(list.id),
       title: list.title,
       replies_policy: list.replies_policy || "list",
-      exclusive: !!list.exclusive
+      exclusive: !!list.exclusive,
+      filter_only_media: !!list.filter_only_media,
+      filter_hide_boosts: !!list.filter_hide_boosts,
+      filter_hide_sensitive: !!list.filter_hide_sensitive
     }
   end
 

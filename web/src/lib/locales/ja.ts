@@ -290,6 +290,9 @@ export const ja = {
   'listDetail.noMembers': 'まだ、だれも入っていません。',
   'listDetail.removeMember': '外す',
   'listDetail.followHint': 'フォローすると、この人の投稿がここに流れます。',
+  'listDetail.homeFilterTitle': 'ホームでの見せ方',
+  'listDetail.homeFilterHint':
+    'このリストの人の投稿を、ホームではこう絞ります（リストのタイムラインには影響しません）。',
   'listDetail.empty':
     'このリストには、まだ何も流れていません。メンバーを加えると、ここに集まります。',
 

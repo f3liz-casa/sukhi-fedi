@@ -54,14 +54,30 @@ defmodule SukhiFedi.Timelines do
     excluded = Lists.excluded_account_ids(id)
     reply_here = "https://#{SukhiFedi.Config.domain!()}/%"
 
+    # Per-list home filters: members of a (non-exclusive) *filtered* list have
+    # their posts narrowed in home — only_media members must carry media,
+    # hide_sensitive members must be non-sensitive, hide_boosts members' boosts
+    # are dropped. Everyone else is untouched. (Global opts[:*] filters from the
+    # timeline dropdown still apply on top.)
+    pl = Lists.home_filter_members(id)
+
     note_account_ids = [id | following_account_ids]
-    boost_account_ids = [id | following_account_ids -- excluded]
+    boost_account_ids = [id | following_account_ids -- excluded -- pl.hide_boosts]
 
     notes =
       Note
       |> where([n], n.account_id in ^note_account_ids)
       |> where([n], n.account_id not in ^excluded or like(n.in_reply_to_ap_id, ^reply_here))
       |> where([n], n.visibility in ["public", "unlisted", "followers"])
+      |> where(
+        [n],
+        n.account_id not in ^pl.only_media or
+          fragment("EXISTS (SELECT 1 FROM note_media nm WHERE nm.note_id = ?)", n.id)
+      )
+      |> where(
+        [n],
+        n.account_id not in ^pl.hide_sensitive or (n.sensitive == false and is_nil(n.cw))
+      )
       |> maybe_only_media(opts[:only_media])
       |> maybe_hide_sensitive(opts[:hide_sensitive])
       |> apply_paging(opts)
@@ -70,6 +86,7 @@ defmodule SukhiFedi.Timelines do
       |> SukhiFedi.Notes.with_refs(id)
 
     # RT(ブースト)を隠すフィルタ。home だけがブーストを混ぜるので、ここで止める。
+    # per-list の hide_boosts メンバーは boost_account_ids から既に引いてある。
     boosts =
       if opts[:hide_boosts], do: [], else: home_boosts(boost_account_ids, opts, limit, id)
 

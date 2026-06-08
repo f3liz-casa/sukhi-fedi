@@ -295,6 +295,9 @@ export const ko: Dict = {
     '이 리스트에는 아직 아무것도 흐르지 않았어요. 멤버를 더하면 여기에 모여요.',
   'listDetail.removeMember': '빼기',
   'listDetail.followHint': '팔로우하면 이 사람의 글이 여기에 흘러요.',
+  'listDetail.homeFilterTitle': '홈에서 보이는 방식',
+  'listDetail.homeFilterHint':
+    '이 리스트의 사람들 글을 홈에서 이렇게 좁혀요 (리스트 타임라인에는 영향 없어요).',
 
   // ── 즐겨찾기 ─────────────────────────────────────────
   'favourites.title': '즐겨찾기',

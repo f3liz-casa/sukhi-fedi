@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import {
     getList,
+    updateList,
     fetchListTimeline,
     getListAccounts,
     getRelationships,
@@ -163,6 +164,18 @@
   function applyFilters() {
     void load();
   }
+
+  // このリストの「ホームでの絞り方」を更新する(リストの永続設定)。
+  async function setHomeFilter(
+    key: 'filterOnlyMedia' | 'filterHideBoosts' | 'filterHideSensitive',
+    value: boolean
+  ) {
+    try {
+      list = await updateList(id, { [key]: value });
+    } catch {
+      // 失敗時はそのまま(checkbox は list の値に描き戻る)。
+    }
+  }
 </script>
 
 <p class="back-row timeline"><a class="back-link" href="/lists">← {$t('listDetail.listIndex')}</a></p>
@@ -174,6 +187,37 @@
   <p class="error timeline">{error}</p>
   <p class="timeline"><a class="chip" href="/lists">{$t('listDetail.toListIndex')}</a></p>
 {:else}
+  {#if list && !list.exclusive}
+    <details class="timeline" style="margin-bottom: var(--space-4);">
+      <summary style="cursor: pointer;">{$t('listDetail.homeFilterTitle')}</summary>
+      <p class="prose-small">{$t('listDetail.homeFilterHint')}</p>
+      <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+        <input
+          type="checkbox"
+          checked={list.filter_only_media}
+          onchange={(e) => setHomeFilter('filterOnlyMedia', e.currentTarget.checked)}
+        />
+        <span>{$t('timeline.onlyMedia')}</span>
+      </label>
+      <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+        <input
+          type="checkbox"
+          checked={list.filter_hide_boosts}
+          onchange={(e) => setHomeFilter('filterHideBoosts', e.currentTarget.checked)}
+        />
+        <span>{$t('timeline.hideBoosts')}</span>
+      </label>
+      <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+        <input
+          type="checkbox"
+          checked={list.filter_hide_sensitive}
+          onchange={(e) => setHomeFilter('filterHideSensitive', e.currentTarget.checked)}
+        />
+        <span>{$t('timeline.hideSensitive')}</span>
+      </label>
+    </details>
+  {/if}
+
   <details class="timeline" ontoggle={onMembersToggle} style="margin-bottom: var(--space-4);">
     <summary style="cursor: pointer;">{$t('listDetail.members')}</summary>
 
