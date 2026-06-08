@@ -96,6 +96,7 @@
     z-index: 10;
     margin-top: 0.25rem;
     min-width: 12rem;
+    max-width: calc(100vw - 2rem);
     padding: 0.25rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);

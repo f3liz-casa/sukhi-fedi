@@ -187,7 +187,8 @@
       {#if isSelf}
         <a class="chip" href="/settings">{$t('profile.edit')}</a>
       {:else}
-        <FollowButton accountId={account.id} relationship={rel} onchange={(r) => (rel = r)} />
+        <div class="profile-actions">
+          <FollowButton accountId={account.id} relationship={rel} onchange={(r) => (rel = r)} />
         {#if rel}
           <AddToListButton accountId={account.id} />
         {/if}
@@ -218,6 +219,7 @@
             {/if}
           </div>
         {/if}
+        </div>
       {/if}
     </div>
 
@@ -280,6 +282,16 @@
 {/if}
 
 <style>
+  /* フォロー/リスト追加/… を一塊にして、狭い幅では折り返す（モバイルで
+     横に溢れないように）。avatar + 名前の右に寄せる。 */
+  .profile-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
   .mod-menu {
     position: relative;
     display: inline-block;
