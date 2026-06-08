@@ -623,8 +623,11 @@ export async function removeFromList(id: string, accountIds: string[]): Promise<
 
 export async function fetchListTimeline(
   id: string,
-  opts: { maxId?: string | null; limit?: number } = {}
+  opts: { maxId?: string | null; limit?: number; onlyMedia?: boolean; hideSensitive?: boolean } = {}
 ): Promise<Page<Status>> {
-  const path = `/api/v1/timelines/list/${encodeURIComponent(id)}?${pageQs(opts, 20)}`;
+  const qs = pageQs(opts, 20);
+  if (opts.onlyMedia) qs.set('only_media', '1');
+  if (opts.hideSensitive) qs.set('hide_sensitive', '1');
+  const path = `/api/v1/timelines/list/${encodeURIComponent(id)}?${qs}`;
   return page<Status>(await req('GET', path, 'list_timeline'));
 }

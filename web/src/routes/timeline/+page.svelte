@@ -5,6 +5,7 @@
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
+  import TimelineFilter from '$lib/components/TimelineFilter.svelte';
   import { t } from '$lib/i18n';
 
   let replyTo = $state<Status | null>(null);
@@ -55,10 +56,6 @@
   let onlyMedia = $state(false);
   let hideBoosts = $state(false);
   let hideSensitive = $state(false);
-  let filterOpen = $state(false);
-  let activeFilters = $derived(
-    [onlyMedia, kind === 'home' && hideBoosts, hideSensitive].filter(Boolean).length
-  );
 
   onMount(() => {
     if (!isLoggedIn()) {
@@ -178,34 +175,14 @@
   >{$t('timeline.tabTag')}</button>
 </nav>
 
-<div class="filter-bar timeline">
-  <button
-    type="button"
-    class="chip"
-    aria-expanded={filterOpen}
-    aria-haspopup="menu"
-    onclick={() => (filterOpen = !filterOpen)}
-  >
-    {$t('timeline.filter')}{activeFilters > 0 ? ` (${activeFilters})` : ''}
-  </button>
-  {#if filterOpen}
-    <div class="filter-menu" role="menu">
-      <label class="filter-row">
-        <input type="checkbox" bind:checked={onlyMedia} onchange={applyFilters} />
-        <span>{$t('timeline.onlyMedia')}</span>
-      </label>
-      {#if kind === 'home'}
-        <label class="filter-row">
-          <input type="checkbox" bind:checked={hideBoosts} onchange={applyFilters} />
-          <span>{$t('timeline.hideBoosts')}</span>
-        </label>
-      {/if}
-      <label class="filter-row">
-        <input type="checkbox" bind:checked={hideSensitive} onchange={applyFilters} />
-        <span>{$t('timeline.hideSensitive')}</span>
-      </label>
-    </div>
-  {/if}
+<div class="timeline">
+  <TimelineFilter
+    bind:onlyMedia
+    bind:hideBoosts
+    bind:hideSensitive
+    showHideBoosts={kind === 'home'}
+    onchange={applyFilters}
+  />
 </div>
 
 {#if kind === 'tag'}
@@ -255,31 +232,3 @@
     <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>
-
-<style>
-  .filter-bar {
-    position: relative;
-    margin-bottom: var(--space-3);
-  }
-  .filter-menu {
-    position: absolute;
-    z-index: 10;
-    margin-top: 0.25rem;
-    min-width: 14rem;
-    max-width: calc(100vw - 2rem);
-    padding: 0.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-  }
-  .filter-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.5rem;
-    cursor: pointer;
-  }
-  .filter-row:hover {
-    background: var(--fill-hover);
-  }
-</style>

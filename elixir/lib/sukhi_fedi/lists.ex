@@ -165,6 +165,8 @@ defmodule SukhiFedi.Lists do
 
       results =
         base
+        |> maybe_only_media(opts[:only_media])
+        |> maybe_hide_sensitive(opts[:hide_sensitive])
         |> maybe_max_id(opts[:max_id])
         |> maybe_since_id(opts[:since_id])
         |> maybe_min_id(opts[:min_id])
@@ -204,6 +206,17 @@ defmodule SukhiFedi.Lists do
 
   defp clamp(n) when is_integer(n) and n > 0 and n <= 40, do: n
   defp clamp(_), do: 20
+
+  # 表示フィルタ(timelines.ex と同じ判定)。メディア付きだけ / sensitive・CW を隠す。
+  defp maybe_only_media(q, true),
+    do: where(q, [n], fragment("EXISTS (SELECT 1 FROM note_media nm WHERE nm.note_id = ?)", n.id))
+
+  defp maybe_only_media(q, _), do: q
+
+  defp maybe_hide_sensitive(q, true),
+    do: where(q, [n], n.sensitive == false and is_nil(n.cw))
+
+  defp maybe_hide_sensitive(q, _), do: q
 
   defp maybe_max_id(q, nil), do: q
   defp maybe_max_id(q, v), do: where(q, [n], n.id < ^to_int(v))

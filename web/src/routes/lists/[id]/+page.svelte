@@ -17,6 +17,7 @@
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
+  import TimelineFilter from '$lib/components/TimelineFilter.svelte';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
   import { t } from '$lib/i18n';
   import { refreshCircles } from '$lib/circles';
@@ -29,6 +30,10 @@
   let loading = $state(false);
   let initial = $state(true);
   let error = $state<string | null>(null);
+
+  // 表示フィルター（タイムラインと同じ。リストはブーストを混ぜないので RT 隠しは無し）。
+  let onlyMedia = $state(false);
+  let hideSensitive = $state(false);
 
   // メンバー（<details> を開いたとき一度だけ読む）。
   let members = $state<Account[]>([]);
@@ -60,7 +65,7 @@
     error = null;
     try {
       list = await getList(id);
-      const p = await fetchListTimeline(id);
+      const p = await fetchListTimeline(id, { onlyMedia, hideSensitive });
       items = p.items;
       nextMaxId = p.nextMaxId;
     } catch (e) {
@@ -81,7 +86,7 @@
     if (loading) return;
     loading = true;
     try {
-      const p = await fetchListTimeline(id, { maxId: nextMaxId });
+      const p = await fetchListTimeline(id, { maxId: nextMaxId, onlyMedia, hideSensitive });
       items = [...items, ...p.items];
       nextMaxId = p.nextMaxId;
     } catch {
@@ -153,6 +158,11 @@
       // 失敗時はそのまま。
     }
   }
+
+  // フィルターを変えたらタイムラインを読み直す。
+  function applyFilters() {
+    void load();
+  }
 </script>
 
 <p class="back-row timeline"><a class="back-link" href="/lists">← {$t('listDetail.listIndex')}</a></p>
@@ -203,6 +213,10 @@
       />
     {/each}
   </details>
+
+  <div class="timeline">
+    <TimelineFilter bind:onlyMedia bind:hideSensitive onchange={applyFilters} />
+  </div>
 
   <section class="timeline">
     {#if initial && loading}

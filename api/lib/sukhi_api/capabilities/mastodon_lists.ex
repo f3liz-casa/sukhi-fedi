@@ -132,7 +132,14 @@ defmodule SukhiApi.Capabilities.MastodonLists do
 
   def timeline(req) do
     with_viewer(req, fn v ->
-      opts = Pagination.parse_opts(req[:query])
+      q = parse_query(req[:query])
+
+      opts =
+        req[:query]
+        |> Pagination.parse_opts()
+        |> Map.put(:only_media, q["only_media"] in ["true", "1"])
+        |> Map.put(:hide_sensitive, q["hide_sensitive"] in ["true", "1"])
+
       id = req[:path_params]["list_id"]
 
       case GatewayRpc.call(SukhiFedi.Lists, :timeline, [v.id, id, Map.to_list(opts)]) do
@@ -185,6 +192,10 @@ defmodule SukhiApi.Capabilities.MastodonLists do
         body
     end
   end
+
+  defp parse_query(nil), do: %{}
+  defp parse_query(""), do: %{}
+  defp parse_query(q) when is_binary(q), do: URI.decode_query(q)
 
   defp cs_errors(%{errors: errors}) do
     Map.new(errors, fn {k, {msg, _}} -> {k, msg} end)
