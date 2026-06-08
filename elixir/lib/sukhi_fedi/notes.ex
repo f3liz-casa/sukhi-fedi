@@ -116,6 +116,7 @@ defmodule SukhiFedi.Notes do
         |> resolve_quote(params)
 
       media_ids = list_media_ids(params)
+      media = attachment_descriptors(media_ids, account_id)
 
       Multi.new()
       |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
@@ -135,7 +136,7 @@ defmodule SukhiFedi.Notes do
             account_id: n.account_id,
             visibility: n.visibility,
             content: n.content,
-            media_ids: media_ids,
+            media: media,
             quote_of_ap_id: n.quote_of_ap_id,
             in_reply_to_ap_id: n.in_reply_to_ap_id
           }
@@ -208,7 +209,7 @@ defmodule SukhiFedi.Notes do
 
         {:ok, note}
       end)
-      |> maybe_enqueue_dm(remote_uris)
+      |> maybe_enqueue_dm(remote_uris, attachment_descriptors(media_ids, account_id))
       |> Repo.transaction()
       |> case do
         {:ok, %{dm: note}} ->
@@ -231,9 +232,9 @@ defmodule SukhiFedi.Notes do
 
   # Only federate when there's a remote recipient. A purely local DM has
   # no inbox to POST to — its delivery is the participant rows above.
-  defp maybe_enqueue_dm(multi, []), do: multi
+  defp maybe_enqueue_dm(multi, [], _media), do: multi
 
-  defp maybe_enqueue_dm(multi, remote_uris) do
+  defp maybe_enqueue_dm(multi, remote_uris, media) do
     Outbox.enqueue_multi(
       multi,
       :outbox_event,
@@ -245,6 +246,7 @@ defmodule SukhiFedi.Notes do
           note_id: n.id,
           account_id: n.account_id,
           content: n.content,
+          media: media,
           recipient_actor_uris: remote_uris,
           in_reply_to_ap_id: n.in_reply_to_ap_id,
           conversation_ap_id: n.conversation_ap_id
@@ -537,6 +539,24 @@ defmodule SukhiFedi.Notes do
       _ ->
         nil
     end
+  end
+
+  # AP `attachment` descriptors for the outbox event, kept in `media_ids`
+  # order so the receiving server shows the gallery the way the author
+  # laid it out. The rows already exist (uploaded earlier); ownership is
+  # re-checked inside the transaction by `attach_media/3`.
+  defp attachment_descriptors([], _account_id), do: []
+
+  defp attachment_descriptors(media_ids, account_id) do
+    by_id =
+      from(m in Media, where: m.id in ^media_ids and m.account_id == ^account_id)
+      |> Repo.all()
+      |> Map.new(&{&1.id, &1})
+
+    media_ids
+    |> Enum.map(&Map.get(by_id, &1))
+    |> Enum.reject(&is_nil/1)
+    |> SukhiFedi.AP.MediaSerialize.descriptors()
   end
 
   defp list_media_ids(params) do

@@ -102,6 +102,41 @@ test("Create(Note) emits a FEP-e232 quote tag Link alongside the legacy fields",
   expect(String(link!["rel"])).toContain("_misskey_quote");
 });
 
+test("Create(Note) carries media as `attachment` Document objects on the inner Note", async () => {
+  const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
+    actor: ACTOR,
+    content: "with a picture",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/8`,
+    activityId: `${ACTOR}/activities/create/8`,
+    attachments: [
+      { url: "https://watch.example/uploads/1/abc.png", mediaType: "image/png", name: "alt", width: 640, height: 480 },
+    ],
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  const att = inner["attachment"] as Record<string, unknown>[];
+  expect(Array.isArray(att)).toBe(true);
+  expect(att[0]["type"]).toBe("Document");
+  expect(att[0]["url"]).toBe("https://watch.example/uploads/1/abc.png");
+  expect(att[0]["mediaType"]).toBe("image/png");
+  expect(att[0]["name"]).toBe("alt");
+  expect(att[0]["width"]).toBe(640);
+});
+
+test("Create(Note) omits `attachment` when there is no media", async () => {
+  const result = await handleBuildNote({
+    ...await testCreds(ACTOR),
+    actor: ACTOR,
+    content: "text only",
+    recipientInboxes: [],
+    noteId: `${ACTOR}/notes/9`,
+    activityId: `${ACTOR}/activities/create/9`,
+  });
+  const inner = (result.note as Record<string, unknown>)["object"] as Record<string, unknown>;
+  expect(inner["attachment"]).toBeUndefined();
+});
+
 test("Create(Note) carries inReplyTo on the inner Note when replying", async () => {
   const PARENT = "https://remote.example/notes/parent";
   const result = await handleBuildNote({

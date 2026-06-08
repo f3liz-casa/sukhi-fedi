@@ -44,6 +44,48 @@ export function injectDefined(
   }
 }
 
+// A media attachment descriptor as the gateway's MediaSerialize emits
+// it. `url` + `mediaType` are always present; the rest are best-effort.
+export interface AttachmentDescriptor {
+  url: string;
+  mediaType?: string;
+  name?: string;
+  blurhash?: string;
+  width?: number;
+  height?: number;
+}
+
+// Set the inner Note's `attachment` to a list of AP `Document` objects.
+// Injected post-serialize (same as _misskey_content / quote) so we keep
+// full control of the Mastodon-flavoured shape — `blurhash`, `width`,
+// `height` aren't standard fedify Document props and would be dropped by
+// the vocab serializer. No-op when there are no attachments.
+export function injectAttachments(
+  activityJson: unknown,
+  attachments: AttachmentDescriptor[] | undefined,
+): void {
+  if (!attachments || attachments.length === 0) return;
+  if (
+    activityJson && typeof activityJson === "object" &&
+    "object" in activityJson
+  ) {
+    const obj = (activityJson as Record<string, unknown>).object;
+    if (obj && typeof obj === "object") {
+      (obj as Record<string, unknown>).attachment = attachments.map((a) => {
+        const doc: Record<string, unknown> = { type: "Document", url: a.url };
+        injectDefined(doc, {
+          mediaType: a.mediaType,
+          name: a.name,
+          blurhash: a.blurhash,
+          width: a.width,
+          height: a.height,
+        });
+        return doc;
+      });
+    }
+  }
+}
+
 export function injectMisskey(activityJson: unknown, content: string): void {
   if (
     activityJson && typeof activityJson === "object" &&

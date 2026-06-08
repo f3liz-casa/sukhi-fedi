@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Create, Note } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { injectMisskey, signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
+import { injectAttachments, injectMisskey, signAndSerialize, type AttachmentDescriptor, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildDmPayload extends SignedPayload {
@@ -21,6 +21,8 @@ export interface BuildDmPayload extends SignedPayload {
   inReplyToId?: string;
   /** Optional conversation context URI. */
   conversationId?: string;
+  /** Media attachments, in gallery order. Optional. */
+  attachments?: AttachmentDescriptor[];
 }
 
 export interface BuildDmResult {
@@ -52,6 +54,7 @@ export async function handleBuildDm(payload: BuildDmPayload): Promise<BuildDmRes
 
   const noteJson = await signAndSerialize(payload, create);
   injectMisskey(noteJson, payload.content);
+  injectAttachments(noteJson, payload.attachments);
 
   return {
     note: noteJson,

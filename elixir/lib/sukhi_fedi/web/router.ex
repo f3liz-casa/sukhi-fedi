@@ -453,6 +453,11 @@ defmodule SukhiFedi.Web.Router do
 
         conn
         |> put_resp_content_type(ct)
+        # Upload keys are random and content-addressed by birth — a given
+        # `/uploads/<key>` never changes — so let browsers and any CDN in
+        # front cache it hard instead of re-proxying the full bytes
+        # through the BEAM from rustfs on every view.
+        |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
         |> send_resp(200, body)
 
       {:error, {:http_error, 404, _}} ->

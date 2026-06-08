@@ -12,7 +12,7 @@ defmodule SukhiFedi.Web.NoteController do
   """
 
   import Plug.Conn
-  alias SukhiFedi.AP.ActorJson
+  alias SukhiFedi.AP.{ActorJson, MediaSerialize}
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
 
@@ -26,6 +26,7 @@ defmodule SukhiFedi.Web.NoteController do
          %Note{} = note <- Repo.get(Note, note_id),
          true <- note.account_id == aid,
          true <- note.visibility == "public" do
+      note = Repo.preload(note, :media)
       send_json(conn, 200, note_to_ap(note, actor_uri))
     else
       _ -> send_json(conn, 404, %{error: "not found"})
@@ -45,7 +46,14 @@ defmodule SukhiFedi.Web.NoteController do
       "to" => [public_ns],
       "cc" => ["#{actor_uri}/followers"]
     }
+    |> put_attachment(n.media)
   end
+
+  defp put_attachment(object, media) when is_list(media) and media != [] do
+    Map.put(object, "attachment", MediaSerialize.ap_attachments(media))
+  end
+
+  defp put_attachment(object, _), do: object
 
   defp send_json(conn, status, body) do
     conn

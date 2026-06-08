@@ -9,7 +9,7 @@ defmodule SukhiFedi.Web.CollectionController do
   import Plug.Conn
   import Ecto.Query
   alias SukhiFedi.{Repo, Social}
-  alias SukhiFedi.AP.ActorJson
+  alias SukhiFedi.AP.{ActorJson, MediaSerialize}
   alias SukhiFedi.Schema.Note
 
   def followers(conn, _opts) do
@@ -51,6 +51,7 @@ defmodule SukhiFedi.Web.CollectionController do
           order_by: [desc: n.created_at]
         )
         |> Repo.all()
+        |> Repo.preload(:media)
 
       items = Enum.map(notes, &note_to_create_activity(&1, actor_uri))
 
@@ -83,17 +84,25 @@ defmodule SukhiFedi.Web.CollectionController do
       "published" => published,
       "to" => [public_ns],
       "cc" => ["#{actor_uri}/followers"],
-      "object" => %{
-        "id" => note_ap_id,
-        "type" => "Note",
-        "attributedTo" => actor_uri,
-        "content" => n.content,
-        "published" => published,
-        "to" => [public_ns],
-        "cc" => ["#{actor_uri}/followers"]
-      }
+      "object" =>
+        %{
+          "id" => note_ap_id,
+          "type" => "Note",
+          "attributedTo" => actor_uri,
+          "content" => n.content,
+          "published" => published,
+          "to" => [public_ns],
+          "cc" => ["#{actor_uri}/followers"]
+        }
+        |> put_attachment(n.media)
     }
   end
+
+  defp put_attachment(object, media) when is_list(media) and media != [] do
+    Map.put(object, "attachment", MediaSerialize.ap_attachments(media))
+  end
+
+  defp put_attachment(object, _), do: object
 
   def following(conn, _opts) do
     username = conn.path_params["name"]

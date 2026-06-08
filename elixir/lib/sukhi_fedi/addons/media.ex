@@ -71,6 +71,12 @@ defmodule SukhiFedi.Addons.Media do
     ext = Path.extname(filename)
     key = "#{account_id}/#{:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)}#{ext}"
 
+    {width, height} =
+      case SukhiFedi.Addons.Media.Dimensions.measure(file_bytes) do
+        {w, h} -> {w, h}
+        nil -> {nil, nil}
+      end
+
     case persist_bytes(key, file_bytes) do
       {:ok, url} ->
         %Media{}
@@ -79,6 +85,8 @@ defmodule SukhiFedi.Addons.Media do
           type: type,
           description: description,
           size: byte_size(file_bytes),
+          width: width,
+          height: height,
           account_id: account_id
         })
         |> Repo.insert()

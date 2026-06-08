@@ -1,6 +1,6 @@
 import { Create, Note } from "@fedify/fedify/vocab";
 import { nowInstant } from "../../fedify/temporal.ts";
-import { injectMisskey, injectQuote, signAndSerialize, type SignedPayload } from "../../fedify/utils.ts";
+import { injectAttachments, injectMisskey, injectQuote, signAndSerialize, type AttachmentDescriptor, type SignedPayload } from "../../fedify/utils.ts";
 import { resolveAudience } from "../../fedify/addressing.ts";
 
 export interface BuildNotePayload extends SignedPayload {
@@ -13,6 +13,8 @@ export interface BuildNotePayload extends SignedPayload {
   quoteUrl?: string;
   // AP id of the note this replies to, so remote servers can thread it.
   inReplyToId?: string;
+  // Media attachments, in gallery order. Optional.
+  attachments?: AttachmentDescriptor[];
 }
 
 export interface BuildNoteResult {
@@ -46,6 +48,7 @@ export async function handleBuildNote(
   const noteJson = await signAndSerialize(payload, create);
   injectMisskey(noteJson, payload.content);
   injectQuote(noteJson, payload.quoteUrl);
+  injectAttachments(noteJson, payload.attachments);
 
   return {
     note: noteJson,

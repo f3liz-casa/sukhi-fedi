@@ -130,6 +130,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
             inReplyToId: p["in_reply_to_ap_id"]
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
+          |> maybe_put_attachments(p["media"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -180,16 +181,18 @@ defmodule SukhiDelivery.Outbox.Consumer do
         ap_id = note_ap_id(actor_uri, note_id)
         activity_id = "#{ap_id}/activity"
 
-        payload = %{
-          actor: actor_uri,
-          content: p["content"] || "",
-          recipientActors: recipient_uris,
-          noteId: ap_id,
-          activityId: activity_id,
-          recipientInboxes: inboxes,
-          inReplyToId: p["in_reply_to_ap_id"],
-          conversationId: p["conversation_ap_id"]
-        }
+        payload =
+          %{
+            actor: actor_uri,
+            content: p["content"] || "",
+            recipientActors: recipient_uris,
+            noteId: ap_id,
+            activityId: activity_id,
+            recipientInboxes: inboxes,
+            inReplyToId: p["in_reply_to_ap_id"],
+            conversationId: p["conversation_ap_id"]
+          }
+          |> maybe_put_attachments(p["media"])
 
         translate_and_fanout("dm", payload, actor_uri, activity_id, inboxes)
     end
@@ -440,6 +443,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
             inReplyToId: p["in_reply_to_ap_id"]
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
+          |> maybe_put_attachments(p["media"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -686,4 +690,13 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp maybe_put_quote(payload, _), do: payload
+
+  # Media descriptors built gateway-side by `SukhiFedi.AP.MediaSerialize`
+  # ride through the outbox event under `media`. The bun `note` / `dm`
+  # translator turns them into the Note's `attachment`.
+  defp maybe_put_attachments(payload, media) when is_list(media) and media != [] do
+    Map.put(payload, :attachments, media)
+  end
+
+  defp maybe_put_attachments(payload, _), do: payload
 end
