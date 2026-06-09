@@ -264,21 +264,39 @@ defmodule SukhiFedi.OAuth do
           {:ok, map()} | {:error, term()}
   def issue_initial_token(app_id, account_id, scopes)
       when is_integer(app_id) and is_integer(account_id) and is_binary(scopes) do
-    mint_token(app_id, account_id, scopes, refresh: true)
+    # Enforce the app's scope ceiling here too (the other grants already
+    # do), so signup can't mint a token with scopes beyond what the app
+    # registered.
+    case Repo.get(OauthApp, app_id) do
+      nil ->
+        {:error, :invalid_client}
+
+      %OauthApp{} = app ->
+        with :ok <- check_scope_subset(scopes, app.scopes) do
+          mint_token(app_id, account_id, scopes, refresh: true)
+        end
+    end
   end
 
   # ── internals ────────────────────────────────────────────────────────────
 
+  # Access tokens previously never expired (expires_at NULL), so a leaked
+  # bearer was valid forever. Give every minted token a finite absolute
+  # lifetime; verify_bearer already rejects an expired one.
+  @token_ttl_seconds 90 * 24 * 60 * 60
+
   defp mint_token(app_id, account_id, scopes, refresh: with_refresh?) do
     access = generate_token()
     refresh = if with_refresh?, do: generate_token(), else: nil
+    expires_at = utc_now() |> DateTime.add(@token_ttl_seconds, :second)
 
     attrs = %{
       token_hash: hash(access),
       refresh_token_hash: refresh && hash(refresh),
       app_id: app_id,
       account_id: account_id,
-      scopes: scopes
+      scopes: scopes,
+      expires_at: expires_at
     }
 
     {:ok, _row} =
@@ -292,7 +310,8 @@ defmodule SukhiFedi.OAuth do
        refresh_token: refresh,
        token_type: "Bearer",
        scope: scopes,
-       created_at: System.system_time(:second)
+       created_at: System.system_time(:second),
+       expires_in: @token_ttl_seconds
      }}
   end
 

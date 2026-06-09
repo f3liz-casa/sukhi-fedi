@@ -60,7 +60,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
           nil ->
             with {:ok, actor_json} <- ActorFetcher.fetch(uri),
-                 {:ok, %Account{} = a} <- RemoteAccounts.upsert_from_actor_json(actor_json) do
+                 {:ok, %Account{} = a} <- RemoteAccounts.upsert_from_actor_json(actor_json, uri) do
               {:ok, a}
             end
         end
@@ -125,6 +125,16 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp content_warning(_), do: nil
 
   defp insert_note(note_json, account_id, uri) do
+    if same_host?(note_json["id"], uri) do
+      do_insert_note(note_json, account_id, uri)
+    else
+      # The origin served a note whose `id` lives on a different host than
+      # the URL we fetched — refuse to mirror it under a spoofed ap_id.
+      {:error, :id_host_mismatch}
+    end
+  end
+
+  defp do_insert_note(note_json, account_id, uri) do
     attrs = %{
       "account_id" => account_id,
       "content" => note_json["content"] || "",
@@ -175,4 +185,17 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
   defp public?(v) when is_binary(v), do: v == @public_ns or v == "Public"
   defp public?(_), do: false
+
+  # True when two AP id/uri values (string or inlined `%{"id" => …}`) share
+  # the same host. Case-insensitive; false if either host is missing.
+  defp same_host?(a, b) do
+    with ua when is_binary(ua) <- extract(a),
+         ub when is_binary(ub) <- extract(b),
+         %URI{host: ha} when is_binary(ha) and ha != "" <- URI.parse(ua),
+         %URI{host: hb} when is_binary(hb) and hb != "" <- URI.parse(ub) do
+      String.downcase(ha) == String.downcase(hb)
+    else
+      _ -> false
+    end
+  end
 end

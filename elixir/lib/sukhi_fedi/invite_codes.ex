@@ -75,10 +75,20 @@ defmodule SukhiFedi.InviteCodes do
     end
   end
 
-  defp mark_consumed(%InviteCode{} = ic, consumer_id, now) do
-    ic
-    |> Ecto.Changeset.change(%{consumed_at: now, consumed_by_id: consumer_id})
-    |> Repo.update()
+  # Atomic claim: a conditional UPDATE guarded on `consumed_at IS NULL`,
+  # requiring exactly one affected row. Under concurrent signups with the
+  # same code only one UPDATE matches; the loser sees 0 rows and gets
+  # `:already_used`, rolling back its account insert. The previous
+  # read-then-write let one code mint N accounts (TOCTOU double-spend).
+  defp mark_consumed(%InviteCode{id: id} = ic, consumer_id, now) do
+    {n, _} =
+      from(c in InviteCode, where: c.id == ^id and is_nil(c.consumed_at))
+      |> Repo.update_all(set: [consumed_at: now, consumed_by_id: consumer_id])
+
+    case n do
+      1 -> {:ok, %{ic | consumed_at: now, consumed_by_id: consumer_id}}
+      _ -> {:error, :already_used}
+    end
   end
 
   defp generate_code do

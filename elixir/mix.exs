@@ -83,6 +83,11 @@ defmodule SukhiFedi.MixProject do
       # Password hashing for local accounts.
       {:argon2_elixir, "~> 4.0"},
 
+      # HTML sanitisation (allow-list) for note content and account bios —
+      # both local input and federated remote HTML — before they reach the
+      # SPA's `{@html}` sinks. Mastodon's model: sanitise on the way in.
+      {:html_sanitize_ex, "~> 1.4"},
+
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:bypass, "~> 2.1", only: :test},
       {:mox, "~> 1.0", only: :test}

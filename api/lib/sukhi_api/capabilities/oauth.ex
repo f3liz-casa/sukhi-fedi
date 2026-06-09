@@ -302,6 +302,7 @@ defmodule SukhiApi.Capabilities.OAuth do
       created_at: t.created_at
     }
     |> maybe_put(:refresh_token, t[:refresh_token] || Map.get(t, :refresh_token))
+    |> maybe_put(:expires_in, t[:expires_in] || Map.get(t, :expires_in))
   end
 
   defp maybe_put(m, _k, nil), do: m

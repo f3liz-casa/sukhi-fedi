@@ -120,8 +120,9 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
   def show(req) do
     id = req[:path_params]["id"]
     viewer = req[:assigns][:current_account]
+    viewer_id = viewer && Map.get(viewer, :id)
 
-    case GatewayRpc.call(SukhiFedi.Notes, :get_note, [id]) do
+    case GatewayRpc.call(SukhiFedi.Notes, :get_note, [id, viewer_id]) do
       {:ok, {:ok, note}} -> ok(200, StatusHydration.one(note, viewer))
       {:ok, {:error, :not_found}} -> ok(404, %{error: "not_found"})
       {:error, :not_connected} -> ok(503, %{error: "gateway_not_connected"})
@@ -169,8 +170,9 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
   def context(req) do
     id = req[:path_params]["id"]
     viewer = req[:assigns][:current_account]
+    viewer_id = viewer && Map.get(viewer, :id)
 
-    case GatewayRpc.call(SukhiFedi.Notes, :context, [id]) do
+    case GatewayRpc.call(SukhiFedi.Notes, :context, [id, viewer_id]) do
       {:ok, {:ok, %{ancestors: a, descendants: d}}} ->
         ok(200, %{
           ancestors: StatusHydration.many(a, viewer),

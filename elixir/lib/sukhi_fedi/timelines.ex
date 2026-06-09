@@ -17,6 +17,7 @@ defmodule SukhiFedi.Timelines do
 
   alias SukhiFedi.{Repo, Snowflake}
   alias SukhiFedi.Lists
+  alias SukhiFedi.Addons.Moderation
   alias SukhiFedi.Schema.{Account, Boost, Follow, Note, Tag}
 
   @default_limit 20
@@ -61,8 +62,12 @@ defmodule SukhiFedi.Timelines do
     # timeline dropdown still apply on top.)
     pl = Lists.home_filter_members(id)
 
-    note_account_ids = [id | following_account_ids]
-    boost_account_ids = [id | following_account_ids -- excluded -- pl.hide_boosts]
+    # Accounts the viewer has blocked or muted drop out of their own home
+    # feed (and its boosts).
+    hidden = Moderation.blocked_target_ids(id) ++ Moderation.muted_target_ids(id)
+
+    note_account_ids = [id | following_account_ids -- hidden]
+    boost_account_ids = [id | following_account_ids -- excluded -- pl.hide_boosts -- hidden]
 
     notes =
       Note

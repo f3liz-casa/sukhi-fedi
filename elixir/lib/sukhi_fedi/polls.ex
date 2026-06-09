@@ -26,42 +26,50 @@ defmodule SukhiFedi.Polls do
         {:error, :not_found}
 
       pid ->
+        # A poll inherits its owning note's visibility — reading a
+        # followers-only / direct poll's options and tallies is the same
+        # disclosure as reading the note.
         case Repo.get(Poll, pid) do
           nil ->
             {:error, :not_found}
 
           %Poll{} = poll ->
-            options =
-              Repo.all(
-                from o in PollOption,
-                  where: o.poll_id == ^pid,
-                  order_by: [asc: o.position]
-              )
+            poll = Repo.preload(poll, :note)
 
-            tallies = tally_for_poll(pid)
-
-            voted_option_ids =
-              if is_integer(viewer_id), do: voted_options(pid, viewer_id), else: []
-
-            voters_count =
-              Repo.aggregate(
-                from(v in PollVote, where: v.poll_id == ^pid, select: v.account_id),
-                :count,
-                :account_id,
-                distinct: true
-              )
-
-            {:ok,
-             %{
-               poll: poll,
-               options: options,
-               tallies: tallies,
-               voters_count: voters_count,
-               voted_option_ids: voted_option_ids,
-               voted?: voted_option_ids != []
-             }}
+            if is_nil(poll.note) or SukhiFedi.Notes.visible_to?(poll.note, viewer_id),
+              do: {:ok, results_for(poll, viewer_id)},
+              else: {:error, :not_found}
         end
     end
+  end
+
+  defp results_for(%Poll{id: pid} = poll, viewer_id) do
+    options =
+      Repo.all(
+        from o in PollOption,
+          where: o.poll_id == ^pid,
+          order_by: [asc: o.position]
+      )
+
+    voted_option_ids =
+      if is_integer(viewer_id), do: voted_options(pid, viewer_id), else: []
+
+    voters_count =
+      Repo.aggregate(
+        from(v in PollVote, where: v.poll_id == ^pid, select: v.account_id),
+        :count,
+        :account_id,
+        distinct: true
+      )
+
+    %{
+      poll: poll,
+      options: options,
+      tallies: tally_for_poll(pid),
+      voters_count: voters_count,
+      voted_option_ids: voted_option_ids,
+      voted?: voted_option_ids != []
+    }
   end
 
   @spec vote(integer(), integer() | String.t(), [integer() | String.t()]) ::
@@ -69,10 +77,25 @@ defmodule SukhiFedi.Polls do
   def vote(account_id, poll_id, choices) when is_integer(account_id) do
     with pid when not is_nil(pid) <- SukhiFedi.Coercion.parse_id(poll_id),
          %Poll{} = poll <- Repo.get(Poll, pid),
+         :ok <- check_poll_visible(poll, account_id),
          :ok <- check_not_expired(poll),
          option_ids when is_list(option_ids) <- normalize_choices(poll, choices) do
+      # Single-choice polls replace the prior ballot (Mastodon UX) instead
+      # of accumulating — otherwise N requests with different choices stuff
+      # N votes from one account.
+      base =
+        if poll.multiple do
+          Multi.new()
+        else
+          Multi.delete_all(
+            Multi.new(),
+            :clear,
+            from(v in PollVote, where: v.poll_id == ^pid and v.account_id == ^account_id)
+          )
+        end
+
       multi =
-        Enum.reduce(option_ids, Multi.new(), fn opt_id, acc ->
+        Enum.reduce(option_ids, base, fn opt_id, acc ->
           Multi.insert(
             acc,
             {:vote, opt_id},
@@ -92,6 +115,7 @@ defmodule SukhiFedi.Polls do
       end
     else
       nil -> {:error, :not_found}
+      :hidden -> {:error, :not_found}
       :expired -> {:error, :expired}
       :too_many -> {:error, :too_many_choices}
       _ -> {:error, :not_found}
@@ -99,6 +123,17 @@ defmodule SukhiFedi.Polls do
   end
 
   # ── helpers ────────────────────────────────────────────────────────────
+
+  # A voter must be allowed to see the poll's owning note (same gate as
+  # reading it), so a followers-only / direct poll can't be voted on by a
+  # non-recipient who guessed the id.
+  defp check_poll_visible(%Poll{} = poll, account_id) do
+    note = Repo.preload(poll, :note).note
+
+    if is_nil(note) or SukhiFedi.Notes.visible_to?(note, account_id),
+      do: :ok,
+      else: :hidden
+  end
 
   defp tally_for_poll(poll_id) do
     Repo.all(

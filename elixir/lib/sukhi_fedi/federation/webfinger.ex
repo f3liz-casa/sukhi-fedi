@@ -55,7 +55,21 @@ defmodule SukhiFedi.Federation.WebFinger do
       {"user-agent", "sukhi-fedi/0.1.0"}
     ]
 
-    case Req.get(url, headers: headers, receive_timeout: @timeout_ms) do
+    cond do
+      not SukhiFedi.Federation.UrlGuard.safe?(url) ->
+        # `host` comes from the handle (attacker-controlled via a mention /
+        # search), so refuse internal / non-https targets (SSRF).
+        {:error, :blocked_host}
+
+      true ->
+        do_fetch_jrd(url, headers, handle)
+    end
+  end
+
+  defp do_fetch_jrd(url, headers, handle) do
+    # `redirect: false` — a 30x Location could otherwise bounce us from a
+    # public host to an internal one, past the guard above.
+    case Req.get(url, headers: headers, redirect: false, receive_timeout: @timeout_ms) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         {:ok, body}
 

@@ -32,8 +32,15 @@ bots:
     action: ALLOW
 
   - name: health
-    path_regex: ^/(up|metrics)$
+    path_regex: ^/up$
     action: ALLOW
+
+  # /metrics is unauthenticated PromEx output — keep it off the public
+  # edge. (kamal-proxy / internal scrapers reach the gateway directly,
+  # not through Anubis.) Must come before default-allow.
+  - name: metrics-deny
+    path_regex: ^/metrics$
+    action: DENY
 
   - name: login-pages
     path_regex: ^/(login|logout|signup)$

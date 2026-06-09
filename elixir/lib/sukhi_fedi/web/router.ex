@@ -458,6 +458,13 @@ defmodule SukhiFedi.Web.Router do
         # front cache it hard instead of re-proxying the full bytes
         # through the BEAM from rustfs on every view.
         |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+        # Media is data, never executable. Lock the response down so an
+        # uploaded `.html` / `.svg` can't run script in our origin, stop
+        # MIME sniffing, and force non-media types to download rather than
+        # render as a page. (Overrides the gateway's general CSP.)
+        |> put_resp_header("content-security-policy", "default-src 'none'; sandbox")
+        |> put_resp_header("x-content-type-options", "nosniff")
+        |> put_resp_header("content-disposition", media_disposition(ct))
         |> send_resp(200, body)
 
       {:error, {:http_error, 404, _}} ->
@@ -469,6 +476,15 @@ defmodule SukhiFedi.Web.Router do
         send_resp(conn, 502, "")
     end
   end
+
+  # Real media renders inline; anything else (an uploaded text/html or
+  # image/svg+xml, which can carry script) is forced to download so it
+  # can't render as a page in our origin.
+  defp media_disposition("image/svg+xml"), do: "attachment"
+  defp media_disposition("image/" <> _), do: "inline"
+  defp media_disposition("video/" <> _), do: "inline"
+  defp media_disposition("audio/" <> _), do: "inline"
+  defp media_disposition(_), do: "attachment"
 
   defp header_value(headers, name) when is_list(headers) do
     target = String.downcase(name)

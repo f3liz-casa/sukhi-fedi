@@ -648,9 +648,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   defp note_author_inbox(_), do: []
 
   defp inbox_for_actor_uri(actor_uri) when is_binary(actor_uri) do
-    domain = SukhiDelivery.Config.domain!()
-
-    if String.contains?(actor_uri, domain) do
+    if local_actor?(actor_uri) do
       # Local actor: skip the network hop, use convention.
       "#{actor_uri}/inbox"
     else
@@ -660,6 +658,18 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp inbox_for_actor_uri(_), do: nil
+
+  # Exact host match, not a substring — `our.domain.evil.com` and
+  # `evil.com/our.domain/...` must NOT count as local.
+  defp local_actor?(actor_uri) do
+    case URI.parse(actor_uri) do
+      %URI{host: host} when is_binary(host) ->
+        String.downcase(host) == String.downcase(SukhiDelivery.Config.domain!())
+
+      _ ->
+        false
+    end
+  end
 
   # Local accounts (domain IS NULL) use the convention; remote shadow
   # accounts carry the actual `actor_uri` + `inbox_url` (or

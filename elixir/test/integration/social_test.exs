@@ -230,6 +230,23 @@ defmodule SukhiFedi.Integration.SocialTest do
       # requested ids — capping is a presentation concern.
       assert length(list) == 50
     end
+
+    test "reflects real block / mute state instead of hardcoded false (C2)" do
+      alice = create_account!("alice_blockrel")
+      bob = create_account!("bob_blockrel")
+      carol = create_account!("carol_blockrel")
+
+      {:ok, _} = SukhiFedi.Addons.Moderation.block(alice.id, bob.id)
+      {:ok, _} = SukhiFedi.Addons.Moderation.mute(alice.id, carol.id)
+
+      [bob_rel, carol_rel] = Social.list_relationships(alice, [bob.id, carol.id])
+
+      assert bob_rel.blocking == true
+      assert bob_rel.muting == false
+      assert carol_rel.muting == true
+      assert carol_rel.muting_notifications == true
+      assert carol_rel.blocking == false
+    end
   end
 
   describe "Accounts.lookup_by_acct/1" do

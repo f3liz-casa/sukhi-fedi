@@ -360,6 +360,122 @@ defmodule SukhiFedi.Integration.NotesTest do
     end
   end
 
+  describe "visibility gating (C2)" do
+    defp local_uri(username),
+      do: "https://#{Application.get_env(:sukhi_fedi, :domain, "localhost:4000")}/users/#{username}"
+
+    test "get_note/2 hides a followers-only note from non-followers and the public" do
+      author = create_account!("vis_author")
+      follower = create_account!("vis_follower")
+      stranger = create_account!("vis_stranger")
+
+      Repo.insert!(%Follow{
+        follower_uri: local_uri(follower.username),
+        followee_id: author.id,
+        state: "accepted"
+      })
+
+      {:ok, note} =
+        Notes.create_status(author, %{"status" => "followers only", "visibility" => "followers"})
+
+      assert {:error, :not_found} = Notes.get_note(note.id, nil)
+      assert {:error, :not_found} = Notes.get_note(note.id, stranger.id)
+      assert {:ok, _} = Notes.get_note(note.id, author.id)
+      assert {:ok, _} = Notes.get_note(note.id, follower.id)
+    end
+
+    test "get_note/2 hides a direct (DM) note from everyone but its participants" do
+      alice = create_account!("vis_dm_alice")
+      bob = create_account!("vis_dm_bob")
+      mallory = create_account!("vis_dm_mallory")
+
+      {:ok, dm} =
+        Notes.create_status(alice, %{
+          "status" => "@#{bob.username} hi",
+          "visibility" => "direct"
+        })
+
+      assert {:error, :not_found} = Notes.get_note(dm.id, nil)
+      assert {:error, :not_found} = Notes.get_note(dm.id, mallory.id)
+      assert {:ok, _} = Notes.get_note(dm.id, alice.id)
+      assert {:ok, _} = Notes.get_note(dm.id, bob.id)
+    end
+
+    test "favourite/2 refuses a followers-only note the caller can't see" do
+      author = create_account!("vis_fav_author")
+      stranger = create_account!("vis_fav_stranger")
+
+      {:ok, note} =
+        Notes.create_status(author, %{"status" => "secret", "visibility" => "followers"})
+
+      assert {:error, :not_found} = Notes.favourite(stranger.id, note.id)
+      assert {:ok, _} = Notes.favourite(author.id, note.id)
+    end
+
+    test "context/2 drops thread nodes the viewer may not see" do
+      author = create_account!("vis_ctx_author")
+      stranger = create_account!("vis_ctx_stranger")
+
+      {:ok, root} =
+        Notes.create_status(author, %{"status" => "root public", "visibility" => "public"})
+
+      {:ok, _priv_reply} =
+        Notes.create_status(author, %{
+          "status" => "followers-only reply",
+          "visibility" => "followers",
+          "in_reply_to_id" => to_string(root.id)
+        })
+
+      assert {:ok, %{descendants: descendants}} = Notes.context(root.id, stranger.id)
+      assert descendants == []
+
+      assert {:ok, %{descendants: own}} = Notes.context(root.id, author.id)
+      assert length(own) == 1
+    end
+  end
+
+  describe "block / mute enforcement (C2)" do
+    test "Notifications.create is dropped when the recipient blocked the actor" do
+      alice = create_account!("blk_notif_alice")
+      bob = create_account!("blk_notif_bob")
+
+      {:ok, _} = SukhiFedi.Addons.Moderation.block(alice.id, bob.id)
+
+      assert {:ok, :blocked_skip} =
+               SukhiFedi.Notifications.create(%{
+                 account_id: alice.id,
+                 from_account_id: bob.id,
+                 type: "follow"
+               })
+
+      assert SukhiFedi.Notifications.list(alice.id, []) == []
+    end
+
+    test "home/2 excludes a muted account the viewer follows" do
+      alice = create_account!("mute_home_alice")
+      bob = create_account!("mute_home_bob")
+      carol = create_account!("mute_home_carol")
+
+      for followee <- [bob, carol] do
+        Repo.insert!(%Follow{
+          follower_uri: local_uri("mute_home_alice"),
+          followee_id: followee.id,
+          state: "accepted"
+        })
+      end
+
+      {:ok, bob_note} = Notes.create_status(bob, %{"status" => "from bob"})
+      {:ok, carol_note} = Notes.create_status(carol, %{"status" => "from carol"})
+
+      {:ok, _} = SukhiFedi.Addons.Moderation.mute(alice.id, carol.id)
+
+      ids = alice |> Timelines.home(limit: 50) |> Enum.map(& &1.id)
+
+      assert bob_note.id in ids
+      refute carol_note.id in ids
+    end
+  end
+
   describe "Timelines" do
     test "public/1 returns only public notes, newest first" do
       a = create_account!("alice_tl_pub")

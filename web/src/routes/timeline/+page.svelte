@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { fetchTimeline, type Status, type TimelineKind } from '$lib/api';
-  import { isLoggedIn, clearToken } from '$lib/auth';
+  import { isLoggedIn, clearToken, signOutServer } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
   import TimelineFilter from '$lib/components/TimelineFilter.svelte';
@@ -122,8 +122,8 @@
     void load(true);
   }
 
-  function signOut() {
-    clearToken();
+  async function signOut() {
+    await signOutServer();
     goto('/');
   }
 

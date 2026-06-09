@@ -54,6 +54,35 @@ defmodule SukhiFedi.Integration.LocalAccountsTest do
       assert {:ok, _} = LocalAccounts.authenticate(name, "brand-new-pass")
     end
 
+    test "revokes the account's OAuth tokens too (C5)", %{account: account} do
+      # Insert the app row directly (no register_app side effects) — we only
+      # need a valid app_id FK for the token.
+      app =
+        SukhiFedi.Repo.insert!(%SukhiFedi.Schema.OauthApp{
+          client_id: "c_#{System.unique_integer([:positive])}",
+          client_secret_hash: "x",
+          name: "pwchg",
+          redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
+          scopes: "read"
+        })
+
+      {:ok, tok} =
+        %SukhiFedi.Schema.OauthAccessToken{}
+        |> SukhiFedi.Schema.OauthAccessToken.changeset(%{
+          token_hash: "th_#{System.unique_integer([:positive])}",
+          scopes: "read",
+          app_id: app.id,
+          account_id: account.id
+        })
+        |> SukhiFedi.Repo.insert()
+
+      assert is_nil(tok.revoked_at)
+
+      assert {:ok, _} = LocalAccounts.change_password(account, "original-pass", "brand-new-pass")
+
+      assert SukhiFedi.Repo.get(SukhiFedi.Schema.OauthAccessToken, tok.id).revoked_at != nil
+    end
+
     test "rejects a wrong current password", %{account: account, name: name} do
       assert {:error, :invalid_current} =
                LocalAccounts.change_password(account, "wrong-pass", "brand-new-pass")

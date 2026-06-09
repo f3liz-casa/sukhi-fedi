@@ -49,7 +49,13 @@ defmodule SukhiFedi.Schema.Note do
       :mfm,
       :emojis
     ])
+    |> update_change(:content, &SukhiFedi.HTML.sanitize/1)
     |> validate_required([:content, :account_id])
+    # Cap content length (the only schema field that lacked one): bounds
+    # unbounded storage + tag-row amplification from a multi-MB local post
+    # or federated note. Oversized federated inserts simply fail the
+    # changeset and are dropped.
+    |> validate_length(:content, max: 5_000)
     |> validate_inclusion(:visibility, ["public", "followers", "direct"])
   end
 end

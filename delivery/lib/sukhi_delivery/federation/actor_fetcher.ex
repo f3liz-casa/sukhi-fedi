@@ -48,6 +48,14 @@ defmodule SukhiDelivery.Federation.ActorFetcher do
   defp inbox(_), do: nil
 
   defp do_fetch(actor_uri) do
+    if not SukhiDelivery.Federation.UrlGuard.safe?(actor_uri) do
+      {:error, :blocked_host}
+    else
+      do_fetch_safe(actor_uri)
+    end
+  end
+
+  defp do_fetch_safe(actor_uri) do
     headers = [
       {"accept", "application/activity+json, application/ld+json"},
       {"user-agent", "sukhi-fedi-delivery/0.1.0"}

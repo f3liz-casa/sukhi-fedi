@@ -149,7 +149,7 @@ defmodule SukhiFedi.Accounts do
 
     with {:ok, self_url} <- WebFinger.resolve_self(handle),
          {:ok, actor_json} <- ActorFetcher.fetch(self_url),
-         {:ok, %Account{} = a} <- RemoteAccounts.upsert_from_actor_json(actor_json) do
+         {:ok, %Account{} = a} <- RemoteAccounts.upsert_from_actor_json(actor_json, self_url) do
       {:ok, a}
     else
       {:error, _} = e -> e

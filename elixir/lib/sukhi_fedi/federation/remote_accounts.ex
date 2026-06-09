@@ -20,10 +20,19 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
 
   Idempotent on `actor_uri`. Returns `{:ok, account}` on success, or
   `{:error, reason}` on malformed input.
+
+  When `expected_uri` is given (the URL we actually fetched), the actor's
+  own `id` host must match it. This stops a server at evil.example from
+  serving a document claiming `id: https://good.example/users/alice` and
+  impersonating / overwriting that actor's shadow row.
   """
-  @spec upsert_from_actor_json(map()) :: {:ok, Account.t()} | {:error, term()}
-  def upsert_from_actor_json(actor_json) when is_map(actor_json) do
+  @spec upsert_from_actor_json(map(), String.t() | nil) ::
+          {:ok, Account.t()} | {:error, term()}
+  def upsert_from_actor_json(actor_json, expected_uri \\ nil)
+
+  def upsert_from_actor_json(actor_json, expected_uri) when is_map(actor_json) do
     with {:ok, actor_uri} <- fetch(actor_json, "id"),
+         :ok <- check_expected_host(actor_uri, expected_uri),
          {:ok, username} <- fetch_username(actor_json),
          {:ok, domain} <- fetch_domain(actor_uri) do
       attrs = %{
@@ -49,7 +58,25 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
     end
   end
 
-  def upsert_from_actor_json(_), do: {:error, :invalid_actor}
+  def upsert_from_actor_json(_, _), do: {:error, :invalid_actor}
+
+  defp check_expected_host(_actor_uri, nil), do: :ok
+
+  defp check_expected_host(actor_uri, expected_uri) do
+    case {host_of(actor_uri), host_of(expected_uri)} do
+      {h, h} when is_binary(h) -> :ok
+      _ -> {:error, :id_host_mismatch}
+    end
+  end
+
+  defp host_of(uri) when is_binary(uri) do
+    case URI.parse(uri) do
+      %URI{host: h} when is_binary(h) and h != "" -> String.downcase(h)
+      _ -> nil
+    end
+  end
+
+  defp host_of(_), do: nil
 
   defp fetch(map, key) do
     case Map.get(map, key) do

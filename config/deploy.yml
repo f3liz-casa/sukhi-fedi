@@ -230,7 +230,11 @@ accessories:
   postgres:
     image: postgres:16-alpine
     host: 217.142.242.103
-    port: 5432
+    # Bind to loopback, not 0.0.0.0 — the app containers reach postgres by
+    # its kamal network alias, so the host port is only for local ops and
+    # must not be internet-reachable. (Docker's publish bypasses firewalld,
+    # so a bare `5432` would expose it regardless of the box firewall.)
+    port: "127.0.0.1:5432:5432"
     env:
       clear:
         POSTGRES_USER: sukhi
@@ -261,7 +265,11 @@ accessories:
   nats:
     image: nats:2-alpine
     host: 217.142.242.103
-    port: 4222
+    # Loopback only — NATS is unauthenticated and carries the federation
+    # OUTBOX + DOMAIN_EVENTS bus; it must never be internet-reachable. App
+    # containers reach it by network alias. (See also: add token/nkey auth
+    # to the nats cmd + every client as a follow-up.)
+    port: "127.0.0.1:4222:4222"
     cmd: --jetstream --store_dir /data --http_port 8222
     directories:
       - data:/data

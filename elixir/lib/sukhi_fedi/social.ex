@@ -9,6 +9,7 @@ defmodule SukhiFedi.Social do
 
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
+  alias SukhiFedi.Addons.Moderation
   alias SukhiFedi.Schema.{Account, Follow}
 
   # ── reads ─────────────────────────────────────────────────────────────────
@@ -303,8 +304,28 @@ defmodule SukhiFedi.Social do
             |> MapSet.new()
         end
 
+      # Real moderation state, so the client reflects what actually took
+      # effect (the block POST response renders this very map).
+      blocking_set = MapSet.new(Moderation.blocked_target_ids(viewer.id))
+      muting_set = MapSet.new(Moderation.muted_target_ids(viewer.id))
+      blocked_by_block_set = MapSet.new(Moderation.blocked_by_ids(viewer.id, target_ids))
+
+      blocked_domains =
+        from(a in Account, where: a.id in ^target_ids and not is_nil(a.domain), select: a.domain)
+        |> Repo.all()
+        |> Enum.uniq()
+        |> Enum.filter(&Moderation.instance_blocked?/1)
+        |> MapSet.new()
+
+      target_domain =
+        from(a in Account, where: a.id in ^target_ids, select: {a.id, a.domain})
+        |> Repo.all()
+        |> Map.new()
+
       Enum.map(target_ids, fn id ->
         state = Map.get(following_set, id)
+        muting? = MapSet.member?(muting_set, id)
+        domain = Map.get(target_domain, id)
 
         %{
           id: id,
@@ -313,11 +334,11 @@ defmodule SukhiFedi.Social do
           followed_by: MapSet.member?(followed_by_set, id),
           showing_reblogs: true,
           notifying: false,
-          blocking: false,
-          blocked_by: false,
-          muting: false,
-          muting_notifications: false,
-          domain_blocking: false,
+          blocking: MapSet.member?(blocking_set, id),
+          blocked_by: MapSet.member?(blocked_by_block_set, id),
+          muting: muting?,
+          muting_notifications: muting?,
+          domain_blocking: is_binary(domain) and MapSet.member?(blocked_domains, domain),
           endorsed: false,
           note: ""
         }

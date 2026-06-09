@@ -108,6 +108,31 @@ defmodule SukhiFedi.Integration.PollsTest do
       assert {:error, :too_many_choices} = Polls.vote(b.id, pid, [0, 1])
     end
 
+    test "single-choice re-vote replaces the prior ballot, no stuffing (C6)" do
+      a = create_account!("alice_pv_rb")
+      b = create_account!("bob_pv_rb")
+
+      {:ok, note} =
+        Notes.create_status(a, %{
+          "status" => "?",
+          "poll" => %{"options" => ["x", "y"], "multiple" => false}
+        })
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+
+      assert :ok = Polls.vote(b.id, pid, [0])
+      assert :ok = Polls.vote(b.id, pid, [1])
+
+      {:ok, ctx} = Polls.get_with_results(pid, b.id)
+      opt0 = Enum.at(ctx.options, 0).id
+      opt1 = Enum.at(ctx.options, 1).id
+
+      assert ctx.tallies[opt0] in [nil, 0]
+      assert ctx.tallies[opt1] == 1
+      assert ctx.voted_option_ids == [opt1]
+      assert ctx.voters_count == 1
+    end
+
     test "expired poll rejects votes" do
       a = create_account!("alice_pv3")
       b = create_account!("bob_pv3")

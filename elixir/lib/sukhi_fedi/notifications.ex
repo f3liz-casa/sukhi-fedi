@@ -24,6 +24,7 @@ defmodule SukhiFedi.Notifications do
   import Ecto.Query
 
   alias SukhiFedi.Repo
+  alias SukhiFedi.Addons.Moderation
   alias SukhiFedi.Schema.{Account, Notification}
 
   @default_limit 15
@@ -40,13 +41,23 @@ defmodule SukhiFedi.Notifications do
   def create(%{account_id: rid, from_account_id: aid}) when rid == aid, do: {:ok, :self_skip}
 
   def create(attrs) when is_map(attrs) do
-    %Notification{}
-    |> Notification.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: :nothing,
-      conflict_target: [:account_id, :from_account_id, :type, :note_id]
-    )
-    |> tap_stream()
+    rid = attrs[:account_id]
+    aid = attrs[:from_account_id]
+
+    # Don't notify the recipient about an account they've blocked or muted.
+    # (Mastodon's mute hides notifications by default.)
+    if is_integer(rid) and is_integer(aid) and
+         (Moderation.blocked?(rid, aid) or Moderation.muted?(rid, aid)) do
+      {:ok, :blocked_skip}
+    else
+      %Notification{}
+      |> Notification.changeset(attrs)
+      |> Repo.insert(
+        on_conflict: :nothing,
+        conflict_target: [:account_id, :from_account_id, :type, :note_id]
+      )
+      |> tap_stream()
+    end
   end
 
   # Push to the recipient's `user` stream — but only on a genuinely new

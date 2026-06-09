@@ -13,6 +13,13 @@ if [ -n "$ERLANG_COOKIE" ] && [ -z "${RELEASE_COOKIE:-}" ]; then
   export RELEASE_COOKIE="$ERLANG_COOKIE"
 fi
 
+# Fail closed on a missing / published-default cluster cookie (the only
+# auth for Erlang distribution). See elixir/rel/entrypoint.sh.
+if [ -z "${RELEASE_COOKIE:-}" ] || [ "${RELEASE_COOKIE:-}" = "sukhi_fedi_dev_cookie" ]; then
+  echo "[entrypoint] refusing to boot: set ERLANG_COOKIE to a random secret (openssl rand -hex 32)" >&2
+  exit 1
+fi
+
 # Cluster sanity log (sha256 prefix only). Compare against the
 # gateway's `[entrypoint] gateway cookie_fp=` line — they must match
 # for Node.connect/1 to succeed.

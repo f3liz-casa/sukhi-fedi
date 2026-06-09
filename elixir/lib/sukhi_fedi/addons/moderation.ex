@@ -51,6 +51,32 @@ defmodule SukhiFedi.Addons.Moderation do
     Repo.exists?(from b in Block, where: b.account_id == ^account_id and b.target_id == ^target_id)
   end
 
+  @doc "Account ids that `account_id` has blocked."
+  def blocked_target_ids(account_id) when is_integer(account_id) do
+    Repo.all(from b in Block, where: b.account_id == ^account_id, select: b.target_id)
+  end
+
+  @doc "Account ids that `account_id` is currently muting (skips expired)."
+  def muted_target_ids(account_id) when is_integer(account_id) do
+    now = DateTime.utc_now()
+
+    Repo.all(
+      from m in Mute,
+        where:
+          m.account_id == ^account_id and (is_nil(m.expires_at) or m.expires_at > ^now),
+        select: m.target_id
+    )
+  end
+
+  @doc "Subset of `target_ids` that have blocked `account_id` (reverse blocks)."
+  def blocked_by_ids(account_id, target_ids) when is_integer(account_id) and is_list(target_ids) do
+    Repo.all(
+      from b in Block,
+        where: b.target_id == ^account_id and b.account_id in ^target_ids,
+        select: b.account_id
+    )
+  end
+
   @doc "Hydrated list of accounts the viewer has blocked. Public-safe fields only."
   def list_blocks(account_id) when is_integer(account_id) do
     Repo.all(

@@ -30,60 +30,126 @@ defmodule SukhiFedi.AP.Instructions do
 
   @doc """
   Executes an instruction map returned from the fedify.inbox.v1 endpoint.
+
+  `signer_host` is the host of the HTTP-signature key's owner (from the
+  inbox controller). The inline body of an activity is only trusted when
+  the signer is the same host as the activity's `actor` — otherwise we are
+  looking at a forwarded/relayed copy whose authority we can't verify, and
+  only the handlers that re-resolve the actor and re-fetch the object
+  independently (relayed `Announce` → boost materialisation) run. The
+  arity-1 form (`:internal`) is the trusted entry used by archive replay
+  and tests, which never flow through the inbox.
   """
-  @spec execute(map()) :: :ok
-  def execute(%{"action" => "save", "object" => object_data}) do
-    maybe_handle_dm(object_data)
-    maybe_handle_relay_accept(object_data)
-    maybe_handle_follow_accept(object_data)
-    maybe_mirror_create_note(object_data)
-    maybe_handle_reaction(object_data)
-    maybe_notify_announce(object_data)
-    materialize_boost(object_data)
-    maybe_handle_pin_unpin(object_data)
-    maybe_handle_delete(object_data)
-    maybe_handle_undo(object_data)
+  @spec execute(map(), String.t() | :internal | nil) :: :ok
+  def execute(instruction, signer_host \\ :internal)
+
+  def execute(%{"action" => "save", "object" => object_data}, signer_host) do
+    if trusted_inline_origin?(object_data, signer_host) do
+      maybe_handle_dm(object_data)
+      maybe_handle_relay_accept(object_data)
+      maybe_handle_follow_accept(object_data)
+      maybe_mirror_create_note(object_data)
+      maybe_handle_reaction(object_data)
+      # A reblog notification should come from the booster's own server
+      # (it delivers the Announce directly: signer == booster). We do not
+      # fire it for a relay-forwarded copy.
+      maybe_notify_announce(object_data)
+      materialize_boost(object_data)
+      maybe_handle_pin_unpin(object_data)
+      maybe_handle_delete(object_data)
+      maybe_handle_undo(object_data)
+    else
+      # Forwarded/relayed: the signer is not the activity's actor. Only
+      # materialise a relayed boost — `materialize_boost` re-resolves the
+      # booster and re-fetches the note, and only acts when a local user
+      # already follows the booster, so it can't be used to inject
+      # arbitrary content or notifications.
+      materialize_boost(object_data)
+    end
+
     :ok
   end
 
-  def execute(%{
-        "action" => "save_and_reply",
-        "save" => save_data,
-        "reply" => reply,
-        "inbox" => inbox_url
-      }) do
-    insert_follow(save_data)
-    maybe_notify_follow(save_data)
+  def execute(
+        %{
+          "action" => "save_and_reply",
+          "save" => save_data,
+          "reply" => reply,
+          "inbox" => inbox_url
+        },
+        signer_host
+      ) do
+    if trusted_inline_origin?(save_data["follow"], signer_host) do
+      insert_follow(save_data)
+      maybe_notify_follow(save_data)
 
-    followee_uri = save_data["followeeUri"]
+      followee_uri = save_data["followeeUri"]
 
-    Oban.insert!(
-      SukhiFedi.Oban,
-      Oban.Job.new(
-        %{raw_json: reply, inbox_url: inbox_url, actor_uri: followee_uri},
-        worker: @delivery_worker,
-        queue: @delivery_queue
+      Oban.insert!(
+        SukhiFedi.Oban,
+        Oban.Job.new(
+          %{raw_json: reply, inbox_url: inbox_url, actor_uri: followee_uri},
+          worker: @delivery_worker,
+          queue: @delivery_queue
+        )
       )
-    )
 
-    # Nudge the follower to refresh our cached actor (so their follower
-    # count reflects us immediately instead of after their 24h TTL).
-    maybe_enqueue_actor_update(followee_uri, inbox_url)
+      # Nudge the follower to refresh our cached actor (so their follower
+      # count reflects us immediately instead of after their 24h TTL).
+      maybe_enqueue_actor_update(followee_uri, inbox_url)
 
-    # Replay our recent public posts to the new follower's inbox. Without
-    # this they only see posts published after the Accept lands, which
-    # means a quiet account looks empty on their server until we post
-    # something new.
-    maybe_backfill_recent_notes(followee_uri, inbox_url)
+      # Replay our recent public posts to the new follower's inbox. Without
+      # this they only see posts published after the Accept lands, which
+      # means a quiet account looks empty on their server until we post
+      # something new.
+      maybe_backfill_recent_notes(followee_uri, inbox_url)
+    end
 
     :ok
   end
 
-  def execute(%{"action" => "ignore"}) do
+  def execute(%{"action" => "ignore"}, _signer_host) do
     :ok
   end
 
   # ── Private helpers ──────────────────────────────────────────────────────
+
+  # The HTTP-signature owner must share the activity actor's host before we
+  # trust the inline body. `:internal` (the arity-1 default) is the trusted
+  # replay/test path. A nil or mismatched signer host is untrusted.
+  defp trusted_inline_origin?(_data, :internal), do: true
+
+  defp trusted_inline_origin?(data, signer_host)
+       when is_map(data) and is_binary(signer_host) do
+    case data |> Map.get("actor") |> extract_uri() do
+      uri when is_binary(uri) ->
+        case URI.parse(uri) do
+          %URI{host: h} when is_binary(h) and h != "" ->
+            String.downcase(h) == signer_host
+
+          _ ->
+            false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp trusted_inline_origin?(_data, _signer_host), do: false
+
+  # True when two AP id/uri values (string or inlined `%{"id" => …}`) share
+  # the same host. Case-insensitive; false if either host is missing.
+  defp same_host?(a, b) do
+    with ua when is_binary(ua) <- extract_uri(a),
+         ub when is_binary(ub) <- extract_uri(b),
+         %URI{host: ha} when is_binary(ha) and ha != "" <- URI.parse(ua),
+         %URI{host: hb} when is_binary(hb) and hb != "" <- URI.parse(ub) do
+      String.downcase(ha) == String.downcase(hb)
+    else
+      _ -> false
+    end
+  end
 
   defp insert_follow(%{"follow" => follow_data} = data) do
     followee_uri = data["followeeUri"]
@@ -291,9 +357,10 @@ defmodule SukhiFedi.AP.Instructions do
       record_sender_participant(conversation_ap_id, sender)
       Enum.each(local_recipients, &record_participant(conversation_ap_id, &1))
 
-      # Persist only when a local account is actually addressed. Idempotent
-      # on the note's AP id, so re-delivery doesn't duplicate.
-      if local_recipients != [] do
+      # Persist only when a local account is actually addressed and the
+      # note's id is on the sender's host (no spoofed ap_id). Idempotent on
+      # the note's AP id, so re-delivery doesn't duplicate.
+      if local_recipients != [] and same_host?(object["id"], actor_uri) do
         save_inbound_dm_note(object, sender, conversation_ap_id)
       end
     end
@@ -483,8 +550,14 @@ defmodule SukhiFedi.AP.Instructions do
       ap_id = note["id"]
       attributed_to = extract_uri(note["attributedTo"]) || extract_uri(activity["actor"])
 
+      # The note's id, its author, and the delivering actor must all live on
+      # the same host. This blocks a server from injecting a note under
+      # another origin's id (impersonation / ap_id collision), including
+      # forging a post attributed to a local user.
       with true <- is_binary(ap_id),
            true <- is_binary(attributed_to),
+           true <- same_host?(ap_id, attributed_to),
+           true <- same_host?(attributed_to, activity["actor"]),
            {:ok, %Account{id: account_id}} <- resolve_or_ingest_actor(attributed_to) do
         attrs = %{
           "account_id" => account_id,
@@ -854,7 +927,7 @@ defmodule SukhiFedi.AP.Instructions do
           nil ->
             with {:ok, json} <- SukhiFedi.Federation.ActorFetcher.fetch(actor_uri),
                  {:ok, %Account{} = a} <-
-                   SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(json) do
+                   SukhiFedi.Federation.RemoteAccounts.upsert_from_actor_json(json, actor_uri) do
               {:ok, a}
             else
               _ -> {:error, :ingest_failed}
@@ -910,16 +983,17 @@ defmodule SukhiFedi.AP.Instructions do
 
   # Inbound `Delete` activity: drop the local mirror of whatever the
   # remote actor is tombstoning. Object id can be a string or a Tombstone
-  # map with `id`.
-  defp maybe_handle_delete(%{"type" => "Delete", "object" => object}) do
-    case extract_object_id(object) do
-      nil ->
-        :ok
-
-      ap_id ->
-        from(n in Note, where: n.ap_id == ^ap_id) |> Repo.delete_all()
-        :ok
+  # map with `id`. We only honour a Delete whose target note lives on the
+  # actor's own host — without this, any (signed) server could delete any
+  # mirrored note by ap_id, regardless of who it belongs to.
+  defp maybe_handle_delete(%{"type" => "Delete", "actor" => actor_uri, "object" => object})
+       when is_binary(actor_uri) do
+    with ap_id when is_binary(ap_id) <- extract_object_id(object),
+         true <- same_host?(ap_id, actor_uri) do
+      from(n in Note, where: n.ap_id == ^ap_id) |> Repo.delete_all()
     end
+
+    :ok
   end
 
   defp maybe_handle_delete(_), do: :ok

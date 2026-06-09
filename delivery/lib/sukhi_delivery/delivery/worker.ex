@@ -48,6 +48,19 @@ defmodule SukhiDelivery.Delivery.Worker do
   end
 
   defp do_deliver(job, args, activity_id, inbox_url) do
+    if SukhiDelivery.Federation.UrlGuard.safe?(inbox_url) do
+      deliver_to(job, args, activity_id, inbox_url)
+    else
+      # The inbox resolved to a non-public / non-https target — an SSRF
+      # attempt (attacker-controlled actor inbox or note id). Cancel the
+      # job so it doesn't retry against the internal host.
+      require Logger
+      Logger.warning("delivery: refusing SSRF-unsafe inbox #{inspect(inbox_url)}")
+      {:cancel, "blocked egress host"}
+    end
+  end
+
+  defp deliver_to(job, args, activity_id, inbox_url) do
     {body, actor_uri} = resolve_body_and_actor(args)
 
     base_headers = %{"content-type" => "application/activity+json"}

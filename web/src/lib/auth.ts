@@ -108,6 +108,34 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// RFC 7009 revoke: tell the server to invalidate the bearer token, then
+// drop it locally. Best-effort — a failed/offline revoke still clears the
+// local state, so sign-out always completes. Without this, "sign out" only
+// removed the token from this browser while it stayed valid server-side.
+export async function signOutServer(): Promise<void> {
+  if (browser) {
+    const t = loadToken();
+    const raw = localStorage.getItem(CLIENT_KEY);
+    if (t && raw) {
+      try {
+        const c = JSON.parse(raw) as ClientCreds;
+        await fetch('/oauth/revoke', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            token: t.access_token,
+            client_id: c.client_id,
+            client_secret: c.client_secret
+          })
+        });
+      } catch {
+        /* best-effort: local logout proceeds regardless */
+      }
+    }
+  }
+  clearToken();
+}
+
 export function isLoggedIn(): boolean {
   return !!loadToken();
 }

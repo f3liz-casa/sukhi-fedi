@@ -18,6 +18,8 @@ defmodule SukhiFedi.AP.MediaIngest do
   alias SukhiFedi.Addons.Media
   alias SukhiFedi.Repo
 
+  @max_attachments 20
+
   @doc """
   Attach the AP `attachment` of an object to `note_id`, authored by
   `account_id`. Accepts a list, a single object, or nil. No-op when the
@@ -31,7 +33,11 @@ defmodule SukhiFedi.AP.MediaIngest do
       when is_list(attachments) and is_integer(note_id) and is_integer(account_id) do
     if attachments != [] and not has_media?(note_id) do
       media_ids =
-        Enum.flat_map(attachments, fn att ->
+        attachments
+        # Cap per-note attachments — a federated note could otherwise carry
+        # a huge `attachment` array, one DB insert each.
+        |> Enum.take(@max_attachments)
+        |> Enum.flat_map(fn att ->
           with %{} = attrs <- attrs(att, account_id),
                {:ok, %{id: id}} <- Media.create_media(attrs) do
             [id]

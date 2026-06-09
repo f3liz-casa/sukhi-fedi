@@ -14,6 +14,7 @@ defmodule SukhiFedi.Notes do
     Bookmark,
     Boost,
     ConversationParticipant,
+    Follow,
     Media,
     Note,
     PinnedNote,
@@ -311,6 +312,7 @@ defmodule SukhiFedi.Notes do
   # whether the account is local, so the caller can split in-process
   # delivery from federation.
   @mention_re ~r/(?<![\w])@([\w]+)(?:@([\w.\-]+))?/
+  @max_mentions 20
 
   defp resolve_mention_recipients(content) when is_binary(content) do
     domain = SukhiFedi.Config.domain!()
@@ -322,6 +324,10 @@ defmodule SukhiFedi.Notes do
       [_, user | _] -> user
     end)
     |> Enum.uniq()
+    # Cap the fan-out: each unknown remote handle triggers a synchronous
+    # WebFinger + actor fetch to an attacker-chosen host, so an unbounded
+    # mention list is an amplification/DoS vector.
+    |> Enum.take(@max_mentions)
     |> Enum.flat_map(fn handle ->
       case SukhiFedi.Accounts.lookup_by_acct(handle, resolve: true) do
         {:ok, %Account{} = account} ->
@@ -608,20 +614,91 @@ defmodule SukhiFedi.Notes do
   @doc """
   Load a single note by id with the assocs Mastodon Status JSON
   needs: account, media, poll, reactions.
+
+  Viewer-aware: `viewer_id` (the requesting account, or `nil` when
+  unauthenticated) must be allowed to see the note's visibility, else
+  this returns `{:error, :not_found}` — matching Mastodon, which 404s a
+  status the caller isn't authorised to see. Without this, any caller
+  could read followers-only and direct (DM) notes by guessing the id.
   """
-  @spec get_note(integer() | binary()) :: {:ok, Note.t()} | {:error, :not_found}
-  def get_note(id) do
+  @spec get_note(integer() | binary(), integer() | nil) ::
+          {:ok, Note.t()} | {:error, :not_found}
+  def get_note(id, viewer_id \\ nil) do
     case parse_int(id) do
       nil ->
         {:error, :not_found}
 
       n ->
         case Repo.get(Note, n) do
-          nil -> {:error, :not_found}
-          note -> {:ok, Repo.preload(note, [:account, :media, :poll, :reactions]) |> with_refs()}
+          nil ->
+            {:error, :not_found}
+
+          note ->
+            if visible_to?(note, viewer_id) do
+              {:ok, Repo.preload(note, [:account, :media, :poll, :reactions]) |> with_refs(viewer_id)}
+            else
+              {:error, :not_found}
+            end
         end
     end
   end
+
+  @doc """
+  True when `viewer_id` (an account id, or `nil` for an unauthenticated
+  request) is permitted to see `note`:
+
+    * `public` / `unlisted` — everyone.
+    * own note — the author always sees it.
+    * `followers` — accepted local followers of the author.
+    * `direct` — participants of the note's conversation.
+
+  The single source of truth for per-note visibility, reused by the
+  single-status read, thread context, poll reads/votes and the
+  favourite/boost/bookmark interactions.
+  """
+  @spec visible_to?(Note.t(), integer() | nil) :: boolean()
+  def visible_to?(%Note{visibility: v} = note, viewer_id) do
+    cond do
+      v in ["public", "unlisted"] -> true
+      not is_integer(viewer_id) -> false
+      note.account_id == viewer_id -> true
+      v == "followers" -> local_follower?(viewer_id, note.account_id)
+      v == "direct" -> dm_participant?(note, viewer_id)
+      true -> false
+    end
+  end
+
+  def visible_to?(_note, _viewer_id), do: false
+
+  # An accepted local follow edge from viewer → author. A local follower's
+  # `follower_uri` is `https://<domain>/users/<viewer-username>` (same shape
+  # the home timeline matches on).
+  defp local_follower?(viewer_id, author_id) do
+    case Repo.get(Account, viewer_id) do
+      %Account{username: u, domain: nil} when is_binary(u) ->
+        uri = "https://#{SukhiFedi.Config.domain!()}/users/#{u}"
+
+        Repo.exists?(
+          from(f in Follow,
+            where:
+              f.followee_id == ^author_id and f.follower_uri == ^uri and f.state == "accepted"
+          )
+        )
+
+      _ ->
+        false
+    end
+  end
+
+  defp dm_participant?(%Note{conversation_ap_id: conv}, viewer_id) when is_binary(conv) do
+    Repo.exists?(
+      from(cp in ConversationParticipant,
+        where: cp.conversation_ap_id == ^conv and cp.account_id == ^viewer_id
+      )
+    )
+  end
+
+  defp dm_participant?(_note, _viewer_id), do: false
 
   @doc """
   Enrich notes with the reply/quote reference fields the Mastodon view
@@ -811,9 +888,9 @@ defmodule SukhiFedi.Notes do
   Descendants stay local-only — pulling a remote `replies` collection
   is a separate piece.
   """
-  @spec context(integer() | binary()) ::
+  @spec context(integer() | binary(), integer() | nil) ::
           {:ok, %{ancestors: [Note.t()], descendants: [Note.t()]}} | {:error, :not_found}
-  def context(note_id) do
+  def context(note_id, viewer_id \\ nil) do
     case parse_int(note_id) do
       nil ->
         {:error, :not_found}
@@ -824,13 +901,22 @@ defmodule SukhiFedi.Notes do
             {:error, :not_found}
 
           note ->
-            note = Repo.preload(note, :account)
+            if visible_to?(note, viewer_id) do
+              note = Repo.preload(note, :account)
 
-            {:ok,
-             %{
-               ancestors: with_refs(ancestors_of(note)),
-               descendants: with_refs(descendants_of(note))
-             }}
+              # Filter every thread node by the viewer's visibility too, so a
+              # private ancestor/descendant from another user can't leak via
+              # the root note's context.
+              {:ok,
+               %{
+                 ancestors:
+                   note |> ancestors_of() |> Enum.filter(&visible_to?(&1, viewer_id)) |> with_refs(viewer_id),
+                 descendants:
+                   note |> descendants_of() |> Enum.filter(&visible_to?(&1, viewer_id)) |> with_refs(viewer_id)
+               }}
+            else
+              {:error, :not_found}
+            end
         end
     end
   end
@@ -971,7 +1057,7 @@ defmodule SukhiFedi.Notes do
   def favourite(%Account{id: aid}, note_id), do: favourite(aid, note_id)
 
   def favourite(account_id, note_id) when is_integer(account_id) do
-    with_loaded_note(note_id, fn note ->
+    with_visible_note(account_id, note_id, fn note ->
       case Repo.get_by(Reaction,
              account_id: account_id,
              note_id: note.id,
@@ -1082,7 +1168,7 @@ defmodule SukhiFedi.Notes do
 
   def react(account_id, note_id, emoji)
       when is_integer(account_id) and is_binary(emoji) do
-    with_loaded_note(note_id, fn note ->
+    with_visible_note(account_id, note_id, fn note ->
       case Repo.get_by(Reaction, account_id: account_id, note_id: note.id, emoji: emoji) do
         %Reaction{} ->
           {:ok, note}
@@ -1176,7 +1262,7 @@ defmodule SukhiFedi.Notes do
   def reblog(%Account{id: aid}, note_id), do: reblog(aid, note_id)
 
   def reblog(account_id, note_id) when is_integer(account_id) do
-    with_loaded_note(note_id, fn note ->
+    with_visible_note(account_id, note_id, fn note ->
       case Repo.get_by(Boost, account_id: account_id, note_id: note.id) do
         %Boost{} ->
           {:ok, note}
@@ -1263,7 +1349,7 @@ defmodule SukhiFedi.Notes do
   def bookmark(%Account{id: aid}, note_id), do: bookmark(aid, note_id)
 
   def bookmark(account_id, note_id) when is_integer(account_id) do
-    with_loaded_note(note_id, fn note ->
+    with_visible_note(account_id, note_id, fn note ->
       _ =
         %Bookmark{account_id: account_id, note_id: note.id}
         |> Repo.insert(on_conflict: :nothing)
@@ -1687,6 +1773,26 @@ defmodule SukhiFedi.Notes do
         case Repo.get(Note, n) do
           nil -> {:error, :not_found}
           note -> fun.(note)
+        end
+    end
+  end
+
+  # Like `with_loaded_note/2`, but only runs `fun` when `account_id` is
+  # allowed to see the note (visibility-gated). Used by the favourite /
+  # boost / bookmark / react interactions so a caller can't act on a
+  # followers-only or direct note they aren't a party to.
+  defp with_visible_note(account_id, note_id, fun) do
+    case parse_int(note_id) do
+      nil ->
+        {:error, :not_found}
+
+      n ->
+        case Repo.get(Note, n) do
+          nil ->
+            {:error, :not_found}
+
+          note ->
+            if visible_to?(note, account_id), do: fun.(note), else: {:error, :not_found}
         end
     end
   end

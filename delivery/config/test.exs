@@ -8,3 +8,7 @@ config :sukhi_delivery, SukhiDelivery.Repo,
   pool_size: 10
 
 config :sukhi_delivery, Oban, testing: :inline
+
+# The worker test delivers to an http://localhost Bypass server, which the
+# SSRF guard rejects in dev/prod. Disable it under test only.
+config :sukhi_delivery, :disable_url_guard, true

@@ -207,6 +207,17 @@ defmodule SukhiFedi.LocalAccounts do
           Multi.new()
           |> Multi.update(:account, Ecto.Changeset.change(account, %{password_hash: new_hash}))
           |> Multi.delete_all(:sessions, from(s in Session, where: s.account_id == ^id))
+          # Also revoke the account's OAuth bearer tokens, so "change
+          # password" actually logs out every API client/device — not just
+          # cookie sessions. Otherwise a leaked, never-expiring token kept
+          # working after a password change.
+          |> Multi.update_all(
+            :tokens,
+            from(t in SukhiFedi.Schema.OauthAccessToken,
+              where: t.account_id == ^id and is_nil(t.revoked_at)
+            ),
+            set: [revoked_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+          )
           |> Repo.transaction()
           |> case do
             {:ok, %{account: a}} -> {:ok, a}

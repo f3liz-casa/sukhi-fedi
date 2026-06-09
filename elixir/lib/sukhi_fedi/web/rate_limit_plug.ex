@@ -50,9 +50,16 @@ defmodule SukhiFedi.Web.RateLimitPlug do
   end
 
   defp peer_id(%Plug.Conn{} = conn) do
-    # Trust X-Forwarded-For only if set by our own reverse proxy — this
-    # naive version just uses the socket peer. Swap in a PlugForwardedFor
-    # here when the deployment terminates TLS elsewhere.
-    conn.remote_ip |> :inet.ntoa() |> to_string()
+    # cloudflared is the sole ingress and Cloudflare's edge sets (and
+    # overwrites any client-supplied) `cf-connecting-ip` with the real
+    # client IP, so prefer it. Without this the socket peer is the tunnel
+    # container — identical for every external request — collapsing the
+    # whole instance into one bucket (no per-IP isolation, /login
+    # credential-stuffing rides under one shared ceiling). Mirrors
+    # AccessLogPlug.
+    case get_req_header(conn, "cf-connecting-ip") do
+      [ip | _] when is_binary(ip) and ip != "" -> ip
+      _ -> conn.remote_ip |> :inet.ntoa() |> to_string()
+    end
   end
 end

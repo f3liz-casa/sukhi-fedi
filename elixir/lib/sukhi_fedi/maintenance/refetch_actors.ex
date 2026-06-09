@@ -58,7 +58,7 @@ defmodule SukhiFedi.Maintenance.RefetchActors do
   defp refetch(uri) do
     case ActorFetcher.fetch(uri) do
       {:ok, json} ->
-        case RemoteAccounts.upsert_from_actor_json(json) do
+        case RemoteAccounts.upsert_from_actor_json(json, uri) do
           {:ok, _} ->
             :refetched
 

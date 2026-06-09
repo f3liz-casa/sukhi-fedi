@@ -258,6 +258,24 @@ defmodule SukhiFedi.Integration.OAuthTest do
 
   # ── helpers ──────────────────────────────────────────────────────────────
 
+  describe "token expiry (C5)" do
+    test "minted tokens carry an absolute expiry and verify_bearer rejects an expired one" do
+      {:ok, %{app: app, client_secret: secret}} = register("EXP", "x", "read")
+
+      assert {:ok, t} = OAuth.client_credentials_grant(app.client_id, secret, "read")
+      assert is_integer(t.expires_in) and t.expires_in > 0
+      assert {:ok, _} = OAuth.verify_bearer(t.access_token)
+
+      tok = Repo.get_by!(OauthAccessToken, app_id: app.id)
+      refute is_nil(tok.expires_at)
+
+      past = DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:second)
+      {:ok, _} = tok |> Ecto.Changeset.change(expires_at: past) |> Repo.update()
+
+      assert {:error, :expired} = OAuth.verify_bearer(t.access_token)
+    end
+  end
+
   defp register(name, redirect \\ "urn:ietf:wg:oauth:2.0:oob", scopes \\ "read") do
     OAuth.register_app(%{
       "client_name" => name,

@@ -520,6 +520,118 @@ defmodule SukhiFedi.Integration.NoteFederationTest do
     )
   end
 
+  describe "C1: inbound signer→actor binding" do
+    test "Create from a signer on a different host than the actor is dropped" do
+      author = create_remote_account!("c1_author", "remote.example")
+      note_uri = "https://remote.example/notes/c1-forged"
+
+      activity = %{
+        "type" => "Create",
+        "actor" => author.actor_uri,
+        "object" => %{
+          "type" => "Note",
+          "id" => note_uri,
+          "attributedTo" => author.actor_uri,
+          "content" => "forwarded forgery",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      # Signer evil.example ≠ actor host remote.example → untrusted, not mirrored.
+      assert :ok =
+               Instructions.execute(%{"action" => "save", "object" => activity}, "evil.example")
+
+      refute Repo.get_by(Note, ap_id: note_uri)
+
+      # Same activity, signer host matches the actor → mirrored.
+      assert :ok =
+               Instructions.execute(%{"action" => "save", "object" => activity}, "remote.example")
+
+      assert Repo.get_by(Note, ap_id: note_uri)
+    end
+
+    test "Create whose note id host differs from its author is rejected even with a matching signer" do
+      author = create_remote_account!("c1_idspoof", "remote.example")
+
+      activity = %{
+        "type" => "Create",
+        "actor" => author.actor_uri,
+        "object" => %{
+          "type" => "Note",
+          "id" => "https://victim.example/notes/spoof",
+          "attributedTo" => author.actor_uri,
+          "content" => "id on a foreign host",
+          "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+        }
+      }
+
+      assert :ok =
+               Instructions.execute(%{"action" => "save", "object" => activity}, "remote.example")
+
+      refute Repo.get_by(Note, ap_id: "https://victim.example/notes/spoof")
+    end
+
+    test "Delete only removes a note whose id is on the actor's own host" do
+      victim = create_remote_account!("c1_victim", "victim.example")
+      victim_note = "https://victim.example/notes/keep"
+
+      :ok =
+        Instructions.execute(
+          %{
+            "action" => "save",
+            "object" => %{
+              "type" => "Create",
+              "actor" => victim.actor_uri,
+              "object" => %{
+                "type" => "Note",
+                "id" => victim_note,
+                "attributedTo" => victim.actor_uri,
+                "content" => "victim's post",
+                "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+              }
+            }
+          },
+          "victim.example"
+        )
+
+      assert Repo.get_by(Note, ap_id: victim_note)
+
+      # An attacker validly signed for its own host cannot delete another
+      # origin's note.
+      assert :ok =
+               Instructions.execute(
+                 %{
+                   "action" => "save",
+                   "object" => %{
+                     "type" => "Delete",
+                     "actor" => "https://evil.example/users/attacker",
+                     "object" => victim_note
+                   }
+                 },
+                 "evil.example"
+               )
+
+      assert Repo.get_by(Note, ap_id: victim_note),
+             "cross-origin Delete must not remove the note"
+
+      # The real origin can delete its own note.
+      assert :ok =
+               Instructions.execute(
+                 %{
+                   "action" => "save",
+                   "object" => %{
+                     "type" => "Delete",
+                     "actor" => victim.actor_uri,
+                     "object" => victim_note
+                   }
+                 },
+                 "victim.example"
+               )
+
+      refute Repo.get_by(Note, ap_id: victim_note)
+    end
+  end
+
   # A local note carries no `ap_id`; its AP id is synthesized the same
   # way `NoteController` publishes it.
   defp local_note_uri(%Account{username: u}, %{id: id}) do

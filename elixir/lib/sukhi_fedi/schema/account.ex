@@ -68,6 +68,7 @@ defmodule SukhiFedi.Schema.Account do
       :locked,
       :last_fetched_at
     ])
+    |> update_change(:summary, &SukhiFedi.HTML.sanitize/1)
     |> validate_required([:username, :domain, :actor_uri])
   end
 
@@ -84,6 +85,7 @@ defmodule SukhiFedi.Schema.Account do
 
     account
     |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot, :locked])
+    |> update_change(:summary, &SukhiFedi.HTML.sanitize/1)
     |> validate_length(:display_name, max: 100)
     |> validate_length(:summary, max: 1024)
   end

@@ -24,7 +24,12 @@ defmodule SukhiFedi.Web.InboxController do
   defp handle_inbox(conn) do
     raw_json = conn.body_params
     raw_body = conn.assigns[:raw_body] || ""
-    headers = Enum.into(conn.req_headers, %{})
+    self_domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
+    # Bind the signature base's `host` to our canonical public host rather
+    # than the proxy-forwarded Host header (cloudflared/kamal can rewrite
+    # it to an internal value). The remote signed `host: <domain>` when it
+    # delivered to https://<domain>/inbox.
+    headers = conn.req_headers |> Enum.into(%{}) |> Map.put("host", self_domain)
     url = public_url(conn)
     sync_header = get_req_header(conn, "collection-synchronization") |> List.first()
 
@@ -35,26 +40,79 @@ defmodule SukhiFedi.Web.InboxController do
       url: url
     }
 
-    self_domain = Application.get_env(:sukhi_fedi, :domain) || conn.host
-
     inbox_payload =
       case sign_as_for(conn) do
         nil -> %{raw: raw_json, selfDomain: self_domain}
         sign_as -> %{raw: raw_json, signAs: sign_as, selfDomain: self_domain}
       end
 
-    # Signature is good ⇒ a genuine original. Archive it to the `inbound`
-    # bucket off the hot path (Q10), right after verify and before the
-    # instruction parser, so a parse failure can't lose the record.
-    with {:ok, _} <- FedifyClient.verify(verify_payload),
-         _ = maybe_archive_inbound(raw_body, raw_json, headers, conn),
-         {:ok, instruction} <- FedifyClient.inbox(inbox_payload) do
-      Instructions.execute(instruction)
-      maybe_enqueue_follower_sync(raw_json, sync_header)
-      send_resp(conn, 202, "")
-    else
+    case FedifyClient.verify(verify_payload) do
+      {:ok, %{"ok" => true} = verify_result} ->
+        cond do
+          blocked_domain?(raw_json) ->
+            # Domain is on the instance block list. Accept-and-drop (202) so
+            # the blocked peer can't tell it's being filtered — but run no
+            # handlers and don't archive.
+            send_resp(conn, 202, "")
+
+          true ->
+            # The signature checks out. Record *who* signed (the key owner's
+            # host) so Instructions can refuse to act on an activity whose
+            # claimed `actor` lives on a different host than the signer.
+            signer_host = signer_host(verify_result)
+
+            # Genuine original ⇒ archive to the `inbound` bucket off the hot
+            # path (Q10), right after verify and before the instruction
+            # parser, so a parse failure can't lose the record.
+            maybe_archive_inbound(raw_body, raw_json, headers, conn)
+
+            case FedifyClient.inbox(inbox_payload) do
+              {:ok, instruction} ->
+                Instructions.execute(instruction, signer_host)
+                maybe_enqueue_follower_sync(raw_json, sync_header)
+                send_resp(conn, 202, "")
+
+              {:error, reason} ->
+                send_resp(conn, 400, JSON.encode!(%{error: inspect(reason)}))
+            end
+        end
+
+      {:ok, _unverified} ->
+        # Verification ran but the signature did not check out. This
+        # `{:ok, %{"ok" => false}}` shape used to slip through `{:ok, _}`
+        # and the activity executed unsigned — reject it now.
+        send_resp(conn, 401, JSON.encode!(%{error: "signature verification failed"}))
+
       {:error, reason} ->
         send_resp(conn, 400, JSON.encode!(%{error: inspect(reason)}))
+    end
+  end
+
+  # True when the activity's actor lives on an instance-blocked domain.
+  defp blocked_domain?(raw_json) when is_map(raw_json) do
+    case raw_json |> Map.get("actor") |> actor_uri() |> uri_host() do
+      host when is_binary(host) -> SukhiFedi.Addons.Moderation.instance_blocked?(host)
+      _ -> false
+    end
+  end
+
+  defp blocked_domain?(_), do: false
+
+  defp actor_uri(uri) when is_binary(uri), do: uri
+  defp actor_uri(%{"id" => id}) when is_binary(id), do: id
+  defp actor_uri(_), do: nil
+
+  # Host of the actor that actually signed the request (the HTTP-signature
+  # key's owner; fall back to the keyId host). nil when neither is present
+  # or parseable.
+  defp signer_host(%{"owner" => owner}) when is_binary(owner), do: uri_host(owner)
+  defp signer_host(%{"keyId" => key_id}) when is_binary(key_id), do: uri_host(key_id)
+  defp signer_host(_), do: nil
+
+  defp uri_host(uri) when is_binary(uri) do
+    case URI.parse(uri) do
+      %URI{host: h} when is_binary(h) and h != "" -> String.downcase(h)
+      _ -> nil
     end
   end
 

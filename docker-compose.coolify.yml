@@ -100,7 +100,7 @@ services:
       NATS_PORT: "4222"
       RELEASE_DISTRIBUTION: name
       RELEASE_NODE: gateway@elixir
-      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      RELEASE_COOKIE: ${ERLANG_COOKIE:?set ERLANG_COOKIE to a random secret — openssl rand -hex 32}
       PLUGIN_NODES: api@api
       DOMAIN: ${DOMAIN:-localhost:4000}
       ENABLED_ADDONS: ${ENABLED_ADDONS:-all}
@@ -195,7 +195,7 @@ services:
     environment:
       RELEASE_DISTRIBUTION: name
       RELEASE_NODE: api@api
-      RELEASE_COOKIE: ${ERLANG_COOKIE:-sukhi_fedi_dev_cookie}
+      RELEASE_COOKIE: ${ERLANG_COOKIE:?set ERLANG_COOKIE to a random secret — openssl rand -hex 32}
       DOMAIN: ${DOMAIN:-localhost:4000}
       INSTANCE_TITLE: ${INSTANCE_TITLE:-sukhi-fedi}
       ENABLED_ADDONS: ${ENABLED_ADDONS:-all}

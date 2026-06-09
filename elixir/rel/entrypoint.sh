@@ -18,6 +18,15 @@ if [ -n "$ERLANG_COOKIE" ] && [ -z "${RELEASE_COOKIE:-}" ]; then
   export RELEASE_COOKIE="$ERLANG_COOKIE"
 fi
 
+# Fail closed: the distribution cookie is the *only* auth for Erlang
+# distribution (≈ remote MFA execution). Refuse to boot with no cookie or
+# the published dev default, so a deploy that forgets to set one can't
+# ship a publicly-known cluster secret.
+if [ -z "${RELEASE_COOKIE:-}" ] || [ "${RELEASE_COOKIE:-}" = "sukhi_fedi_dev_cookie" ]; then
+  echo "[entrypoint] refusing to boot: set ERLANG_COOKIE to a random secret (openssl rand -hex 32)" >&2
+  exit 1
+fi
+
 # 16-char sha256 prefix of the cookie, for cluster sanity checking via
 # logs. The value itself is never printed. Remove after the cluster
 # stays up between deploys.
