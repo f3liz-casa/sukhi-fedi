@@ -670,6 +670,32 @@ defmodule SukhiFedi.Notes do
 
   def visible_to?(_note, _viewer_id), do: false
 
+  @doc """
+  Restrict a `Note` query to the statuses `viewer_id` may see on an
+  account's *profile* timeline (`GET /accounts/:id/statuses`):
+
+    * `public` / `unlisted` — always.
+    * `followers` — only for the account owner or an accepted local follower.
+    * `direct` — never; DMs live in conversations, not on the profile.
+
+  The list-level companion to `visible_to?/2`, so the account-statuses
+  endpoint can't enumerate someone's followers-only or direct posts. A
+  `nil` viewer (unauthenticated) sees only public/unlisted.
+  """
+  @spec scope_profile_statuses(Ecto.Query.t(), integer(), integer() | nil) :: Ecto.Query.t()
+  def scope_profile_statuses(query, account_id, viewer_id) do
+    followers_visible? =
+      viewer_id == account_id or
+        (is_integer(viewer_id) and local_follower?(viewer_id, account_id))
+
+    allowed =
+      if followers_visible?,
+        do: ["public", "unlisted", "followers"],
+        else: ["public", "unlisted"]
+
+    from(n in query, where: n.visibility in ^allowed)
+  end
+
   # An accepted local follow edge from viewer → author. A local follower's
   # `follower_uri` is `https://<domain>/users/<viewer-username>` (same shape
   # the home timeline matches on).

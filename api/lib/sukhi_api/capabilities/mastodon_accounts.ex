@@ -306,7 +306,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     viewer = req[:assigns][:current_account]
 
     with {:ok, int_id} <- parse_int(id),
-         opts = parse_status_opts(req[:query]),
+         opts = parse_status_opts(req[:query]) |> Map.put(:viewer_id, viewer && viewer.id),
          {:ok, notes} when is_list(notes) <-
            GatewayRpc.call(SukhiFedi.Accounts, :list_statuses, [int_id, Map.to_list(opts)]) do
       body = StatusHydration.many(notes, viewer)

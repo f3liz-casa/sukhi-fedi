@@ -432,6 +432,41 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert {:ok, %{descendants: own}} = Notes.context(root.id, author.id)
       assert length(own) == 1
     end
+
+    test "list_statuses hides followers-only/direct on a profile from strangers and the public" do
+      author = create_account!("vis_ls_author")
+      follower = create_account!("vis_ls_follower")
+      stranger = create_account!("vis_ls_stranger")
+
+      Repo.insert!(%Follow{
+        follower_uri: local_uri(follower.username),
+        followee_id: author.id,
+        state: "accepted"
+      })
+
+      # Insert one note per visibility directly — exercises the list-level
+      # filter regardless of which visibilities the local create path accepts.
+      for v <- ["public", "unlisted", "followers", "direct"] do
+        Repo.insert!(%Note{account_id: author.id, content: v, visibility: v})
+      end
+
+      vis = fn viewer_id ->
+        SukhiFedi.Accounts.list_statuses(author.id, viewer_id: viewer_id)
+        |> Enum.map(& &1.visibility)
+        |> Enum.sort()
+      end
+
+      # Public/unauthenticated and strangers: only public + unlisted.
+      assert vis.(nil) == ["public", "unlisted"]
+      assert vis.(stranger.id) == ["public", "unlisted"]
+
+      # An accepted follower additionally sees followers-only — never the DM.
+      assert vis.(follower.id) == ["followers", "public", "unlisted"]
+
+      # The owner sees their own followers-only too; a profile timeline never
+      # lists direct messages (those live in conversations).
+      assert vis.(author.id) == ["followers", "public", "unlisted"]
+    end
   end
 
   describe "block / mute enforcement (C2)" do

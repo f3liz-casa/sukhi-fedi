@@ -443,6 +443,7 @@ defmodule SukhiFedi.Accounts do
   @spec list_statuses(integer(), keyword() | map()) :: [Note.t()]
   def list_statuses(account_id, opts \\ []) do
     opts = normalize_opts(opts)
+    viewer_id = Map.get(opts, :viewer_id)
 
     base =
       if Map.get(opts, :pinned, false) do
@@ -460,6 +461,11 @@ defmodule SukhiFedi.Accounts do
           order_by: [desc: n.id]
         )
       end
+
+    # Per-note visibility, applied in SQL so pagination counts only the
+    # statuses this viewer is allowed to see (followers-only/direct never
+    # leak to strangers). Single source of truth: SukhiFedi.Notes.
+    base = SukhiFedi.Notes.scope_profile_statuses(base, account_id, viewer_id)
 
     query =
       Enum.reduce(opts, base, fn
