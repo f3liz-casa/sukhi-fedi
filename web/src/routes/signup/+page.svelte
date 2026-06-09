@@ -5,7 +5,7 @@
     saveSignupDraft,
     loadSignupDraft
   } from '$lib/auth';
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
   import LangSwitch from '$lib/components/LangSwitch.svelte';
 
   let username = $state('');
@@ -13,6 +13,10 @@
   let invite_code = $state('');
   let agreed = $state(false);
   let error = $state<string | null>(null);
+
+  // Send the consent links to the legal page in the current UI language.
+  const termsHref = $derived($locale === 'ko' ? '/terms?lang=ko' : '/terms');
+  const privacyHref = $derived($locale === 'ko' ? '/privacy?lang=ko' : '/privacy');
 
   // /check で失敗して戻ってきた人のために下書きを復元するが、
   // password だけは(/check が clearSignupPassword で落としてあるので)
@@ -88,8 +92,8 @@
   <label class="agree">
     <input type="checkbox" bind:checked={agreed} required />
     <span
-      >{$t('signup.agreePre')}<a href="/terms" target="_blank" rel="noopener">{$t('signup.termsLink')}</a
-      >{$t('signup.agreeMid')}<a href="/privacy" target="_blank" rel="noopener">{$t('signup.privacyLink')}</a
+      >{$t('signup.agreePre')}<a href={termsHref} target="_blank" rel="noopener">{$t('signup.termsLink')}</a
+      >{$t('signup.agreeMid')}<a href={privacyHref} target="_blank" rel="noopener">{$t('signup.privacyLink')}</a
       >{$t('signup.agreePost')}</span
     >
   </label>
