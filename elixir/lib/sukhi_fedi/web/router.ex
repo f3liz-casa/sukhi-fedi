@@ -58,6 +58,18 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  # ── Legal pages (static HTML baked at compile time) ────────────────────
+  # Robust on purpose: no SPA, no JS, no DB — served even if everything
+  # else is down. Source: priv/legal/*.ko.md (see LegalController).
+
+  get "/privacy" do
+    SukhiFedi.Web.LegalController.privacy(conn)
+  end
+
+  get "/terms" do
+    SukhiFedi.Web.LegalController.terms(conn)
+  end
+
   post "/login" do
     LoginController.submit(conn)
   end

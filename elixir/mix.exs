@@ -88,6 +88,11 @@ defmodule SukhiFedi.MixProject do
       # SPA's `{@html}` sinks. Mastodon's model: sanitise on the way in.
       {:html_sanitize_ex, "~> 1.4"},
 
+      # Markdown → HTML for the static legal pages (terms/privacy). Pure
+      # Elixir, used at compile time only; the rendered HTML is baked into
+      # the release, so serving it at runtime can't fail.
+      {:earmark, "~> 1.4"},
+
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:bypass, "~> 2.1", only: :test},
       {:mox, "~> 1.0", only: :test}
