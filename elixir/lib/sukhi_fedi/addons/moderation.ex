@@ -16,7 +16,7 @@ defmodule SukhiFedi.Addons.Moderation do
   import Ecto.Query
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
-  alias SukhiFedi.Schema.{Mute, Block, Report, InstanceBlock, Account}
+  alias SukhiFedi.Schema.{Mute, Block, Report, InstanceBlock, Account, AdminAudit}
 
   # ── user-level mutes / blocks (no admin outbox) ──────────────────────────
 
@@ -181,6 +181,17 @@ defmodule SukhiFedi.Addons.Moderation do
 
         Multi.new()
         |> Multi.update(:report, changeset)
+        |> Multi.insert(
+          :audit,
+          fn %{report: r} ->
+            AdminAudit.changeset(%{
+              action: "report_resolved",
+              admin_account_id: resolved_by_id,
+              target_account_id: r.target_id,
+              metadata: %{report_id: r.id}
+            })
+          end
+        )
         |> Outbox.enqueue_multi(
           :outbox_event,
           "sns.outbox.admin.report_resolved",
@@ -219,6 +230,16 @@ defmodule SukhiFedi.Addons.Moderation do
 
     Multi.new()
     |> Multi.insert(:block, changeset, on_conflict: :nothing, conflict_target: :domain)
+    |> Multi.insert(
+      :audit,
+      AdminAudit.changeset(%{
+        action: "instance_blocked",
+        admin_account_id: created_by_id,
+        target_domain: domain,
+        reason: reason,
+        metadata: %{severity: severity}
+      })
+    )
     |> Outbox.enqueue_multi(
       :outbox_event,
       "sns.outbox.admin.instance_blocked",
@@ -245,6 +266,14 @@ defmodule SukhiFedi.Addons.Moderation do
       %InstanceBlock{} = block ->
         Multi.new()
         |> Multi.delete(:block, block)
+        |> Multi.insert(
+          :audit,
+          AdminAudit.changeset(%{
+            action: "instance_unblocked",
+            admin_account_id: by_id,
+            target_domain: block.domain
+          })
+        )
         |> Outbox.enqueue_multi(
           :outbox_event,
           "sns.outbox.admin.instance_unblocked",
@@ -303,6 +332,17 @@ defmodule SukhiFedi.Addons.Moderation do
 
         Multi.new()
         |> Multi.update(:account, changeset)
+        |> Multi.insert(
+          :audit,
+          fn %{account: a} ->
+            AdminAudit.changeset(%{
+              action: "account_suspended",
+              admin_account_id: suspended_by_id,
+              target_account_id: a.id,
+              reason: reason
+            })
+          end
+        )
         |> Outbox.enqueue_multi(
           :outbox_event,
           "sns.outbox.admin.account_suspended",
@@ -337,6 +377,16 @@ defmodule SukhiFedi.Addons.Moderation do
 
         Multi.new()
         |> Multi.update(:account, changeset)
+        |> Multi.insert(
+          :audit,
+          fn %{account: a} ->
+            AdminAudit.changeset(%{
+              action: "account_unsuspended",
+              admin_account_id: by_id,
+              target_account_id: a.id
+            })
+          end
+        )
         |> Outbox.enqueue_multi(
           :outbox_event,
           "sns.outbox.admin.account_unsuspended",

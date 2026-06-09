@@ -1,0 +1,30 @@
+# Time-based retention for Docker container logs (access/app logs).
+#
+# The app's access log (AccessLogPlug, with cf-connecting-ip) goes to stdout
+# → Docker's json-file driver. Kamal sets `--log-opt max-size=10m`, which
+# rotates by *size* only — so depending on traffic the logs could hold a few
+# days or many months. The privacy policy commits to deleting access logs
+# after 30 days, so enforce that here.
+#
+# Install on the deploy box (Rocky runs /etc/cron.daily/logrotate):
+#   sudo cp infra/logrotate/docker-container-logs /etc/logrotate.d/sukhi-fedi-docker
+#   sudo chown root:root /etc/logrotate.d/sukhi-fedi-docker
+#   sudo chmod 0644 /etc/logrotate.d/sukhi-fedi-docker
+#   sudo logrotate --debug /etc/logrotate.d/sukhi-fedi-docker   # dry-run check
+#
+# NOTE: this matches *every* container's json log on the box (the path is keyed
+# by container id, not name), so it caps techo/kanidm/cloudflared logs at 30
+# days too — a sane global ceiling. Exempt a specific container by giving it
+# its own stanza above this one.
+
+/var/lib/docker/containers/*/*-json.log {
+    daily
+    rotate 30
+    maxage 30
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su root root
+}

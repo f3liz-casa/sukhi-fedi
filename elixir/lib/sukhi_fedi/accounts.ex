@@ -398,6 +398,17 @@ defmodule SukhiFedi.Accounts do
       %Account{} = account ->
         Multi.new()
         |> Multi.update(:account, Ecto.Changeset.change(account, %{is_admin: flag}))
+        |> Multi.insert(
+          :audit,
+          fn %{account: a} ->
+            SukhiFedi.Schema.AdminAudit.changeset(%{
+              action: "role_changed",
+              admin_account_id: by_id,
+              target_account_id: a.id,
+              metadata: %{is_admin: a.is_admin}
+            })
+          end
+        )
         |> Outbox.enqueue_multi(
           :outbox_event,
           "sns.outbox.admin.role_changed",
