@@ -11,6 +11,7 @@
   let username = $state('');
   let password = $state('');
   let invite_code = $state('');
+  let agreed = $state(false);
   let error = $state<string | null>(null);
 
   // /check で失敗して戻ってきた人のために下書きを復元するが、
@@ -84,7 +85,16 @@
     <input type="text" bind:value={invite_code} autocomplete="off" required />
   </label>
 
-  <button type="submit">{$t('signup.create')}</button>
+  <label class="agree">
+    <input type="checkbox" bind:checked={agreed} required />
+    <span
+      >{$t('signup.agreePre')}<a href="/terms" target="_blank" rel="noopener">{$t('signup.termsLink')}</a
+      >{$t('signup.agreeMid')}<a href="/privacy" target="_blank" rel="noopener">{$t('signup.privacyLink')}</a
+      >{$t('signup.agreePost')}</span
+    >
+  </label>
+
+  <button type="submit" disabled={!agreed}>{$t('signup.create')}</button>
 </form>
 
 <p class="prose-small">
@@ -95,3 +105,17 @@
 <section class="section" style="text-align: center; margin-top: var(--space-5);">
   <LangSwitch />
 </section>
+
+<style>
+  .agree {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .agree input[type='checkbox'] {
+    margin-top: 0.2rem;
+    flex: 0 0 auto;
+  }
+</style>
