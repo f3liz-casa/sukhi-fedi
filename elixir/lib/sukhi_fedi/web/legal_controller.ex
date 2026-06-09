@@ -34,11 +34,35 @@ defmodule SukhiFedi.Web.LegalController do
   @terms_ja Earmark.as_html!(File.read!(@ja_terms), @opts)
   @terms_ko Earmark.as_html!(File.read!(@ko_terms), @opts)
 
+  # Fonts are subset to the glyphs these docs use and embedded as base64 at
+  # compile time — no external request (Google Fonts would leak the reader's
+  # IP, which is the wrong thing to do on a *privacy* page) and nothing extra
+  # to fetch. `font-display: swap` keeps the page readable in a system font
+  # if the embedded font is ignored. Only the page's own language font is
+  # embedded per request.
+  @biz_path Path.expand("../../../priv/legal/fonts/bizudpgothic.woff2", __DIR__)
+  @nanum_path Path.expand("../../../priv/legal/fonts/nanumgothic.woff2", __DIR__)
+  @external_resource @biz_path
+  @external_resource @nanum_path
+  @biz_b64 @biz_path |> File.read!() |> Base.encode64()
+  @nanum_b64 @nanum_path |> File.read!() |> Base.encode64()
+
+  @font_ja """
+  @font-face { font-family: "BIZ UDPGothic"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url(data:font/woff2;base64,#{@biz_b64}) format("woff2"); }
+  body { font-family: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif; }
+  """
+
+  @font_ko """
+  @font-face { font-family: "Nanum Gothic"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url(data:font/woff2;base64,#{@nanum_b64}) format("woff2"); }
+  body { font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  """
+
   @css """
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; line-height: 1.7; color: #222; background: #fafafa;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Noto Sans JP", Roboto, sans-serif; }
+  body { margin: 0; line-height: 1.7; color: #222; background: #fafafa; }
   .nav, .legal, .foot { max-width: 720px; margin: 0 auto; padding-left: 1.25rem; padding-right: 1.25rem; }
   .nav { padding-top: 1.1rem; font-size: .9rem; }
   .nav a { color: #777; text-decoration: none; margin-right: 1rem; }
@@ -109,6 +133,8 @@ defmodule SukhiFedi.Web.LegalController do
         do: {"처음으로", "日本語", self_path},
         else: {"トップへ", "한국어", self_path <> "?lang=ko"}
 
+    font = if lang == "ko", do: @font_ko, else: @font_ja
+
     html = """
     <!doctype html>
     <html lang="#{lang}">
@@ -117,7 +143,7 @@ defmodule SukhiFedi.Web.LegalController do
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="index,follow">
     <title>#{title} · sukhi.f3liz.casa</title>
-    <style>#{@css}</style>
+    <style>#{@css}#{font}</style>
     </head>
     <body>
     <nav class="nav"><a href="/">← #{home}</a><a href="#{cross_href}">#{cross_label}</a><a href="#{toggle_href}">#{toggle_label}</a></nav>

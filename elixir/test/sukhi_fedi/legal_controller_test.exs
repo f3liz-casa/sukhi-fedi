@@ -22,6 +22,26 @@ defmodule SukhiFedi.Web.LegalControllerTest do
     refute conn.resp_body =~ "<script"
   end
 
+  test "Japanese page embeds BIZ UDPGothic, Korean embeds Nanum, no external font request" do
+    ja = get("/privacy") |> LegalController.privacy() |> Map.get(:resp_body)
+    ko = get("/privacy?lang=ko") |> LegalController.privacy() |> Map.get(:resp_body)
+
+    # ja page: BIZ font embedded, Nanum not present
+    assert ja =~ ~s("BIZ UDPGothic")
+    assert ja =~ "@font-face"
+    assert ja =~ "font/woff2;base64,"
+    refute ja =~ "Nanum"
+
+    # ko page: Nanum embedded, BIZ not present
+    assert ko =~ ~s("Nanum Gothic")
+    refute ko =~ "BIZ UDPGothic"
+
+    # never an external font request (privacy page must not call Google)
+    refute ja =~ "googleapis"
+    refute ja =~ "gstatic"
+    refute ko =~ "gstatic"
+  end
+
   test "/privacy?lang=ko serves the Korean (PIPA) version" do
     conn = get("/privacy?lang=ko") |> LegalController.privacy()
 
