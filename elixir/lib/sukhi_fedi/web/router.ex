@@ -399,8 +399,26 @@ defmodule SukhiFedi.Web.Router do
         full ->
           conn
           |> put_resp_content_type(content_type_for(full))
+          |> put_static_cache_control(relative)
           |> send_file(200, full)
       end
+    end
+  end
+
+  # serve_spa のコメントで「chunks は cache-forever-safe」と言っておきながら
+  # ヘッダを付け忘れていた ─ CF が BYPASS して毎回 origin まで来ていた。
+  # `_app/immutable/` は content-hash 付きなので永久キャッシュ、twemoji は
+  # 名前が安定(package 更新時だけ変わる)なので一日。それ以外は触らない。
+  defp put_static_cache_control(conn, relative) do
+    cond do
+      String.starts_with?(relative, "_app/immutable/") ->
+        put_resp_header(conn, "cache-control", "public, max-age=31536000, immutable")
+
+      String.starts_with?(relative, "twemoji/") ->
+        put_resp_header(conn, "cache-control", "public, max-age=86400")
+
+      true ->
+        conn
     end
   end
 
