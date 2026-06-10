@@ -64,6 +64,7 @@
   }
   .filter-menu {
     position: absolute;
+    top: 100%; /* ボタンの下に。指定しないと static 位置=ボタンに重なる */
     right: 0;
     z-index: 10;
     margin-top: 0.25rem;

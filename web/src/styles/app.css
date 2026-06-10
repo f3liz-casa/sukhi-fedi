@@ -13,9 +13,10 @@
  * などはこの上に自前の padding を重ねるので、視覚的にはほんの
  * 少し下がるくらい。timeline のように hero を持たないページが
  * いきなり屋根にぶつからないように。AppNav の屋根ができてからは
- * 屋根自身も高さを持つので、呼吸は浅めでいい。 */
+ * 屋根自身も高さを持つので、呼吸は浅めでいい。下は「もっと読む」
+ * などがページの底にぴったり付かないよう、深めにとる。 */
 main.wrap {
-  padding-block-start: var(--space-6);
+  padding-block: var(--space-6) var(--space-12);
 }
 
 /* ── 共有の見た目 ──────────────────────────────────────────────────
@@ -231,6 +232,14 @@ img.twemoji {
 
 .tabs .filter-bar {
   margin-left: auto;
+}
+
+/* タブ行に同居する chip(フィルター)。`.tabs button` の透明な下線に
+   `.chip:hover` の border-color が乗ると、ホバーで急にタブ風の下線が
+   現れてしまう。ここでは枠線は出さず、色の変化だけにする。 */
+.tabs .chip,
+.tabs .chip:hover {
+  border-color: transparent;
 }
 
 .tabs a,
