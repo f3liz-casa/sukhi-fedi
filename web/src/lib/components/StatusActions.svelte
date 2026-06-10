@@ -225,16 +225,6 @@
   >
     <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
   </button>
-  <button
-    type="button"
-    class="chip"
-    class:active={bookmarked}
-    onclick={toggleBookmark}
-    aria-pressed={bookmarked}
-    aria-label={bookmarked ? $t('status.bookmarkRemove') : $t('status.bookmarkAdd')}
-  >
-    <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
-  </button>
   {#if canReply}
     <button type="button" class="chip" onclick={() => onreply?.(status)}>
       {$t('status.reply')}
@@ -252,6 +242,18 @@
       ⋯
     </button>
   {/if}
+  <!-- ブックマークは自分だけの栞なので、社交の並び(⭐🔁返信)から
+       離して、行の右端にひとり分置く。 -->
+  <button
+    type="button"
+    class="chip bookmark"
+    class:active={bookmarked}
+    onclick={toggleBookmark}
+    aria-pressed={bookmarked}
+    aria-label={bookmarked ? $t('status.bookmarkRemove') : $t('status.bookmarkAdd')}
+  >
+    <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
+  </button>
 </footer>
 
 {#if pickerOpen}
@@ -329,6 +331,9 @@
   }
   .status-actions .chip.active {
     background: var(--fill-active);
+  }
+  .status-actions .bookmark {
+    margin-left: auto;
   }
   .picker-anchor {
     position: relative;

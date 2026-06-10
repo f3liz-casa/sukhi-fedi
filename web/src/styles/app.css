@@ -578,7 +578,17 @@ button:disabled {
 .status-actions {
   margin-top: var(--space-3);
   display: flex;
+  align-items: center;
   gap: var(--space-2);
+}
+
+/* chip の中身(Twemoji アイコン + 数字)を縦の真ん中にそろえる。
+   inline の vertical-align: middle だと、アイコンが文字よりすこし
+   沈んで見える。 */
+.status-actions .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 /* ── プロフィール ────────────────────────────────────────────────── */
