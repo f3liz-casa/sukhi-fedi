@@ -584,11 +584,14 @@ button:disabled {
 
 /* chip の中身(Twemoji アイコン + 数字)を縦の真ん中にそろえる。
    inline の vertical-align: middle だと、アイコンが文字よりすこし
-   沈んで見える。 */
+   沈んで見える。min-height は「文字一行ぶん(1.6em) + 上下 padding
+   3px×2 + 枠線 1px×2」── アイコンだけの chip (栞・数字なしの⭐🔁)
+   が、文字入りの chip より低くならないように。 */
 .status-actions .chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  min-height: calc(1.6em + 8px);
 }
 
 /* ── プロフィール ────────────────────────────────────────────────── */
