@@ -38,7 +38,7 @@ defmodule SukhiFedi.Web.MediaProxyController do
   @profile_cache "public, max-age=86400"
 
   def media(conn, id_str) do
-    with {id, ""} <- Integer.parse(id_str),
+    with {:ok, id} <- parse_id(id_str),
          %Media{remote_url: url} when is_binary(url) <- Repo.get(Media, id) do
       fetch(conn, url, @media_cache, @max_redirects)
     else
@@ -52,12 +52,24 @@ defmodule SukhiFedi.Web.MediaProxyController do
   # リモートアカウント(domain あり)の画像だけ。ローカルの avatar は
   # /uploads/ 直なのでここへは来ない(来ても 404 でいい)。
   defp profile_image(conn, id_str, field) do
-    with {id, ""} <- Integer.parse(id_str),
+    with {:ok, id} <- parse_id(id_str),
          %Account{domain: domain} = account when is_binary(domain) <- Repo.get(Account, id),
          url when is_binary(url) <- Map.get(account, field) do
       fetch(conn, url, @profile_cache, @max_redirects)
     else
       _ -> send_resp(conn, 404, "")
+    end
+  end
+
+  # id には飾りの拡張子が付いてくる("6.webp" 等)。Cloudflare は既定で
+  # 拡張子を見てキャッシュ対象を決めるので、拡張子なしの URL は origin が
+  # cache-control を付けても edge に乗らない(DYNAMIC のまま)。api 側の
+  # view が元 URL の拡張子をくっつけ、こちらは剥がして無視する。
+  defp parse_id(id_str) do
+    case Integer.parse(id_str) do
+      {id, ""} -> {:ok, id}
+      {id, "." <> _ext} -> {:ok, id}
+      _ -> :error
     end
   end
 

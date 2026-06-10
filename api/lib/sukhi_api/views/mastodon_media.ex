@@ -7,6 +7,7 @@ defmodule SukhiApi.Views.MastodonMedia do
   """
 
   alias SukhiApi.Views.Id
+  alias SukhiApi.Views.ProxyUrl
 
   @spec render(map()) :: map()
   def render(media) do
@@ -28,10 +29,9 @@ defmodule SukhiApi.Views.MastodonMedia do
   # 渡さない + CF edge cache に乗る。原本は remote_url にそのまま残る
   # (Mastodon の意味論どおり)。ローカル upload は /uploads/ のまま。
   defp display_url(media) do
-    if is_binary(Map.get(media, :remote_url)) do
-      "https://#{SukhiApi.Config.domain!()}/proxy/media/#{media.id}"
-    else
-      Map.get(media, :url)
+    case Map.get(media, :remote_url) do
+      remote when is_binary(remote) -> ProxyUrl.media(media.id, remote)
+      _ -> Map.get(media, :url)
     end
   end
 

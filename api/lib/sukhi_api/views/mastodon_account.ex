@@ -65,11 +65,11 @@ defmodule SukhiApi.Views.MastodonAccount do
     remote? = remote_domain not in [nil, ""]
 
     avatar =
-      proxy_image(remote?, "avatar", account.id, Map.get(account, :avatar_url), local_domain) ||
+      proxy_image(remote?, "avatar", account.id, Map.get(account, :avatar_url)) ||
         @default_image
 
     header =
-      proxy_image(remote?, "header", account.id, Map.get(account, :banner_url), local_domain) ||
+      proxy_image(remote?, "header", account.id, Map.get(account, :banner_url)) ||
         @default_image
 
     %{
@@ -98,11 +98,11 @@ defmodule SukhiApi.Views.MastodonAccount do
     }
   end
 
-  defp proxy_image(true, kind, id, url, local_domain) when is_binary(url) do
-    "https://#{local_domain}/proxy/#{kind}/#{id}?v=#{:erlang.phash2(url)}"
+  defp proxy_image(true, kind, id, url) when is_binary(url) do
+    SukhiApi.Views.ProxyUrl.profile_image(kind, id, url)
   end
 
-  defp proxy_image(_remote?, _kind, _id, url, _local_domain), do: url
+  defp proxy_image(_remote?, _kind, _id, url), do: url
 
   @doc """
   Render `verify_credentials`-shaped CredentialAccount: extends a

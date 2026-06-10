@@ -18,9 +18,17 @@ defmodule SukhiApi.Views.MastodonMediaTest do
       remote = "https://remote.example/files/cat.png"
       out = MastodonMedia.render(media(%{url: remote, remote_url: remote}))
 
-      assert out.url == "https://localhost:4000/proxy/media/7"
+      # 拡張子は CF の edge cache 判定(拡張子ベース)のための飾り
+      assert out.url == "https://localhost:4000/proxy/media/7.png"
       assert out.preview_url == out.url
       assert out.remote_url == remote
+    end
+
+    test "an extension-less or query-laden source still proxies, just without the suffix" do
+      remote = "https://remote.example/files/abc?dl=1"
+      out = MastodonMedia.render(media(%{url: remote, remote_url: remote}))
+
+      assert out.url == "https://localhost:4000/proxy/media/7"
     end
 
     test "local uploads are served directly, not proxied" do

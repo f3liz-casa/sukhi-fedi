@@ -21,8 +21,8 @@ defmodule SukhiApi.Views.MastodonAccountTest do
           })
         )
 
-      assert out.avatar =~ ~r"^https://localhost:4000/proxy/avatar/3\?v=\d+$"
-      assert out.header =~ ~r"^https://localhost:4000/proxy/header/3\?v=\d+$"
+      assert out.avatar =~ ~r"^https://localhost:4000/proxy/avatar/3\.png\?v=\d+$"
+      assert out.header =~ ~r"^https://localhost:4000/proxy/header/3\.png\?v=\d+$"
       assert out.avatar_static == out.avatar
 
       # 元 URL が変われば ?v= も変わる ─ edge cache が自然に外れる
