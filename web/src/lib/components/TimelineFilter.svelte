@@ -55,12 +55,12 @@
 </div>
 
 <style>
-  /* 右寄せ。メニューは右端そろえで画面外に出さない。 */
+  /* 右寄せ。メニューは右端そろえで画面外に出さない。まわりとの間隔は
+     置かれた側(.tabs の行内 / .stack のリズム)に任せる。 */
   .filter-bar {
     position: relative;
     display: flex;
     justify-content: flex-end;
-    margin-bottom: var(--space-3);
   }
   .filter-menu {
     position: absolute;

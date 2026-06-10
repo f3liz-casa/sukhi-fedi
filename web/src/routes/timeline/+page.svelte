@@ -163,9 +163,6 @@
     aria-pressed={kind === 'tag'}
     onclick={() => selectKind('tag')}
   >{$t('timeline.tabTag')}</button>
-</nav>
-
-<div class="timeline">
   <TimelineFilter
     bind:onlyMedia
     bind:hideBoosts
@@ -173,7 +170,7 @@
     showHideBoosts={kind === 'home'}
     onchange={applyFilters}
   />
-</div>
+</nav>
 
 {#if kind === 'tag'}
   <form
