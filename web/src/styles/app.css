@@ -100,6 +100,33 @@ main.wrap {
   color: var(--color-text-muted);
 }
 
+/* ── 共通ヘッダー ─────────────────────────────────────────────────
+   ログイン後の全ページにかかる屋根(AppNav.svelte)。wordmark を左に、
+   行き先の chip を右に。罫線は画面の端まで通し、中身は .wrap 幅に
+   そろえる。狭い画面では chip が折り返して並ぶだけで、別レイアウトは
+   持たない。 */
+.app-nav {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+}
+
+.app-nav-name {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-nav-name:hover {
+  text-decoration: underline;
+}
+
 /* chip — どの画面にも出る小さなピル。ナビにもボタンにも使う。 */
 .chip {
   font: inherit;
@@ -120,7 +147,8 @@ main.wrap {
   border-color: var(--color-text);
 }
 
-.chip[aria-pressed='true'] {
+.chip[aria-pressed='true'],
+.chip[aria-current='page'] {
   color: var(--color-surface);
   background: var(--color-lane);
   border-color: var(--color-lane);

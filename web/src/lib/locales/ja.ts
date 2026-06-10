@@ -6,7 +6,6 @@ export const ja = {
   'common.loading': '読んでいます…',
   'common.loadMore': 'もっと読む',
   'common.backToTimeline': 'タイムラインへ戻る',
-  'common.timeline': 'タイムライン',
   'common.backToTop': 'トップにもどる',
   'common.sending': '送っています…',
   'common.deliverFailed': 'うまく届きませんでした。',
@@ -17,7 +16,8 @@ export const ja = {
   // ── ことば切替 ───────────────────────────────────────
   'lang.switch': 'ことばを選ぶ',
 
-  // ── タイムライン上のナビ ─────────────────────────────
+  // ── 共通ヘッダーのナビ ───────────────────────────────
+  'nav.label': 'メインナビ',
   'nav.notifications': '通知',
   'nav.messages': 'メッセージ',
   'nav.bookmarks': 'ブックマーク',

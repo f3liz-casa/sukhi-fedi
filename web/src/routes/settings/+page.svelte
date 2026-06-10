@@ -193,12 +193,11 @@
   }
 </script>
 
-<p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
 <header class="timeline page-head">
   <h1>{$t('settings.title')}</h1>
 </header>
 
-<section class="timeline" style="margin: var(--space-4) 0;">
+<section class="timeline" style="margin-block: var(--space-4);">
   <p class="muted" style="margin-bottom: var(--space-2);">{$t('settings.language')}</p>
   <LangSwitch />
 </section>

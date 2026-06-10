@@ -9,7 +9,6 @@ export const ko: Dict = {
   'common.loading': '읽고 있어요…',
   'common.loadMore': '더 보기',
   'common.backToTimeline': '타임라인으로 돌아가기',
-  'common.timeline': '타임라인',
   'common.backToTop': '처음으로 돌아가기',
   'common.sending': '보내고 있어요…',
   'common.deliverFailed': '잘 닿지 않았어요.',
@@ -20,7 +19,8 @@ export const ko: Dict = {
   // ── 언어 전환 ────────────────────────────────────────
   'lang.switch': '언어 선택',
 
-  // ── 타임라인 위 메뉴 ─────────────────────────────────
+  // ── 공통 헤더 메뉴 ───────────────────────────────────
+  'nav.label': '메인 메뉴',
   'nav.notifications': '알림',
   'nav.messages': '메시지',
   'nav.bookmarks': '북마크',

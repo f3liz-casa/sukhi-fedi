@@ -80,7 +80,6 @@
   }
 </script>
 
-<p class="back-row timeline"><a class="back-link" href="/timeline">← {$t('common.timeline')}</a></p>
 <header class="timeline page-head">
   <h1>{$t('lists.title')}</h1>
 </header>

@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { fetchTimeline, type Status, type TimelineKind } from '$lib/api';
-  import { isLoggedIn, clearToken, signOutServer } from '$lib/auth';
+  import { isLoggedIn, clearToken } from '$lib/auth';
+  import { composeRequest } from '$lib/compose';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
   import TimelineFilter from '$lib/components/TimelineFilter.svelte';
@@ -15,6 +16,15 @@
     replyTo = null;
     composerOpen = true;
   }
+
+  // ヘッダーの「書く」から。開いたら 0 に戻す(戻さないと、あとで
+  // このページに来直したときにまた開いてしまう)。
+  $effect(() => {
+    if ($composeRequest > 0) {
+      composeRequest.set(0);
+      openCompose();
+    }
+  });
 
   function onReply(s: Status) {
     replyTo = s;
@@ -122,31 +132,11 @@
     void load(true);
   }
 
-  async function signOut() {
-    await signOutServer();
-    goto('/');
-  }
-
   // フィルターを変えたら先頭から読み直す。
   function applyFilters() {
     void load(true);
   }
 </script>
-
-<header class="timeline page-head">
-  <h1>sukhi-fedi</h1>
-  <span class="page-nav">
-    <a class="chip" href="/notifications">{$t('nav.notifications')}</a>
-    <a class="chip" href="/messages">{$t('nav.messages')}</a>
-    <a class="chip" href="/bookmarks">{$t('nav.bookmarks')}</a>
-    <a class="chip" href="/favourites">{$t('nav.favourites')}</a>
-    <a class="chip" href="/lists">{$t('nav.lists')}</a>
-    <a class="chip" href="/search">{$t('nav.search')}</a>
-    <a class="chip" href="/settings">{$t('nav.settings')}</a>
-    <button class="chip" onclick={openCompose}>{$t('nav.compose')}</button>
-    <button class="chip" onclick={signOut}>{$t('nav.logout')}</button>
-  </span>
-</header>
 
 {#if composerOpen}
   <Composer
