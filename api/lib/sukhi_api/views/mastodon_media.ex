@@ -13,14 +13,26 @@ defmodule SukhiApi.Views.MastodonMedia do
     %{
       id: Id.encode(media.id),
       type: Map.get(media, :type) || "unknown",
-      url: Map.get(media, :url),
-      preview_url: Map.get(media, :url),
+      url: display_url(media),
+      preview_url: display_url(media),
       remote_url: Map.get(media, :remote_url),
       text_url: nil,
       meta: meta(media),
       description: Map.get(media, :description),
       blurhash: Map.get(media, :blurhash)
     }
+  end
+
+  # リモート添付(remote_url あり)は相手サーバの URL を直接渡さず、
+  # gateway の /proxy/media/:id に書き換える ─ 閲覧者の IP を相手に
+  # 渡さない + CF edge cache に乗る。原本は remote_url にそのまま残る
+  # (Mastodon の意味論どおり)。ローカル upload は /uploads/ のまま。
+  defp display_url(media) do
+    if is_binary(Map.get(media, :remote_url)) do
+      "https://#{SukhiApi.Config.domain!()}/proxy/media/#{media.id}"
+    else
+      Map.get(media, :url)
+    end
   end
 
   defp meta(media) do

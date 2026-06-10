@@ -15,6 +15,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.StreamingSseController
   alias SukhiFedi.Web.Auth.LoginController
   alias SukhiFedi.Web.Auth.PasswordController
+  alias SukhiFedi.Web.MediaProxyController
 
   plug(Plug.Logger)
   plug(SukhiFedi.Web.AccessLogPlug)
@@ -160,6 +161,24 @@ defmodule SukhiFedi.Web.Router do
 
   get "/uploads/*path" do
     serve_upload(conn, path)
+  end
+
+  # ── Remote media proxy ───────────────────────────────────────────────────
+  # リモート投稿の添付・avatar・banner を自ドメイン経由で配る。閲覧者の
+  # IP を相手サーバへ渡さないため + CF edge cache に乗せるため。api 側の
+  # view (MastodonMedia / MastodonAccount) がリモート URL をこの形に
+  # 書き換える。詳細は MediaProxyController の moduledoc。
+
+  get "/proxy/media/:id" do
+    MediaProxyController.media(conn, id)
+  end
+
+  get "/proxy/avatar/:id" do
+    MediaProxyController.avatar(conn, id)
+  end
+
+  get "/proxy/header/:id" do
+    MediaProxyController.header(conn, id)
   end
 
   # ── Human-facing HTML + JSON proxy for nodeinfo lookup ──────────────────

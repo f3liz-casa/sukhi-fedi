@@ -59,8 +59,18 @@ defmodule SukhiApi.Views.MastodonAccount do
     # いないので、最小の透明 PNG を data URL で返してフォールバック
     # する(クラッシュさせないことが先)。落ち着いたら /static/missing.png
     # にしてここを差し戻す。
-    avatar = Map.get(account, :avatar_url) || @default_image
-    header = Map.get(account, :banner_url) || @default_image
+    # リモートアカウントの画像は gateway の /proxy/{avatar,header}/:id に
+    # 書き換える ─ 閲覧者の IP を相手サーバへ渡さないため。?v= は元 URL の
+    # ハッシュで、actor 更新で画像 URL が変われば CF cache も自然に外れる。
+    remote? = remote_domain not in [nil, ""]
+
+    avatar =
+      proxy_image(remote?, "avatar", account.id, Map.get(account, :avatar_url), local_domain) ||
+        @default_image
+
+    header =
+      proxy_image(remote?, "header", account.id, Map.get(account, :banner_url), local_domain) ||
+        @default_image
 
     %{
       id: Id.encode(account.id),
@@ -87,6 +97,12 @@ defmodule SukhiApi.Views.MastodonAccount do
       fields: []
     }
   end
+
+  defp proxy_image(true, kind, id, url, local_domain) when is_binary(url) do
+    "https://#{local_domain}/proxy/#{kind}/#{id}?v=#{:erlang.phash2(url)}"
+  end
+
+  defp proxy_image(_remote?, _kind, _id, url, _local_domain), do: url
 
   @doc """
   Render `verify_credentials`-shaped CredentialAccount: extends a
