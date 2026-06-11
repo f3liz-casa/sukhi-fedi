@@ -10,6 +10,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
     def call(SukhiFedi.Accounts, fun, args, _t), do: lookup(:fake_accounts, fun, args)
     def call(SukhiFedi.Social, fun, args, _t), do: lookup(:fake_social, fun, args)
     def call(SukhiFedi.OAuth, fun, args, _t), do: lookup(:fake_oauth, fun, args)
+    def call(SukhiFedi.LocalAccounts, fun, args, _t), do: lookup(:fake_local_accounts, fun, args)
     def call(_, _, _, _), do: {:error, :not_connected}
 
     defp lookup(env_key, fun, args) do
@@ -34,7 +35,8 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
       addons: Application.get_env(:sukhi_api, :enabled_addons),
       accounts: Application.get_env(:sukhi_api, :fake_accounts),
       social: Application.get_env(:sukhi_api, :fake_social),
-      oauth: Application.get_env(:sukhi_api, :fake_oauth)
+      oauth: Application.get_env(:sukhi_api, :fake_oauth),
+      local_accounts: Application.get_env(:sukhi_api, :fake_local_accounts)
     }
 
     Application.put_env(:sukhi_api, :gateway_rpc_impl, FakeRpc)
@@ -48,6 +50,7 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
       restore(:fake_accounts, prev.accounts)
       restore(:fake_social, prev.social)
       restore(:fake_oauth, prev.oauth)
+      restore(:fake_local_accounts, prev.local_accounts)
     end)
 
     :ok
@@ -86,6 +89,36 @@ defmodule SukhiApi.Capabilities.MastodonAccountsTest do
       },
       extra
     )
+  end
+
+  describe "POST /api/v1/accounts (signup)" do
+    test "minted user token inherits the app token's granted scopes" do
+      Application.put_env(:sukhi_api, :fake_local_accounts, %{
+        create: {:ok, %{id: 500}}
+      })
+
+      Application.put_env(:sukhi_api, :fake_oauth, %{
+        :verify_bearer =>
+          {:ok, %{account: nil, app: %{id: 7, name: "test"}, scopes: ["read", "write", "follow"]}},
+        # 引数まで一致するときだけ返す ── "read" に落ちたら 500 で落ちる
+        {:issue_initial_token, [7, 500, "read write follow"]} =>
+          {:ok, %{access_token: "tok", token_type: "Bearer", scope: "read write follow"}}
+      })
+
+      req = %{
+        method: "POST",
+        path: "/api/v1/accounts",
+        headers: [{"authorization", "Bearer t"}, {"content-type", "application/json"}],
+        body: JSON.encode!(%{username: "aka", password: "pw123456", invite_code: "x"})
+      }
+
+      {:ok, resp} = Router.handle(req)
+      assert resp.status == 200
+
+      body = JSON.decode!(resp.body)
+      assert body["access_token"] == "tok"
+      assert body["scope"] == "read write follow"
+    end
   end
 
   describe "GET /api/v1/accounts/verify_credentials" do

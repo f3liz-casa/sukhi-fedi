@@ -52,7 +52,10 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
       %{id: app_id} ->
         case GatewayRpc.call(SukhiFedi.LocalAccounts, :create, [attrs]) do
           {:ok, {:ok, %{id: account_id}}} ->
-            scopes = attrs["scopes"] || "read"
+            # Mastodon 同様、明示が無ければ署名に使った app token の
+            # granted scopes を継ぐ。固定 "read" に落とすと write 系が
+            # 全部 403 になる(新規ユーザーが follow できなかった原因)。
+            scopes = attrs["scopes"] || Enum.join(req[:assigns][:scopes] || ["read"], " ")
 
             case GatewayRpc.call(SukhiFedi.OAuth, :issue_initial_token, [app_id, account_id, scopes]) do
               {:ok, {:ok, token}} ->
