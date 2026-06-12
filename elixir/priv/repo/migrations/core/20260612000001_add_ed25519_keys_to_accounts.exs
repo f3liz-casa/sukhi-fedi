@@ -46,13 +46,16 @@ defmodule SukhiFedi.Repo.Migrations.AddEd25519KeysToAccounts do
         "d" => Base.url_encode64(private, padding: false)
       }
 
+      # Pass the map itself: the parameter's inferred type is jsonb, so
+      # postgrex encodes the term. Handing it pre-encoded JSON text gets
+      # double-wrapped into a jsonb string (see the 000002 repair).
       repo().query!(
         """
         UPDATE accounts
         SET ed25519_private_key_jwk = $1::jsonb, ed25519_public_multibase = $2
         WHERE id = $3
         """,
-        [JSON.encode!(jwk), multibase(public), id]
+        [jwk, multibase(public), id]
       )
     end
   end
