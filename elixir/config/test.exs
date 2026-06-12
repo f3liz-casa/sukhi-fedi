@@ -36,6 +36,12 @@ config :sukhi_fedi,
        :secret_key_base,
        "test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
+# Mails land in an ETS table tests can read (Mailer.Capture.all/0)
+# instead of going anywhere near a socket.
+config :sukhi_fedi, :mailer,
+  transport: SukhiFedi.Mailer.Capture,
+  from: "test@localhost"
+
 # Point ex_aws at the rustfs container from docker-compose.test.yml.
 config :ex_aws, :s3,
   scheme: "http://",

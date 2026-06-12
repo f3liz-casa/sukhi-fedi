@@ -43,10 +43,20 @@ defmodule SukhiFedi.Schema.Account do
     field :public_key_id, :string
     field :last_fetched_at, :utc_datetime
 
-    # Local-account credentials. Both `domain IS NULL` only. `email`
-    # is nullable for now; signup may omit it.
+    # Local-account credentials. All `domain IS NULL` only. `email` is
+    # required at signup since 2026-06; rows from before may still lack
+    # it (the SPA nudges them). `email_verified_at` marks an address
+    # that completed the code round-trip — email login keys off it.
     field :email, :string
+    field :email_verified_at, :utc_datetime
     field :password_hash, :string
+    # Authenticator-app 2FA. `totp_secret` is set at setup time but the
+    # factor counts only once `totp_enabled_at` is non-NULL (the user
+    # proved they scanned it). `totp_last_used_step` rejects replay of
+    # the current 30-second code.
+    field :totp_secret, :binary
+    field :totp_enabled_at, :utc_datetime
+    field :totp_last_used_step, :integer
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end
@@ -123,7 +133,26 @@ defmodule SukhiFedi.Schema.Account do
       message: "は小文字英数字とアンダースコアのみ、30字までです"
     )
     |> validate_length(:display_name, max: 100)
+    |> validate_email()
     |> unique_constraint(:username, name: :accounts_local_username_index)
+  end
+
+  @doc """
+  Shared email shape + uniqueness rule for local rows. Presence is the
+  caller's call (signup requires it, `create_admin` doesn't), but any
+  email that does land must look like one and be unclaimed among local
+  accounts — `EmailAuth.confirm/2` routes through here too.
+  """
+  def validate_email(changeset) do
+    changeset
+    |> validate_format(:email, ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      message: "の形が、メールアドレスに見えません"
+    )
+    |> validate_length(:email, max: 254)
+    |> unique_constraint(:email,
+      name: :accounts_local_email_index,
+      message: "は、もう使われています"
+    )
   end
 
   defp normalize_credentials_attrs(attrs) when is_map(attrs) do

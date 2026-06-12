@@ -86,6 +86,35 @@ else
   config :sukhi_fedi, :s3, enabled: false
 end
 
+# ── Transactional mail (OCI Email Delivery or any SMTP relay) ────────────
+# Verification / login codes go out through here. Without SMTP_HOST the
+# Mailer uses the log transport: the mail lands in the logs instead of a
+# mailbox — fine for dev, and an explicit "not wired up yet" in prod.
+# For OCI Email Delivery: host smtp.email.<region>.oci.oraclecloud.com,
+# port 587 (STARTTLS), the SMTP credentials of a user in the tenancy,
+# and MAIL_FROM must be a registered approved sender.
+smtp_host = System.get_env("SMTP_HOST")
+
+cond do
+  # test.exs pins the capture transport; don't let runtime override it.
+  config_env() == :test ->
+    :ok
+
+  smtp_host ->
+    config :sukhi_fedi, :mailer,
+      transport: SukhiFedi.Mailer.SMTP,
+      host: smtp_host,
+      port: String.to_integer(System.get_env("SMTP_PORT", "587")),
+      username: System.fetch_env!("SMTP_USERNAME"),
+      password: System.fetch_env!("SMTP_PASSWORD"),
+      from: System.fetch_env!("MAIL_FROM")
+
+  true ->
+    config :sukhi_fedi, :mailer,
+      transport: SukhiFedi.Mailer.Log,
+      from: System.get_env("MAIL_FROM", "no-reply@localhost")
+end
+
 if config_env() == :prod do
   config :sukhi_fedi, SukhiFedi.Repo,
     database: System.get_env("DB_NAME", "sukhi_fedi"),

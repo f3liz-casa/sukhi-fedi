@@ -91,6 +91,17 @@ defmodule SukhiFedi.MixProject do
       # Password hashing for local accounts.
       {:argon2_elixir, "~> 4.0"},
 
+      # SMTP client for transactional mail (email verification / login
+      # codes). Prod points it at OCI Email Delivery via SMTP_* env vars;
+      # without them the Mailer falls back to a log transport.
+      {:gen_smtp, "~> 1.2"},
+
+      # WebAuthn (passkey) attestation/assertion verification. The
+      # credential and challenge storage stays in our own tables; Wax
+      # only does the spec-heavy byte checking — same "lean on a focused
+      # lib for exactly its slice" call as fedify for HTTP signatures.
+      {:wax_, "~> 0.7"},
+
       # HTML sanitisation (allow-list) for note content and account bios —
       # both local input and federated remote HTML — before they reach the
       # SPA's `{@html}` sinks. Mastodon's model: sanitise on the way in.
