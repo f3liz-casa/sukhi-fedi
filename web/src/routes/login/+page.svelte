@@ -3,11 +3,11 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import {
+    goToCheck,
     isLoggedIn,
     loginWithPassword,
-    loginWithEmailCode,
     loginWithPasskey,
-    requestEmailLoginCode,
+    saveLoginEmail,
     submitTotp,
     type FirstFactorResult
   } from '$lib/auth';
@@ -17,8 +17,9 @@
 
   // 入りかたは二つから選べる: (確認済みの)メールに届くコード、または
   // パスワード。メールが既定で先頭 ─ 覚えるものが少ない道を正面に。
-  // アプリ 2FA を有効にしている人は、どちらの道でもそのあと totp の
-  // 段が出る。パスキーは別の戸 ─ 一回で入れる。
+  // メールの道はコードの送信も入力も /check(Anubis の通り道)の上で
+  // 行うので、このページからメールは出ない。パスワードの道で
+  // アプリ 2FA を有効にしている人は、ここで totp の段が出る。
   let method = $state<'password' | 'email'>('email');
   let phase = $state<'first' | 'totp'>('first');
 
@@ -26,14 +27,11 @@
   let password = $state('');
 
   let email = $state('');
-  let codeSent = $state(false);
-  let emailCode = $state('');
 
   let pending = $state('');
   let totpCode = $state('');
 
   let error = $state<string | null>(null);
-  let notice = $state<string | null>(null);
   let submitting = $state(false);
   let canPasskey = $state(false);
 
@@ -82,48 +80,13 @@
     }
   }
 
-  async function sendEmailCode() {
-    if (submitting) return;
-    submitting = true;
-    error = null;
-    notice = null;
-    try {
-      await requestEmailLoginCode(email);
-      codeSent = true;
-      notice = $t('login.codeSentNotice');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      if (msg === 'anubis') {
-        // ページ滞在中に Anubis cookie が切れた ─ 読み直せば PoW が
-        // 再走して戻ってくる。
-        window.location.reload();
-        return;
-      }
-      error = msg === 'rate_limited' ? $t('login.rateLimited') : $t('login.failed');
-    } finally {
-      submitting = false;
-    }
-  }
-
-  async function submitEmailCode() {
-    if (submitting) return;
-    submitting = true;
-    error = null;
-    try {
-      proceed(await loginWithEmailCode(email, emailCode));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      if (msg === 'anubis') {
-        window.location.reload();
-        return;
-      }
-      error =
-        msg === 'too_many_attempts'
-          ? $t('login.rateLimited')
-          : $t('login.emailCodeFailed');
-    } finally {
-      submitting = false;
-    }
+  // メールの道: アドレスを持って /check へ。PoW のあと、/check が
+  // コードを送って・聞いて・cookie まで面倒を見る。oauth authorize
+  // から弾かれて来た人は、その戻り先(?next)も一緒に持っていく。
+  function goEmailCheck() {
+    saveLoginEmail(email);
+    const raw = $page.url.searchParams.get('next');
+    goToCheck('login-email', raw && raw.startsWith('/') ? raw : undefined);
   }
 
   async function submitTotpCode() {
@@ -175,9 +138,6 @@
 {#if error}
   <p class="error">{error}</p>
 {/if}
-{#if notice}
-  <p class="prose-small">{notice}</p>
-{/if}
 
 {#if phase === 'totp'}
   <section class="section">
@@ -215,7 +175,6 @@
       onclick={() => {
         method = 'email';
         error = null;
-        notice = null;
       }}>{$t('login.methodEmail')}</button
     >
     <button
@@ -226,7 +185,6 @@
       onclick={() => {
         method = 'password';
         error = null;
-        notice = null;
       }}>{$t('login.methodPassword')}</button
     >
   </div>
@@ -264,7 +222,7 @@
       class="form stack"
       onsubmit={(e) => {
         e.preventDefault();
-        void (codeSent ? submitEmailCode() : sendEmailCode());
+        goEmailCheck();
       }}
     >
       <label class="stack-tight">
@@ -280,25 +238,7 @@
         <span class="help">{$t('login.emailHelp')}</span>
       </label>
 
-      {#if codeSent}
-        <label class="stack-tight">
-          <span>{$t('login.code')}</span>
-          <input
-            type="text"
-            bind:value={emailCode}
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            pattern="[0-9]{'{6}'}"
-            required
-          />
-        </label>
-        <button type="submit" disabled={submitting}>{$t('login.submit')}</button>
-        <button type="button" class="chip" disabled={submitting} onclick={() => void sendEmailCode()}
-          >{$t('login.sendAgain')}</button
-        >
-      {:else}
-        <button type="submit" disabled={submitting}>{$t('login.sendCode')}</button>
-      {/if}
+      <button type="submit" disabled={submitting}>{$t('login.sendCode')}</button>
     </form>
   {/if}
 

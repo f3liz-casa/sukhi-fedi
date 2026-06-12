@@ -583,10 +583,31 @@ export async function deletePasskey(id: number, reauth: Reauth): Promise<void> {
 // Navigate to the shared check page. Anubis challenges this path; the
 // page picks up `intent` and finishes the flow on the other side.
 //
-// Single entry point used by both doors ─ keeps the homepage's "入る"
-// click handler and the signup form's submit short and uniform.
-export function goToCheck(intent: 'login' | 'signup', next?: string): void {
+// Single entry point used by all the doors ─ keeps the homepage's
+// "入る"、signup の「作る」、login のメールタブが短く揃う。
+// 'login-email' はメールコードでのログイン: コードの送信も入力も
+// /check の上(= PoW の内側)で行われる。
+export function goToCheck(intent: 'login' | 'signup' | 'login-email', next?: string): void {
   const params = new URLSearchParams({ intent });
   if (next) params.set('next', next);
   window.location.assign(`/check?${params.toString()}`);
+}
+
+// メールログインで /login → /check へ渡すアドレス。秘密ではない
+// (コードはメール側に届く)が、URL に載せず session に置く。
+const LOGIN_EMAIL_KEY = 'sf.login_email';
+
+export function saveLoginEmail(email: string): void {
+  if (!browser) return;
+  sessionStorage.setItem(LOGIN_EMAIL_KEY, email);
+}
+
+export function loadLoginEmail(): string | null {
+  if (!browser) return null;
+  return sessionStorage.getItem(LOGIN_EMAIL_KEY);
+}
+
+export function clearLoginEmail(): void {
+  if (!browser) return;
+  sessionStorage.removeItem(LOGIN_EMAIL_KEY);
 }
