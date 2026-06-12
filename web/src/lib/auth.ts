@@ -296,12 +296,21 @@ export async function signup(input: Required<Pick<SignupDraft, 'username' | 'pas
   return body as TokenSet;
 }
 
+// 一段目(パスワード or メールコード)が通ったあとのサーバの返事。
+// cookie が立って終わりか、アプリ 2FA の二段目が要るかの二択。
+export type FirstFactorResult = { ok: true } | { second_factor: 'totp'; pending: string };
+
 // First-party credential login. POSTs username + password to `/login`,
 // which validates them and sets the `session_token` cookie that
 // `/oauth/authorize` later consumes. Cookie-based, NOT the OAuth bearer
 // the rest of the SPA uses ─ this only opens the door; the caller then
 // walks through `/check` (Anubis) → `/oauth/authorize` to get a token.
-export async function loginWithPassword(username: string, password: string): Promise<void> {
+// アプリ 2FA が有効な人には cookie は立たず、`/login/totp` 用の
+// pending トークンが返る ─ 呼び元が二段目の画面を出す。
+export async function loginWithPassword(
+  username: string,
+  password: string
+): Promise<FirstFactorResult> {
   const res = await fetch('/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -310,6 +319,78 @@ export async function loginWithPassword(username: string, password: string): Pro
   });
   if (res.status === 401) throw new Error('invalid');
   if (!res.ok) throw new Error(`login_failed_${res.status}`);
+  return (await res.json()) as FirstFactorResult;
+}
+
+// 二段目: /login で受け取った pending と、認証アプリの 6 桁。
+// 通れば session_token cookie が立つ。
+export async function submitTotp(pending: string, code: string): Promise<void> {
+  const res = await fetch('/login/totp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ pending, code })
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body?.error ?? `totp_failed_${res.status}`);
+}
+
+// メール認証コードでのログイン。request は、知らないアドレスにも
+// 200 を返す(居る/居ないを言わない)ので、送った前提で次の画面へ。
+export async function requestEmailLoginCode(email: string): Promise<void> {
+  const res = await fetch('/login/email/request', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email })
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body?.error ?? `email_request_failed_${res.status}`);
+}
+
+export async function loginWithEmailCode(
+  email: string,
+  code: string
+): Promise<FirstFactorResult> {
+  const res = await fetch('/login/email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, code })
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error ?? `email_login_failed_${res.status}`);
+  }
+  return (await res.json()) as FirstFactorResult;
+}
+
+// パスキーでのログイン。options → ブラウザの認証器 → submit まで
+// 一息にやる。成功すれば cookie が立つ(2FA の二段目は無し ─
+// 認証器の本人確認がその役)。
+export async function loginWithPasskey(): Promise<void> {
+  const { getPasskeyAssertion } = await import('./webauthn');
+
+  const optRes = await fetch('/login/passkey/options', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: '{}'
+  });
+  if (!optRes.ok) throw new Error('passkey');
+  const { ref, publicKey } = await optRes.json();
+
+  const assertion = await getPasskeyAssertion(publicKey);
+
+  const res = await fetch('/login/passkey', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ ref, ...assertion })
+  });
+  if (!res.ok) throw new Error('passkey');
 }
 
 // Change the signed-in account's password. Cookie-gated like /login (the
@@ -334,6 +415,97 @@ export async function changePassword(
   if (res.ok) return;
   const body = await res.json().catch(() => ({}));
   throw new Error(body?.error ?? `password_failed_${res.status}`);
+}
+
+// ── ログイン要素の管理 (settings/security と EmailNudge が使う) ──────
+//
+// 変更系は session cookie 専用(サーバ側の決め: bearer は第三者アプリ
+// にも渡るから、ログイン要素には触らせない)。/auth/state だけは
+// bearer でも読める ─ 加入直後(cookie がまだ無いことがある)でも
+// ポップアップの出す/出さないを決められるように。
+
+export type AuthState = {
+  // false のときは cookie が無い(または切れた)ので、変更系を呼ぶ前に
+  // もう一度 /login を通ってもらう必要がある。
+  manageable: boolean;
+  email: string | null;
+  email_verified: boolean;
+  totp_enabled: boolean;
+  totp_pending: boolean;
+  passkeys: {
+    id: number;
+    nickname: string | null;
+    created_at: string;
+    last_used_at: string | null;
+  }[];
+};
+
+function bearerHeaders(): Record<string, string> {
+  const t = loadToken();
+  return t ? { authorization: `Bearer ${t.access_token}` } : {};
+}
+
+async function settingsPost(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body ?? {})
+  });
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((parsed as { error?: string })?.error ?? `failed_${res.status}`);
+  }
+  return parsed;
+}
+
+export async function fetchAuthState(): Promise<AuthState | null> {
+  const res = await fetch('/auth/state', {
+    credentials: 'same-origin',
+    headers: bearerHeaders()
+  });
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(`auth_state_failed_${res.status}`);
+  return (await res.json()) as AuthState;
+}
+
+// メール登録/変更: コードを送る。すでに確認済みアドレスがある人が
+// 別のアドレスへ変えるときだけ password が要る。
+export async function requestEmailCode(email: string, password?: string): Promise<void> {
+  await settingsPost('/settings/email/request', password ? { email, password } : { email });
+}
+
+export async function confirmEmailCode(code: string): Promise<void> {
+  await settingsPost('/settings/email/confirm', { code });
+}
+
+export async function totpSetup(): Promise<{ secret: string; otpauth: string }> {
+  return (await settingsPost('/settings/totp/setup', {})) as { secret: string; otpauth: string };
+}
+
+export async function totpEnable(code: string): Promise<void> {
+  await settingsPost('/settings/totp/enable', { code });
+}
+
+export async function totpDisable(password: string): Promise<void> {
+  await settingsPost('/settings/totp/disable', { password });
+}
+
+// パスキー登録: options → 認証器 → 登録、まで。
+export async function registerPasskey(nickname: string): Promise<void> {
+  const { createPasskey } = await import('./webauthn');
+
+  const { ref, publicKey } = (await settingsPost('/settings/passkeys/options', {})) as {
+    ref: string;
+    publicKey: Parameters<typeof createPasskey>[0];
+  };
+
+  const payload = await createPasskey(publicKey);
+  await settingsPost('/settings/passkeys', { ref, nickname, ...payload });
+}
+
+export async function deletePasskey(id: number, password: string): Promise<void> {
+  await settingsPost(`/settings/passkeys/${id}/delete`, { password });
 }
 
 // Navigate to the shared check page. Anubis challenges this path; the

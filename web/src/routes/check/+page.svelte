@@ -14,6 +14,7 @@
   import {
     startLogin,
     signup,
+    loginWithPassword,
     loadSignupDraft,
     clearSignupDraft,
     clearSignupPassword
@@ -99,6 +100,19 @@
         clearSignupPassword();
 
         await signup(payload);
+
+        // 同じ合言葉(まだメモリにある)で一人称の戸も開けておく。
+        // settings の「ログインと安全」(メール確認・2FA・パスキー)は
+        // session cookie 専用なので、ここで立てておかないと、加入
+        // 直後の人がメール確認のたびに /login へ回されてしまう。
+        // 失敗しても先へ進む ─ bearer は持っているので、必要に
+        // なったとき EmailNudge が「入りなおして」と案内する。
+        try {
+          await loginWithPassword(payload.username, payload.password);
+        } catch {
+          /* best-effort */
+        }
+
         clearSignupDraft();
         await goto('/timeline');
       }

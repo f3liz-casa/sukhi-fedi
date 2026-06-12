@@ -10,6 +10,7 @@
 
   let username = $state('');
   let password = $state('');
+  let email = $state('');
   let invite_code = $state('');
   let agreed = $state(false);
   let error = $state<string | null>(null);
@@ -25,6 +26,7 @@
     const d = loadSignupDraft();
     if (d) {
       username = d.username ?? '';
+      email = d.email ?? '';
       invite_code = d.invite_code ?? '';
       if (!d.password) {
         error = $t('signup.pwAgain');
@@ -34,7 +36,7 @@
 
   function submit() {
     error = null;
-    saveSignupDraft({ username, password, invite_code });
+    saveSignupDraft({ username, password, invite_code, email });
     goToCheck('signup');
   }
 
@@ -82,6 +84,19 @@
       required
     />
     <span class="help">{$t('signup.passwordHelp')}</span>
+  </label>
+
+  <label class="stack-tight">
+    <span>{$t('signup.email')}</span>
+    <input
+      type="email"
+      bind:value={email}
+      autocomplete="email"
+      autocapitalize="none"
+      spellcheck="false"
+      required
+    />
+    <span class="help">{$t('signup.emailHelp')}</span>
   </label>
 
   <label class="stack-tight">

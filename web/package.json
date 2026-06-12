@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@twemoji/api": "^17.0.3",
-    "@twemoji/svg": "^15.0.0"
+    "@twemoji/svg": "^15.0.0",
+    "uqr": "^0.1.3"
   }
 }

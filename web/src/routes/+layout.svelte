@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../styles/app.css';
   import AppNav from '$lib/components/AppNav.svelte';
+  import EmailNudge from '$lib/components/EmailNudge.svelte';
   import UpdateBanner from '$lib/components/UpdateBanner.svelte';
   import type { Snippet } from 'svelte';
 
@@ -13,4 +14,5 @@
   {@render children?.()}
 </main>
 
+<EmailNudge />
 <UpdateBanner />
