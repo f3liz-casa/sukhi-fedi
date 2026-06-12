@@ -24,7 +24,7 @@ defmodule SukhiDelivery.Delivery.Worker do
   use Oban.Worker, queue: :delivery, max_attempts: 10
   import Ecto.Query
 
-  alias SukhiDelivery.{Repo, Delivery.FedifyClient}
+  alias SukhiDelivery.{Repo, Delivery.FedifyClient, Delivery.SigSpec}
   alias SukhiDelivery.Schema.{Object, Account, DeliveryReceipt}
   alias SukhiDelivery.Delivery.FollowersSync
 
@@ -63,67 +63,137 @@ defmodule SukhiDelivery.Delivery.Worker do
   defp deliver_to(job, args, activity_id, inbox_url) do
     {body, actor_uri} = resolve_body_and_actor(args)
 
-    base_headers = %{"content-type" => "application/activity+json"}
+    static_headers =
+      %{"content-type" => "application/activity+json"}
+      |> Map.merge(resolve_sync_headers(args, actor_uri))
 
-    sync_headers = resolve_sync_headers(args, actor_uri)
+    host = inbox_url |> URI.parse() |> Map.get(:host)
+    spec = SigSpec.spec_for(host)
 
+    inbox_url
+    |> deliver_with_knock(actor_uri, body, static_headers, host, spec)
+    |> handle_result(job, body, activity_id, inbox_url, actor_uri)
+  end
+
+  # Double-knock: POST with the spec we expect this host to want; if it
+  # answers with a signature-rejection status (401/400), re-sign once
+  # with the other spec. Whichever the host accepts is remembered, so
+  # steady state is a single POST. Both specs rejected → not a spec
+  # problem (key/clock/block) — return the first result, let Oban retry,
+  # and learn nothing so we keep probing if the peer later recovers.
+  defp deliver_with_knock(inbox_url, actor_uri, body, static_headers, host, spec) do
+    knock_loop(host, spec, fn s ->
+      signed_post(actor_uri, inbox_url, body, static_headers, s)
+    end)
+  end
+
+  @doc false
+  # Double-knock control flow, kept free of HTTP/signing so it is
+  # testable with a fake poster. `poster` is
+  # `(spec -> {:ok, %{status: integer}} | {:error, term})`. Send with
+  # `spec`; on a signature-rejection status (`SigSpec.knock?/1`),
+  # re-sign once with the other spec. Learn whichever spec the host
+  # accepted; learn nothing if both are rejected, so the next delivery
+  # keeps probing and a recovered peer is picked up.
+  def knock_loop(host, spec, poster) do
+    case poster.(spec) do
+      {:ok, %{status: status}} = result ->
+        if SigSpec.knock?(status) do
+          knock_alt(host, spec, poster, result)
+        else
+          SigSpec.learn(host, spec)
+          result
+        end
+
+      {:error, _reason} = result ->
+        result
+    end
+  end
+
+  defp knock_alt(host, spec, poster, first_result) do
+    alt = SigSpec.alt(spec)
+
+    require Logger
+    Logger.info("delivery double-knock #{host}: #{spec} rejected, retrying #{alt}")
+
+    case poster.(alt) do
+      {:ok, %{status: status}} = alt_result ->
+        if SigSpec.knock?(status) do
+          first_result
+        else
+          SigSpec.learn(host, alt)
+          alt_result
+        end
+
+      {:error, _reason} ->
+        first_result
+    end
+  end
+
+  defp signed_post(actor_uri, inbox_url, body, static_headers, spec) do
     headers =
-      case sign_request(actor_uri, inbox_url, body) do
-        {:ok, sig_headers} ->
-          base_headers |> Map.merge(sync_headers) |> Map.merge(sig_headers)
-
-        :skip ->
-          Map.merge(base_headers, sync_headers)
+      case sign_request(actor_uri, inbox_url, body, spec) do
+        {:ok, sig_headers} -> Map.merge(static_headers, sig_headers)
+        :skip -> static_headers
       end
 
     require Logger
 
     # 署名検証失敗を追っている間だけ、POST 直前のヘッダ一覧と body の
-    # 先頭バイトを出す。"Failed to verify the request signature."
-    # の原因が「Req が User-Agent 等を上書きしている」「Digest が
-    # ボディ実体と一致していない」のどちらなのかを切り分けたい。
+    # 先頭バイトを出す。"Failed to verify the request signature." の
+    # 原因が「Req が User-Agent 等を上書きしている」「Digest がボディ
+    # 実体と一致していない」のどちらなのかを切り分けたい。
     Logger.info(
-      "delivery POST #{inbox_url} headers=#{inspect(Enum.to_list(headers))} body_first=#{inspect(String.slice(body, 0, 80))} body_bytes=#{byte_size(body)}"
+      "delivery POST #{inbox_url} spec=#{spec} headers=#{inspect(Enum.to_list(headers))} body_first=#{inspect(String.slice(body, 0, 80))} body_bytes=#{byte_size(body)}"
     )
 
-    case Req.post(inbox_url,
-           body: body,
-           headers: Enum.to_list(headers),
-           finch: SukhiDelivery.Finch,
-           receive_timeout: 30_000
-         ) do
-      {:ok, %{status: status}} when status in 200..299 ->
-        record_delivery(activity_id, inbox_url, "delivered")
-        archive_outbound(body, activity_id, inbox_url, actor_uri, "delivered", status)
-        :ok
+    Req.post(inbox_url,
+      body: body,
+      headers: Enum.to_list(headers),
+      finch: SukhiDelivery.Finch,
+      receive_timeout: 30_000
+    )
+  end
 
-      {:ok, %{status: 410}} ->
-        record_delivery(activity_id, inbox_url, "gone")
-        archive_outbound(body, activity_id, inbox_url, actor_uri, "gone", 410)
-        :ok
+  defp handle_result({:ok, %{status: status}}, _job, body, activity_id, inbox_url, actor_uri)
+       when status in 200..299 do
+    record_delivery(activity_id, inbox_url, "delivered")
+    archive_outbound(body, activity_id, inbox_url, actor_uri, "delivered", status)
+    :ok
+  end
 
-      {:ok, %{status: status, body: resp_body, headers: resp_headers}} ->
-        # 401/403 を踏み続けるとき何が原因か見えるように、サーバから
-        # 返ってきた body と頭の数行を残す。長すぎたら切り詰める。
-        # [[fedify-401-diagnostic]]
-        body_str =
-          resp_body
-          |> to_string()
-          |> String.slice(0, 400)
+  defp handle_result({:ok, %{status: 410}}, _job, body, activity_id, inbox_url, actor_uri) do
+    record_delivery(activity_id, inbox_url, "gone")
+    archive_outbound(body, activity_id, inbox_url, actor_uri, "gone", 410)
+    :ok
+  end
 
-        require Logger
+  defp handle_result(
+         {:ok, %{status: status, body: resp_body, headers: resp_headers}},
+         job,
+         body,
+         activity_id,
+         inbox_url,
+         actor_uri
+       ) do
+    # 401/403 を踏み続けるとき何が原因か見えるように、サーバから返って
+    # きた body と頭の数行を残す。長すぎたら切り詰める。
+    # [[fedify-401-diagnostic]]
+    body_str = resp_body |> to_string() |> String.slice(0, 400)
 
-        Logger.warning(
-          "delivery #{status} from #{inbox_url}: body=#{inspect(body_str)} headers=#{inspect(Enum.take(resp_headers, 8))}"
-        )
+    require Logger
 
-        maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, status)
-        {:error, "unexpected status #{status}"}
+    Logger.warning(
+      "delivery #{status} from #{inbox_url}: body=#{inspect(body_str)} headers=#{inspect(Enum.take(resp_headers, 8))}"
+    )
 
-      {:error, reason} ->
-        maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, nil)
-        {:error, inspect(reason)}
-    end
+    maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, status)
+    {:error, "unexpected status #{status}"}
+  end
+
+  defp handle_result({:error, reason}, job, body, activity_id, inbox_url, actor_uri) do
+    maybe_archive_failure(job, body, activity_id, inbox_url, actor_uri, nil)
+    {:error, inspect(reason)}
   end
 
   # Keep the bytes we actually delivered. The body is content-addressed on
@@ -208,9 +278,9 @@ defmodule SukhiDelivery.Delivery.Worker do
     end
   end
 
-  defp sign_request(nil, _inbox, _body), do: :skip
+  defp sign_request(nil, _inbox, _body, _spec), do: :skip
 
-  defp sign_request(actor_uri, inbox_url, body) do
+  defp sign_request(actor_uri, inbox_url, body, spec) do
     case get_private_key_jwk(actor_uri) do
       nil ->
         :skip
@@ -226,7 +296,7 @@ defmodule SukhiDelivery.Delivery.Worker do
             privateKeyJwk: jwk,
             keyId: key_id
           }
-          |> maybe_put_algorithm(inbox_url)
+          |> put_algorithm(spec)
 
         case FedifyClient.sign(payload) do
           {:ok, %{"headers" => sig_headers}} -> {:ok, sig_headers}
@@ -235,30 +305,11 @@ defmodule SukhiDelivery.Delivery.Worker do
     end
   end
 
-  # Per-host signing-spec override. hackers.pub (Fedify 2.x) keeps
-  # returning "Failed to verify the request signature." on our valid
-  # cavage signatures — same key, same digest, self-verifies fine.
-  # Fedify accepts both cavage and rfc9421 on the verify side (picked
-  # by the presence of the `Signature-Input` header), so try rfc9421
-  # for that one origin and see if it changes the outcome.
-  # [[fedify-401-diagnostic]]
-  @rfc9421_inbox_hosts ["hackers.pub"]
-
-  defp maybe_put_algorithm(payload, inbox_url) when is_binary(inbox_url) do
-    case URI.parse(inbox_url) do
-      %URI{host: host} when is_binary(host) ->
-        if host in @rfc9421_inbox_hosts do
-          Map.put(payload, :algorithm, "rfc9421")
-        else
-          payload
-        end
-
-      _ ->
-        payload
-    end
-  end
-
-  defp maybe_put_algorithm(payload, _), do: payload
+  # The spec is chosen per host by `SigSpec` (learned via double-knock).
+  # cavage carries no algorithm tag; rfc9421 sets it so the fedify
+  # service signs RFC 9421 instead. [[fedify-401-diagnostic]]
+  defp put_algorithm(payload, :rfc9421), do: Map.put(payload, :algorithm, "rfc9421")
+  defp put_algorithm(payload, :cavage), do: payload
 
   defp get_private_key_jwk(actor_uri) when is_binary(actor_uri) do
     username =

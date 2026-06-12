@@ -7,7 +7,11 @@ defmodule SukhiDelivery.Cache.Ets do
 
   use GenServer
 
-  @tables [:actor_remote]
+  # Prefixed: the gateway owns :actor_remote, and the combined release
+  # runs both apps in one BEAM where named tables share a namespace.
+  # :delivery_httpsig_spec holds the per-host signature spec learned by
+  # the delivery worker's double-knock (SukhiDelivery.Delivery.SigSpec).
+  @tables [:delivery_actor_remote, :delivery_httpsig_spec]
   @sweep_interval_ms 60_000
 
   @spec get(atom(), term()) :: {:ok, term()} | :miss
