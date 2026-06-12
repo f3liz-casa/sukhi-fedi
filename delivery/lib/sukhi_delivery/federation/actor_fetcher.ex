@@ -19,7 +19,7 @@ defmodule SukhiDelivery.Federation.ActorFetcher do
 
   @spec fetch(String.t()) :: {:ok, map()} | {:error, term()}
   def fetch(actor_uri) when is_binary(actor_uri) do
-    case Ets.get(:actor_remote, actor_uri) do
+    case Ets.get(:delivery_actor_remote, actor_uri) do
       {:ok, actor} -> {:ok, actor}
       :miss -> do_fetch(actor_uri)
     end
@@ -67,13 +67,13 @@ defmodule SukhiDelivery.Federation.ActorFetcher do
            receive_timeout: @timeout_ms
          ) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
-        Ets.put(:actor_remote, actor_uri, body, @ttl_seconds)
+        Ets.put(:delivery_actor_remote, actor_uri, body, @ttl_seconds)
         {:ok, body}
 
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
         case JSON.decode(body) do
           {:ok, actor} ->
-            Ets.put(:actor_remote, actor_uri, actor, @ttl_seconds)
+            Ets.put(:delivery_actor_remote, actor_uri, actor, @ttl_seconds)
             {:ok, actor}
 
           {:error, reason} ->

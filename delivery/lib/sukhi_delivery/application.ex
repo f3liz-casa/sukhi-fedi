@@ -39,7 +39,9 @@ defmodule SukhiDelivery.Application do
     port = Keyword.get(nats_cfg, :port, 4222)
 
     %{
-      name: :gnat,
+      # Not :gnat — the gateway registers that name, and the combined
+      # release runs both apps in one BEAM.
+      name: :gnat_delivery,
       connection_settings: [
         %{host: host, port: port}
       ]

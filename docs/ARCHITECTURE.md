@@ -2,8 +2,10 @@
 
 > **This document is the canonical architecture reference.** A fresh
 > contributor can rebuild the system from scratch using only this file
-> plus the code. The only companion doc is
-> [`ADDONS.md`](ADDONS.md), which specifies the addon ABI.
+> plus the code. The companion docs are
+> [`ADDONS.md`](ADDONS.md), which specifies the addon ABI, and
+> [`CODE_STYLE.md`](CODE_STYLE.md), which fixes where concerns live
+> inside the code.
 
 ## 1. Product intent
 
@@ -79,6 +81,13 @@ Rules enforced by this split:
    ActivityPub handling is exactly this slice, so we lean on it there.
 6. **Mastodon/Misskey REST runs on the api plugin node**, reached via
    distributed Erlang `:rpc` — no HTTP hop, no JSON-over-NATS envelope.
+
+These boundaries are *module-level* (OTP app namespaces, schema
+ownership, no shared registered names), so the gateway/delivery split
+is a deployment choice, not a code one: `combined/` assembles both
+apps into a single-BEAM release for small single-box deployments
+(`docker-compose.combined.yml`). Rules 1–6 hold unchanged in either
+topology; only the process count differs.
 
 ## 3. Repository layout
 
@@ -255,12 +264,21 @@ sukhi-fedi/
 │   ├── config/{config,dev,prod,runtime,test}.exs
 │   └── Dockerfile                         # distributed Erlang release
 │
+├── combined/                              # gateway + delivery in ONE BEAM
+│   ├── mix.exs                            # release shell: path deps on
+│   │                                        elixir/ + delivery/, no code
+│   ├── config/                            # imports/reads both projects'
+│   │                                        own configs (single source)
+│   ├── rel/entrypoint.sh                  # migrate (gateway-owned) + start
+│   └── Dockerfile                         # small single-box image
+│
 ├── infra/
 │   ├── nats/bootstrap.sh                  # JetStream stream bootstrap
 │   ├── cloud-init.yaml.tmpl               # shared VM bootstrap template
 │   └── terraform/ · terraform-x64-freetier/ # infra-as-code (OCI ARM + x64)
 │
 ├── docker-compose.yml                     # dev + prod stack (pinned GHCR images)
+├── docker-compose.combined.yml            # 1-BEAM override (≈1 core / 2 GB box)
 ├── docker-compose.test.yml                # hermetic test stack
 ├── TODO.md                                # punch list of deferred work
 └── docs/

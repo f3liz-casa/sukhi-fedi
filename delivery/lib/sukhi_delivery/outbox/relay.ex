@@ -121,7 +121,7 @@ defmodule SukhiDelivery.Outbox.Relay do
     body = JSON.encode!(event.payload)
     headers = [{"Nats-Msg-Id", "outbox-#{event.id}"}]
 
-    case Gnat.pub(:gnat, event.subject, body, headers: headers) do
+    case Gnat.pub(:gnat_delivery, event.subject, body, headers: headers) do
       :ok -> :ok
       {:error, _} = err -> err
       other -> {:error, {:unexpected, other}}

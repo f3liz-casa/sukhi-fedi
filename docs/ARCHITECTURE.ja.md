@@ -1,8 +1,9 @@
 # sukhi-fedi のかたち
 
 > **これが設計の教科書だよー。** 新しく来た人がこのファイルとコードだけ見て、
-> ゼロから作り直せる — それが目標。併読するなら
-> [`ADDONS.md`](ADDONS.md) だけ（アドオンABIのお約束ごと）。
+> ゼロから作り直せる — それが目標。併読するのは
+> [`ADDONS.md`](ADDONS.md)（アドオンABIのお約束ごと）と
+> [`CODE_STYLE.md`](CODE_STYLE.md)（関心ごとの置き場所のお約束）。
 >
 > 英語の正本は [`ARCHITECTURE.md`](ARCHITECTURE.md)。ズレてたら英語側を信じてね。
 

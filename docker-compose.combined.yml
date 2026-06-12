@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Override for small single-box deployments (≈1 core / 2 GB): run
+# gateway + delivery as ONE BEAM (the `combined` release) instead of
+# two containers. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.combined.yml up -d
+#
+# - The `gateway` service keeps its name (anubis / cloudflared / api
+#   routing stay untouched) but boots the combined image, which runs
+#   both OTP apps. ARCHITECTURE.md §2 boundaries are module-level and
+#   survive the merge; only the process topology changes.
+# - `delivery` is moved to a disabled profile — its env lives on the
+#   gateway service below.
+# - Unlike the 1 GB x64-freetier override, the api node stays on:
+#   2 GB has room for the Mastodon/Misskey REST surface.
+# - Caveat: DB_POOL_SIZE is read by BOTH repos in the combined VM
+#   (gateway and delivery each open a pool of that size).
+#
+# Memory limits below follow a 13-min 1-core endurance run (2026-06-11):
+# combined held flat at ~130 MiB under sustained read+write+inbox load,
+# while bun OOM-killed at a 120M cap (its resident floor is ~100 MiB and
+# JSON-LD work spikes above it) — so bun gets headroom before anything
+# else does. Minimal known-good split for a 512 MB container budget:
+# combined 192M / postgres 112M / bun 160M / nats 40M.
+
+# One scheduler, busy-wait off, small heaps — same rationale as
+# docker-compose.x64-freetier.yml, shared by every BEAM container here.
+x-erl-small: &erl_small
+  ERL_FLAGS: >-
+    +S 1:1
+    +SDcpu 1:1
+    +SDio 1
+    +sbwt none
+    +sbwtdcpu none
+    +sbwtdio none
+    +P 65536
+    +Q 4096
+    +MBas aobf
+    +MHas aobf
+    +MBsbct 128
+    +MBlmbcs 256
+    +MMmcs 30
+    +hms 46
+    +hmbs 12288
+  ERL_FULLSWEEP_AFTER: "10"
+  ERL_MAX_PORTS: "4096"
+
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=25
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - jit=off
+      - -c
+      - max_wal_size=512MB
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  nats:
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  gateway:
+    image: ghcr.io/${SUKHI_REPO_OWNER:-nyanrus}/sukhi-fedi-combined:${SUKHI_VERSION:-v1}
+    build:
+      context: .
+      dockerfile: combined/Dockerfile
+    environment:
+      <<: *erl_small
+      # Shared by both repos in the combined VM: 5 + 5 connections.
+      DB_POOL_SIZE: "5"
+      # Delivery-side env, normally on the delivery service.
+      METRICS_PORT: "4001"
+      OBAN_DELIVERY_CONCURRENCY: "5"
+      OBAN_FEDERATION_CONCURRENCY: "2"
+      OBAN_MONITOR_CONCURRENCY: "2"
+      FINCH_POOL_SIZE: "16"
+      FINCH_POOL_COUNT: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  delivery:
+    profiles: ["disabled"]
+
+  bun:
+    # Measured floor ~100 MiB resident; a 120M cap OOM-killed it after
+    # ~10 min of load. Do not set this below 160M.
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  api:
+    environment:
+      <<: *erl_small
+    deploy:
+      resources:
+        limits:
+          memory: 256M

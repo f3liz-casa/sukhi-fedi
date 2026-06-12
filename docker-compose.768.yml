@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Override for a ~768 MB / 1-core single-box deployment. Layer it on the
+# base AND the combined override (combined gives gateway+delivery in one
+# BEAM; this file tightens the memory split, drops the api node, and
+# drops the Bun fedify sidecar):
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.combined.yml \
+#     -f docker-compose.768.yml up -d
+#
+# Split (container budget ≈600 MiB, leaving ~168 MiB for OS+dockerd):
+#   combined 384M / postgres 176M / nats 40M     (NO bun)
+#
+# *** No Bun container. *** The combined image now answers fedify.*.v1
+# itself via SukhiFedi.Fedi.Service (a Gnat.Server on the same
+# `fedify-workers` queue group — native HTTP-Signature + RsaSignature2017
+# LD-signatures + URDNA2015 canonicalization, the json_ld dep). Measured
+# 2026-06-12 on a 1-core bun-less stack at 100 deliveries/s + ~95
+# inbound-verify/s for 5.5 min: combined peaked 259 MiB — essentially
+# the SAME as combined-with-bun (261 MiB), because the Elixir-native
+# signer has none of Bun's ~100 MiB V8 floor and its canonicalization
+# allocates only transiently. So removing Bun reclaims its whole ~160 MiB
+# for free. CPU cost: combined rose from ~17% to ~43% of the core (it now
+# does the crypto in-process) — still half a core idle at 100/s.
+#
+# Bonus: the "translator down → silent federation loss" failure mode is
+# gone. With Bun as a separate container, a Bun outage longer than the
+# JetStream redelivery window dropped outbound federation for posts made
+# during it. Co-located in the BEAM, the signer can only die when
+# combined dies — and a combined crash is the clean, zero-loss case
+# (transactional outbox + Oban DB jobs survive SIGKILL, verified).
+#
+# Earlier measured facts that still hold:
+#  - combined floor ~320M: fan-out builds ~100 signed payloads/s and that
+#    binary churn does not compress below it. DO NOT cap below 320M.
+#  - postgres is the first component to OOM under burst (100 oban_jobs
+#    INSERTs/post + WAL). It was killed first at 128M past ~150/s and
+#    cascaded (combined lost the DB, heap ballooned, OOM'd too). It gets
+#    the burst headroom and is the thing to widen first to go faster.
+#  - Ceiling is ~150/s (postgres memory, not CPU). For sustained >150/s,
+#    move to ~1 GB and widen postgres + combined together.
+#
+# Keep ~168 MiB host headroom AND add 1 GB swap + vm.swappiness=10 on a
+# real 768 MB VPS, so a pg/combined blip pages out instead of starting a
+# cascade.
+#
+# Parity caveat: SukhiFedi.Fedi covers core sign/verify/translate (45
+# golden tests green). A few fedify-family interop FEPs are still TODO in
+# the module (FEP-8b32 Ed25519 proofs, FEP-521a Multikey, FEP-044f quote
+# round-trip). If you federate with peers that require those, keep Bun
+# until parity lands — use docker-compose.combined.yml alone (Bun on,
+# its 160 MiB back, so size up to ~1 GB).
+#
+# The api (Mastodon/Misskey REST) node stays disabled to fit the budget.
+
+services:
+  postgres:
+    # First component to OOM under burst; gets the headroom. Widen this
+    # before anything else to push past ~100/s.
+    deploy:
+      resources:
+        limits:
+          memory: 176M
+
+  gateway:
+    # combined image (from docker-compose.combined.yml), now also running
+    # the native fedify service. Peaked 259 MiB at 100/s; 384M leaves
+    # room for canonicalization bursts and the cascade-spike margin.
+    # Floor ~320M.
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  # Bun is replaced by SukhiFedi.Fedi.Service inside the combined image.
+  bun:
+    profiles: ["disabled"]
+
+  nats:
+    deploy:
+      resources:
+        limits:
+          memory: 40M
+
+  # No room for the REST plugin node in this budget.
+  api:
+    profiles: ["disabled"]

@@ -40,7 +40,7 @@ defmodule SukhiDelivery.Outbox.PullConsumer do
   @impl true
   def init(_arg) do
     {:ok, nil,
-     connection_name: :gnat,
+     connection_name: :gnat_delivery,
      stream_name: @stream_name,
      consumer_name: @consumer_name}
   end

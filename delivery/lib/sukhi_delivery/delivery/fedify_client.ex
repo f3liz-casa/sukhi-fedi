@@ -32,7 +32,7 @@ defmodule SukhiDelivery.Delivery.FedifyClient do
 
   @spec ping() :: :ok | {:ok, binary()} | {:error, term()}
   def ping do
-    case Gnat.request(:gnat, "fedify.ping.v1", "pong", receive_timeout: @timeout) do
+    case Gnat.request(:gnat_delivery, "fedify.ping.v1", "pong", receive_timeout: @timeout) do
       {:ok, %{body: "pong"}} -> :ok
       {:ok, %{body: other}} -> {:ok, other}
       {:error, _} = err -> err
@@ -42,7 +42,7 @@ defmodule SukhiDelivery.Delivery.FedifyClient do
   defp request(subject, payload) do
     body = JSON.encode!(payload)
 
-    case Gnat.request(:gnat, subject, body, receive_timeout: @timeout) do
+    case Gnat.request(:gnat_delivery, subject, body, receive_timeout: @timeout) do
       {:ok, %{body: reply}} ->
         case JSON.decode(reply) do
           {:ok, %{"ok" => true, "data" => data}} -> {:ok, data}
