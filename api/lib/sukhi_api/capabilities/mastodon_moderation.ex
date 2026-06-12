@@ -52,15 +52,22 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
       if is_nil(id) do
         ok(404, %{error: "not_found"})
       else
-        call_op(op, v.id, id)
+        # The inner result may be {:error, changeset} (e.g. already
+        # blocked) — the refetched Relationship below reports what
+        # actually took effect, so only transport failures are errors.
+        case call_op(op, v.id, id) do
+          {:ok, _applied} ->
+            rel =
+              case GatewayRpc.call(SukhiFedi.Social, :list_relationships, [v, [id]]) do
+                {:ok, [r]} -> r
+                _ -> %{id: id}
+              end
 
-        rel =
-          case GatewayRpc.call(SukhiFedi.Social, :list_relationships, [v, [id]]) do
-            {:ok, [r]} -> r
-            _ -> %{id: id}
-          end
+            ok(200, MastodonRelationship.render(rel))
 
-        ok(200, MastodonRelationship.render(rel))
+          e ->
+            rpc_error(e)
+        end
       end
     end)
   end
@@ -86,8 +93,10 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
         {:ok, accounts} when is_list(accounts) ->
           ok(200, Enum.map(accounts, &MastodonAccount.render(&1, %{})))
 
-        _ ->
-          ok(200, [])
+        e ->
+          # An empty 200 here would tell the client "you block nobody"
+          # while the gateway is merely unreachable.
+          rpc_error(e)
       end
     end)
   end
@@ -136,11 +145,8 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
         {:ok, {:ok, {rows, _total}}} ->
           ok(200, Enum.map(rows, fn r -> r.domain end))
 
-        {:ok, {rows, _total}} when is_list(rows) ->
-          ok(200, Enum.map(rows, fn r -> r.domain end))
-
-        _ ->
-          ok(200, [])
+        e ->
+          rpc_error(e)
       end
     end)
   end
@@ -151,14 +157,16 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
 
       case body["domain"] do
         d when is_binary(d) and d != "" ->
-          GatewayRpc.call(SukhiFedi.Addons.Moderation, :block_instance, [
-            d,
-            "silence",
-            "",
-            v.id
-          ])
-
-          ok(200, %{})
+          case GatewayRpc.call(SukhiFedi.Addons.Moderation, :block_instance, [
+                 d,
+                 "silence",
+                 "",
+                 v.id
+               ]) do
+            {:ok, {:ok, _block}} -> ok(200, %{})
+            {:ok, {:error, _}} -> ok(422, %{error: "block_failed"})
+            e -> rpc_error(e)
+          end
 
         _ ->
           ok(422, %{error: "missing_domain"})
@@ -172,8 +180,13 @@ defmodule SukhiApi.Capabilities.MastodonModeration do
 
       case body["domain"] do
         d when is_binary(d) and d != "" ->
-          GatewayRpc.call(SukhiFedi.Addons.Moderation, :unblock_instance, [d, v.id])
-          ok(200, %{})
+          case GatewayRpc.call(SukhiFedi.Addons.Moderation, :unblock_instance, [d, v.id]) do
+            {:ok, {:ok, _}} -> ok(200, %{})
+            # Deleting a block that isn't there is idempotent.
+            {:ok, {:error, :not_found}} -> ok(200, %{})
+            {:ok, {:error, _}} -> ok(422, %{error: "unblock_failed"})
+            e -> rpc_error(e)
+          end
 
         _ ->
           ok(422, %{error: "missing_domain"})

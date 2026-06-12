@@ -110,8 +110,14 @@ defmodule SukhiFedi.Polls do
         end)
 
       case Repo.transaction(multi) do
-        {:ok, _} -> :ok
-        {:error, _, _, _} -> :ok
+        {:ok, _} ->
+          :ok
+
+        # Re-votes land in `on_conflict: :nothing` and still commit, so
+        # an error here is a real failure — the poll/option vanished
+        # under us. Don't report a vote that wasn't recorded.
+        {:error, _op, _value, _changes} ->
+          {:error, :not_found}
       end
     else
       nil -> {:error, :not_found}

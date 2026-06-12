@@ -63,14 +63,12 @@ defmodule SukhiApi.Capabilities.MastodonFollows do
          {:ok, target_id} <- parse_int(id) do
       case GatewayRpc.call(SukhiFedi.Social, :unfollow, [v, target_id]) do
         {:ok, {:ok, _follow}} ->
-          {:ok, [rel | _]} = relationships(v, [target_id])
-          ok(200, MastodonRelationship.render(rel))
+          respond_with_relationship(v, target_id)
 
         {:ok, {:error, :not_found}} ->
           # Unfollowing when there's no follow is idempotent in Mastodon
           # — return a Relationship with following=false rather than 404.
-          {:ok, [rel | _]} = relationships(v, [target_id])
-          ok(200, MastodonRelationship.render(rel))
+          respond_with_relationship(v, target_id)
 
         {:error, :not_connected} ->
           ok(503, %{error: "gateway_not_connected"})
@@ -91,6 +89,17 @@ defmodule SukhiApi.Capabilities.MastodonFollows do
     case GatewayRpc.call(SukhiFedi.Social, :list_relationships, [viewer, ids]) do
       {:ok, list} when is_list(list) -> {:ok, list}
       other -> other
+    end
+  end
+
+  # The refetch can fail on transport like any RPC — answer 503, not a
+  # MatchError-turned-500.
+  defp respond_with_relationship(v, target_id) do
+    case relationships(v, [target_id]) do
+      {:ok, [rel | _]} -> ok(200, MastodonRelationship.render(rel))
+      {:error, :not_connected} -> ok(503, %{error: "gateway_not_connected"})
+      {:error, {:badrpc, r}} -> ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+      _ -> ok(500, %{error: "internal_error"})
     end
   end
 
