@@ -132,16 +132,22 @@ function authHeader(): Record<string, string> {
 }
 
 type ReqInit = {
-  auth?: boolean; // attach bearer + enforce 401 logout (default true)
+  // true (default): attach bearer + log out on 401.
+  // false: never attach (purely public).
+  // 'optional': attach the bearer when logged in so the viewer is seen
+  //   (own DMs, followers-only, fav/reaction flags), but a 401 here does
+  //   NOT log out — an anonymous read of public content shouldn't end a
+  //   stale session, and the server 401s an offered-but-bad token.
+  auth?: boolean | 'optional';
   json?: unknown; // JSON request body
   form?: FormData; // multipart request body
   notFound?: boolean; // map a 404 to Error('not_found')
 };
 
 async function req(method: string, path: string, label: string, init: ReqInit = {}): Promise<Response> {
-  const authed = init.auth !== false;
+  const attachAuth = init.auth !== false;
   const headers: Record<string, string> = { accept: 'application/json' };
-  if (authed) Object.assign(headers, authHeader());
+  if (attachAuth) Object.assign(headers, authHeader());
 
   let body: BodyInit | undefined;
   if (init.json !== undefined) {
@@ -153,7 +159,7 @@ async function req(method: string, path: string, label: string, init: ReqInit = 
 
   const res = await fetch(path, { method, headers, body });
 
-  if (authed && res.status === 401) {
+  if (init.auth !== false && init.auth !== 'optional' && res.status === 401) {
     clearToken();
     throw new Error('unauthorized');
   }
@@ -421,19 +427,23 @@ export async function getAccountStatuses(
   const qs = pageQs(opts, 20);
   if (opts.pinned) qs.set('pinned', 'true');
   const path = `/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`;
-  return page<Status>(await req('GET', path, 'account_statuses', { auth: false }));
+  // 'optional' so a logged-in viewer sees their own followers-only posts
+  // (and accepted-follower posts) on the profile, plus fav/reaction flags.
+  return page<Status>(await req('GET', path, 'account_statuses', { auth: 'optional' }));
 }
 
 export async function getStatus(id: string): Promise<Status> {
   return json(
-    await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}`, 'status', { auth: false, notFound: true })
+    await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}`, 'status', { auth: 'optional', notFound: true })
   );
 }
 
 export type Context = { ancestors: Status[]; descendants: Status[] };
 
 export async function getContext(id: string): Promise<Context> {
-  return json(await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}/context`, 'context', { auth: false }));
+  return json(
+    await req('GET', `/api/v1/statuses/${encodeURIComponent(id)}/context`, 'context', { auth: 'optional' })
+  );
 }
 
 async function fetchAccountList(
