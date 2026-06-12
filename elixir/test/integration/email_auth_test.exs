@@ -143,4 +143,55 @@ defmodule SukhiFedi.Integration.EmailAuthTest do
       assert {:error, :invalid_code} = EmailAuth.confirm_login(email, real)
     end
   end
+
+  describe "signup codes (no account yet)" do
+    test "request → confirm yields a proof of the normalized address" do
+      email = "presign_#{System.unique_integer([:positive])}@example.test"
+
+      assert :ok = EmailAuth.request_signup_code("  " <> String.upcase(email) <> " ")
+      assert {:ok, proof} = EmailAuth.confirm_signup_code(email, code_from_mail(email))
+      assert {:ok, ^email} = EmailAuth.verify_signup_proof(proof)
+    end
+
+    test "garbage proofs verify to nothing" do
+      assert {:error, :invalid_proof} = EmailAuth.verify_signup_proof("garbage")
+      assert {:error, :invalid_proof} = EmailAuth.verify_signup_proof(nil)
+    end
+
+    test "an address with a verified owner is refused", %{account: account, email: email} do
+      :ok = EmailAuth.request_verification(account, email)
+      {:ok, _} = EmailAuth.confirm_verification(account, code_from_mail(email))
+
+      assert {:error, :email_taken} = EmailAuth.request_signup_code(email)
+    end
+
+    test "a wrong signup code burns attempts like the others" do
+      email = "presign_w_#{System.unique_integer([:positive])}@example.test"
+      assert :ok = EmailAuth.request_signup_code(email)
+      real = code_from_mail(email)
+      wrong = if real == "000000", do: "000001", else: "000000"
+
+      assert {:error, :invalid_code} = EmailAuth.confirm_signup_code(email, wrong)
+      assert {:ok, _} = EmailAuth.confirm_signup_code(email, real)
+      # one-shot row
+      assert {:error, :invalid_code} = EmailAuth.confirm_signup_code(email, real)
+    end
+  end
+
+  describe "reauth codes" do
+    test "only a verified address can receive one", %{account: account} do
+      assert {:error, :no_verified_email} = EmailAuth.request_reauth(account)
+    end
+
+    test "request → confirm, single-use", %{account: account, email: email} do
+      :ok = EmailAuth.request_verification(account, email)
+      {:ok, account} = EmailAuth.confirm_verification(account, code_from_mail(email))
+
+      assert :ok = EmailAuth.request_reauth(account)
+      code = code_from_mail(email)
+
+      assert :ok = EmailAuth.confirm_reauth(account, code)
+      assert {:error, :invalid_code} = EmailAuth.confirm_reauth(account, code)
+    end
+  end
 end

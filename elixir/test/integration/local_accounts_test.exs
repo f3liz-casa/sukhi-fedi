@@ -42,10 +42,19 @@ defmodule SukhiFedi.Integration.LocalAccountsTest do
 
   describe "create/1 (signup)" do
     setup do
+      SukhiFedi.Mailer.Capture.clear()
       issuer = "inv_#{System.unique_integer([:positive])}"
       {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
       {:ok, invite} = SukhiFedi.InviteCodes.issue(issuer.id)
       %{invite: invite.code}
+    end
+
+    defp proof_for(email) do
+      :ok = SukhiFedi.Auth.EmailAuth.request_signup_code(email)
+      %{body: body} = SukhiFedi.Mailer.Capture.last_to(email |> String.trim() |> String.downcase())
+      [_, code] = Regex.run(~r/\n\s+(\d{6})\n/, body)
+      {:ok, proof} = SukhiFedi.Auth.EmailAuth.confirm_signup_code(email, code)
+      proof
     end
 
     defp signup_attrs(invite, overrides) do
@@ -54,45 +63,122 @@ defmodule SukhiFedi.Integration.LocalAccountsTest do
       Map.merge(
         %{
           "username" => "signup_#{n}",
-          "password" => "long-enough-pass",
-          "email" => "signup_#{n}@example.test",
+          "email_proof" => proof_for("signup_#{n}@example.test"),
           "invite_code" => invite
         },
         overrides
       )
     end
 
-    test "stores the email normalized and unverified", %{invite: invite} do
-      attrs = signup_attrs(invite, %{"email" => "  Mixed.Case@Example.TEST "})
+    test "born passwordless with the proven address verified", %{invite: invite} do
+      attrs = signup_attrs(invite, %{})
 
       assert {:ok, account} = LocalAccounts.create(attrs)
-      assert account.email == "mixed.case@example.test"
-      assert is_nil(account.email_verified_at)
+      assert account.email =~ "@example.test"
+      assert %DateTime{} = account.email_verified_at
+      assert is_nil(account.password_hash)
+
+      # no password door…
+      assert {:error, :invalid} = LocalAccounts.authenticate(account.username, "anything-here")
+      # …but the email door is open from minute one
+      assert %{id: id} = SukhiFedi.Auth.EmailAuth.login_account_by_email(account.email)
+      assert id == account.id
     end
 
-    test "email is required regardless of anything else", %{invite: invite} do
-      attrs = signup_attrs(invite, %{"email" => nil})
-      assert {:error, {:validation, %{email: [msg]}}} = LocalAccounts.create(attrs)
-      assert msg =~ "入れて"
+    test "the proof carries the normalized address", %{invite: invite} do
+      email = "  Mixed.Case#{System.unique_integer([:positive])}@Example.TEST "
+      attrs = signup_attrs(invite, %{"email_proof" => proof_for(email)})
 
-      attrs = signup_attrs(invite, %{"email" => "   "})
-      assert {:error, {:validation, %{email: _}}} = LocalAccounts.create(attrs)
+      assert {:ok, account} = LocalAccounts.create(attrs)
+      assert account.email == email |> String.trim() |> String.downcase()
     end
 
-    test "a malformed email is refused", %{invite: invite} do
-      attrs = signup_attrs(invite, %{"email" => "not-an-email"})
-      assert {:error, {:validation, %{email: [msg]}}} = LocalAccounts.create(attrs)
-      assert msg =~ "メールアドレス"
+    test "a password may still be set at signup (legacy, optional)", %{invite: invite} do
+      attrs = signup_attrs(invite, %{"password" => "long-enough-pass"})
+      assert {:ok, account} = LocalAccounts.create(attrs)
+      assert is_binary(account.password_hash)
+      assert {:ok, _} = LocalAccounts.authenticate(account.username, "long-enough-pass")
     end
 
-    test "two signups may carry the same (unverified) address", %{invite: invite} do
+    test "a blank password means none, a short one is refused", %{invite: invite} do
+      attrs = signup_attrs(invite, %{"password" => ""})
+      assert {:ok, account} = LocalAccounts.create(attrs)
+      assert is_nil(account.password_hash)
+
+      issuer = "inv3_#{System.unique_integer([:positive])}"
+      {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
+      {:ok, invite2} = SukhiFedi.InviteCodes.issue(issuer.id)
+
+      attrs = signup_attrs(invite2.code, %{"password" => "short"})
+      assert {:error, :password_too_short} = LocalAccounts.create(attrs)
+    end
+
+    test "a missing or garbled proof is refused", %{invite: invite} do
+      attrs = %{
+        "username" => "noproof_#{System.unique_integer([:positive])}",
+        "invite_code" => invite
+      }
+
+      assert {:error, :email_proof_invalid} = LocalAccounts.create(attrs)
+
+      assert {:error, :email_proof_invalid} =
+               LocalAccounts.create(Map.put(attrs, "email_proof", "garbage"))
+    end
+
+    test "a verified address cannot be claimed twice", %{invite: invite} do
+      email = "claimed_#{System.unique_integer([:positive])}@example.test"
+      # two proofs up front — the second simulates a stale-but-valid one
+      proof1 = proof_for(email)
+      proof2 = proof_for(email)
+
+      assert {:ok, _} = LocalAccounts.create(signup_attrs(invite, %{"email_proof" => proof1}))
+
+      # a fresh code request now says taken…
+      assert {:error, :email_taken} = SukhiFedi.Auth.EmailAuth.request_signup_code(email)
+
+      # …and replaying the stale proof trips the unique index
       issuer = "inv2_#{System.unique_integer([:positive])}"
       {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
       {:ok, invite2} = SukhiFedi.InviteCodes.issue(issuer.id)
 
-      shared = "shared_#{System.unique_integer([:positive])}@example.test"
-      assert {:ok, _} = LocalAccounts.create(signup_attrs(invite, %{"email" => shared}))
-      assert {:ok, _} = LocalAccounts.create(signup_attrs(invite2.code, %{"email" => shared}))
+      assert {:error, {:validation, %{email: _}}} =
+               LocalAccounts.create(signup_attrs(invite2.code, %{"email_proof" => proof2}))
+    end
+  end
+
+  describe "set_initial_password/2 and remove_password/1" do
+    setup do
+      SukhiFedi.Mailer.Capture.clear()
+      issuer = "inv_#{System.unique_integer([:positive])}"
+      {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
+      {:ok, invite} = SukhiFedi.InviteCodes.issue(issuer.id)
+      {:ok, account} = LocalAccounts.create(signup_attrs(invite.code, %{}))
+      %{account: account}
+    end
+
+    test "a passwordless account can gain a password, once", %{account: account} do
+      assert {:error, :password_too_short} = LocalAccounts.set_initial_password(account, "short")
+      assert {:ok, with_pw} = LocalAccounts.set_initial_password(account, "first-password")
+      assert {:ok, _} = LocalAccounts.authenticate(account.username, "first-password")
+
+      # with a hash in place, the no-questions-asked door closes
+      assert {:error, :has_password} =
+               LocalAccounts.set_initial_password(with_pw, "other-password")
+    end
+
+    test "removing the password keeps the email door open", %{account: account} do
+      {:ok, with_pw} = LocalAccounts.set_initial_password(account, "first-password")
+
+      assert {:ok, without} = LocalAccounts.remove_password(with_pw)
+      assert is_nil(without.password_hash)
+      assert {:error, :invalid} = LocalAccounts.authenticate(account.username, "first-password")
+      assert %{} = SukhiFedi.Auth.EmailAuth.login_account_by_email(account.email)
+    end
+
+    test "an account without a verified email cannot drop its password" do
+      name = "noemail_#{System.unique_integer([:positive])}"
+      {:ok, admin} = LocalAccounts.create_admin(name, "long-enough-pass")
+      assert {:error, :no_verified_email} = LocalAccounts.remove_password(admin)
     end
   end
 

@@ -18,6 +18,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.Auth.PasskeyLoginController
   alias SukhiFedi.Web.Auth.PasswordController
   alias SukhiFedi.Web.Auth.SecurityController
+  alias SukhiFedi.Web.Auth.SignupEmailController
   alias SukhiFedi.Web.MediaProxyController
 
   plug(Plug.Logger)
@@ -109,7 +110,19 @@ defmodule SukhiFedi.Web.Router do
     LoginController.logout(conn)
   end
 
-  # ── Password change (session_token cookie required) ────────────────────
+  # Pre-signup mailbox proof: code mail + exchange for the signed
+  # email_proof that POST /api/v1/accounts now requires. Accounts are
+  # born with a verified address — that's what makes the password
+  # optional (and legacy).
+  post "/signup/email/request" do
+    SignupEmailController.request(conn)
+  end
+
+  post "/signup/email/confirm" do
+    SignupEmailController.confirm(conn)
+  end
+
+  # ── Password set / change / remove (session_token cookie required) ─────
   # Form in the SPA (`web/src/routes/settings/password`), POST is JSON.
   # Same cookie auth surface as /login (not the OAuth bearer).
 
@@ -119,6 +132,10 @@ defmodule SukhiFedi.Web.Router do
 
   post "/settings/password" do
     PasswordController.submit(conn)
+  end
+
+  post "/settings/password/remove" do
+    PasswordController.remove(conn)
   end
 
   # ── Login-factor management (cookie-gated; see SecurityController) ─────
@@ -132,6 +149,10 @@ defmodule SukhiFedi.Web.Router do
 
   get "/settings/security" do
     serve_spa(conn)
+  end
+
+  post "/settings/reauth/request" do
+    SecurityController.reauth_request(conn)
   end
 
   post "/settings/email/request" do

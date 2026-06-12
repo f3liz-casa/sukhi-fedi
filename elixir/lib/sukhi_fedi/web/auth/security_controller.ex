@@ -5,14 +5,15 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
   the SPA):
 
       GET  /auth/state                      what factors this account has
-      POST /settings/email/request          {email, password?} → code mail
+      POST /settings/reauth/request         → code mail to own verified address
+      POST /settings/email/request          {email, password?|reauth_code?} → code mail
       POST /settings/email/confirm          {code} → email verified
       POST /settings/totp/setup             → {secret, otpauth}
       POST /settings/totp/enable            {code}
-      POST /settings/totp/disable           {password}
+      POST /settings/totp/disable           {password?|reauth_code?}
       POST /settings/passkeys/options       → {ref, publicKey}
       POST /settings/passkeys               {ref, attestation…, nickname}
-      POST /settings/passkeys/:id/delete    {password}
+      POST /settings/passkeys/:id/delete    {password?|reauth_code?}
 
   Mutations are **session-cookie only** (`SessionCookie` moduledoc has
   the why: bearers travel through third-party apps). `GET /auth/state`
@@ -22,7 +23,10 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
   re-login is needed first.
 
   Factor-*removing* changes (TOTP off, passkey delete) and replacing a
-  verified email re-ask the password; factor-*adding* ones don't.
+  verified email re-prove the owner; factor-*adding* ones don't. The
+  proof is the password when the account has one, otherwise a fresh
+  code mailed to the verified address (`reauth_request/1`) — the
+  password is optional/legacy now, so the gate must stand without it.
   """
 
   import Plug.Conn
@@ -57,6 +61,7 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
       manageable: manageable?,
       email: account.email,
       email_verified: not is_nil(account.email_verified_at),
+      has_password: is_binary(account.password_hash),
       totp_enabled: not is_nil(account.totp_enabled_at),
       totp_pending: is_binary(account.totp_secret) and is_nil(account.totp_enabled_at),
       passkeys: Enum.map(Passkeys.list(account), &render_passkey/1)
@@ -84,17 +89,30 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
     end
   end
 
+  # ── reauth (the "prove it's still you" code) ─────────────────────────────
+
+  def reauth_request(conn) do
+    with_session(conn, fn account ->
+      case EmailAuth.request_reauth(account) do
+        :ok -> json(conn, 200, %{ok: true})
+        {:error, :no_verified_email} -> json(conn, 409, %{error: "no_verified_email"})
+        {:error, :rate_limited} -> json(conn, 429, %{error: "rate_limited"})
+        {:error, :send_failed} -> json(conn, 502, %{error: "send_failed"})
+      end
+    end)
+  end
+
   # ── email ────────────────────────────────────────────────────────────────
 
   def email_request(conn) do
     with_session(conn, fn account ->
       email = to_string(conn.body_params["email"] || "")
 
-      with :ok <- maybe_require_password(conn, account),
+      with :ok <- maybe_reauth(conn, account),
            :ok <- EmailAuth.request_verification(account, email) do
         json(conn, 200, %{ok: true})
       else
-        {:error, :password} -> json(conn, 403, %{error: "password"})
+        {:error, :reauth} -> json(conn, 403, %{error: "reauth"})
         {:error, :invalid_email} -> json(conn, 422, %{error: "email"})
         {:error, :email_taken} -> json(conn, 422, %{error: "email_taken"})
         {:error, :rate_limited} -> json(conn, 429, %{error: "rate_limited"})
@@ -117,17 +135,13 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
     end)
   end
 
-  # An account that already proved an address must re-prove the
-  # password to swap it — a hijacked session shouldn't be able to
-  # quietly point email login somewhere else. First-time setup is free.
-  defp maybe_require_password(conn, %Account{email_verified_at: %DateTime{}} = account) do
-    case LocalAccounts.check_password(account, to_string(conn.body_params["password"] || "")) do
-      :ok -> :ok
-      {:error, :invalid} -> {:error, :password}
-    end
-  end
+  # An account that already proved an address must re-prove the owner
+  # to swap it — a hijacked session shouldn't be able to quietly point
+  # email login somewhere else. First-time setup is free.
+  defp maybe_reauth(conn, %Account{email_verified_at: %DateTime{}} = account),
+    do: reauth_ok(conn, account)
 
-  defp maybe_require_password(_conn, %Account{}), do: :ok
+  defp maybe_reauth(_conn, %Account{}), do: :ok
 
   # ── totp ─────────────────────────────────────────────────────────────────
 
@@ -157,13 +171,13 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
 
   def totp_disable(conn) do
     with_session(conn, fn account ->
-      case require_password(conn, account) do
+      case reauth_ok(conn, account) do
         :ok ->
           {:ok, _} = SecondFactor.disable_totp(account)
           json(conn, 200, %{ok: true})
 
-        {:error, :password} ->
-          json(conn, 403, %{error: "password"})
+        {:error, :reauth} ->
+          json(conn, 403, %{error: "reauth"})
       end
     end)
   end
@@ -190,12 +204,12 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
 
   def passkey_delete(conn) do
     with_session(conn, fn account ->
-      with :ok <- require_password(conn, account),
+      with :ok <- reauth_ok(conn, account),
            {id, ""} <- Integer.parse(to_string(conn.path_params["id"] || "")),
            :ok <- Passkeys.delete(account, id) do
         json(conn, 200, %{ok: true})
       else
-        {:error, :password} -> json(conn, 403, %{error: "password"})
+        {:error, :reauth} -> json(conn, 403, %{error: "reauth"})
         {:error, :not_found} -> json(conn, 404, %{error: "not_found"})
         _ -> json(conn, 404, %{error: "not_found"})
       end
@@ -211,10 +225,19 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
     end
   end
 
-  defp require_password(conn, account) do
+  # The single owner-re-proof rule: password when the account has one,
+  # otherwise a fresh reauth code mailed to the verified address.
+  defp reauth_ok(conn, %Account{password_hash: hash} = account) when is_binary(hash) do
     case LocalAccounts.check_password(account, to_string(conn.body_params["password"] || "")) do
       :ok -> :ok
-      {:error, :invalid} -> {:error, :password}
+      {:error, :invalid} -> {:error, :reauth}
+    end
+  end
+
+  defp reauth_ok(conn, %Account{} = account) do
+    case EmailAuth.confirm_reauth(account, to_string(conn.body_params["reauth_code"] || "")) do
+      :ok -> :ok
+      {:error, _} -> {:error, :reauth}
     end
   end
 

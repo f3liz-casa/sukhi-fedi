@@ -27,8 +27,13 @@ defmodule SukhiFedi.LocalAccounts do
 
   @type signup_attrs :: %{
           required(:username) => String.t(),
-          required(:password) => String.t(),
-          required(:email) => String.t(),
+          # Signed proof from `EmailAuth.confirm_signup_code/2` — the
+          # mailbox is proven *before* the account exists, so the row
+          # is born with `email_verified_at` set and email login works
+          # from minute one. That is also what makes the password safe
+          # to skip: a passwordless account always has a working door.
+          required(:email_proof) => String.t(),
+          optional(:password) => String.t() | nil,
           optional(:display_name) => String.t() | nil,
           required(:invite_code) => String.t()
         }
@@ -39,11 +44,12 @@ defmodule SukhiFedi.LocalAccounts do
           | {:error, :invite_used}
           | {:error, :invite_expired}
           | {:error, :invite_missing}
+          | {:error, :email_proof_invalid}
           | {:error, :password_too_short}
           | {:error, {:validation, map()}}
   def create(attrs) when is_map(attrs) do
     with {:ok, normalized} <- normalize(attrs),
-         {:ok, hash} <- hash_password(normalized.password),
+         {:ok, hash} <- maybe_hash_password(normalized.password),
          keys = KeyGen.generate() do
       account_attrs = %{
         username: normalized.username,
@@ -57,8 +63,18 @@ defmodule SukhiFedi.LocalAccounts do
         ed25519_public_multibase: keys.ed25519_public_multibase
       }
 
+      changeset =
+        %Account{}
+        |> Account.changeset_local(account_attrs)
+        # put_change, not cast: the signed proof is the only road to a
+        # verified-at-birth address.
+        |> Ecto.Changeset.put_change(
+          :email_verified_at,
+          DateTime.utc_now() |> DateTime.truncate(:second)
+        )
+
       Multi.new()
-      |> Multi.insert(:account, Account.changeset_local(%Account{}, account_attrs))
+      |> Multi.insert(:account, changeset)
       |> Multi.run(:invite, fn _repo, %{account: %Account{id: id}} ->
         case InviteCodes.consume(normalized.invite_code, id) do
           {:ok, ic} -> {:ok, ic}
@@ -132,13 +148,12 @@ defmodule SukhiFedi.LocalAccounts do
     username = get.(["username", :username]) |> trim_or_nil()
     password = get.(["password", :password])
     invite = get.(["invite_code", :invite_code, "token", :token]) |> trim_or_nil()
-    email = get.(["email", :email]) |> trim_or_nil()
+    proof = get.(["email_proof", :email_proof])
     display_name = get.(["display_name", :display_name]) |> trim_or_nil()
 
-    # Email is required at signup regardless of how the account will
-    # log in (2026-06). It lands unverified — the SPA nudges for the
-    # code round-trip afterwards; only verification claims the address
-    # (see the partial unique index + EmailAuth).
+    # The email arrives as a signed proof (mailbox already opened),
+    # never as a raw address — required regardless of whether a
+    # password is set. The password itself is optional/legacy.
     cond do
       is_nil(invite) ->
         {:error, :invite_missing}
@@ -146,23 +161,20 @@ defmodule SukhiFedi.LocalAccounts do
       is_nil(username) ->
         {:error, {:validation, %{username: ["を入れてください"]}}}
 
-      is_nil(email) ->
-        {:error, {:validation, %{email: ["を入れてください"]}}}
-
       true ->
-        case SukhiFedi.Auth.EmailAuth.normalize_email(email) do
-          {:ok, norm} ->
+        case SukhiFedi.Auth.EmailAuth.verify_signup_proof(proof) do
+          {:ok, email} ->
             {:ok,
              %{
                username: String.downcase(username),
-               password: password || "",
+               password: password,
                invite_code: invite,
-               email: norm,
+               email: email,
                display_name: display_name
              }}
 
-          {:error, :invalid_email} ->
-            {:error, {:validation, %{email: ["の形が、メールアドレスに見えません"]}}}
+          {:error, :invalid_proof} ->
+            {:error, :email_proof_invalid}
         end
     end
   end
@@ -180,6 +192,12 @@ defmodule SukhiFedi.LocalAccounts do
   end
 
   defp hash_password(_), do: {:error, :password_too_short}
+
+  # Signup-side: no password at all is fine (passwordless account);
+  # a present one must still clear the 8-byte floor.
+  defp maybe_hash_password(nil), do: {:ok, nil}
+  defp maybe_hash_password(""), do: {:ok, nil}
+  defp maybe_hash_password(p), do: hash_password(p)
 
   @doc """
   Verify a username + password against a local account, returning the
@@ -266,6 +284,46 @@ defmodule SukhiFedi.LocalAccounts do
       {:error, :password_too_short} -> {:error, :password_too_short}
     end
   end
+
+  @doc """
+  Give a passwordless account its first password. No "current" check —
+  there is nothing to check against — but only when the hash really is
+  absent: an account *with* a password must go through
+  `change_password/3` and prove the old one.
+
+  Adding a factor doesn't lock anyone out (email login keeps working),
+  so no session revocation here.
+  """
+  @spec set_initial_password(Account.t(), String.t()) ::
+          {:ok, Account.t()} | {:error, :has_password | :password_too_short}
+  def set_initial_password(%Account{password_hash: nil} = account, new) when is_binary(new) do
+    with {:ok, hash} <- hash_password(new) do
+      account
+      |> Ecto.Changeset.change(%{password_hash: hash})
+      |> Repo.update()
+    end
+  end
+
+  def set_initial_password(%Account{}, _new), do: {:error, :has_password}
+
+  @doc """
+  Retire the account's password — the "legacy off" switch. Refused
+  while the email is unverified: with no password *and* no email door,
+  only a passkey (or nobody) could ever get back in. The caller gates
+  this behind a fresh re-auth (`SecurityController`); existing
+  sessions stay valid — removing a factor compromises nothing they
+  hold.
+  """
+  @spec remove_password(Account.t()) :: {:ok, Account.t()} | {:error, :no_verified_email}
+  def remove_password(%Account{email_verified_at: %DateTime{}} = account) do
+    # Only the password goes. TOTP stays — it seconds the email door
+    # just as it seconded the password one.
+    account
+    |> Ecto.Changeset.change(%{password_hash: nil})
+    |> Repo.update()
+  end
+
+  def remove_password(%Account{}), do: {:error, :no_verified_email}
 
   @session_ttl_days 30
 

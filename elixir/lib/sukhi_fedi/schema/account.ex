@@ -128,7 +128,10 @@ defmodule SukhiFedi.Schema.Account do
       :ed25519_public_multibase
     ])
     |> put_change(:domain, nil)
-    |> validate_required([:username, :password_hash, :public_key_pem])
+    # password_hash is NOT required — passwordless accounts are the
+    # norm since 2026-06; the verified-at-birth email is the door.
+    # `LocalAccounts` enforces the 8-byte floor when one IS set.
+    |> validate_required([:username, :public_key_pem])
     |> validate_format(:username, ~r/^[a-z0-9_]{1,30}$/,
       message: "は小文字英数字とアンダースコアのみ、30字までです"
     )

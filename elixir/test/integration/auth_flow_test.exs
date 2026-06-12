@@ -236,4 +236,108 @@ defmodule SukhiFedi.Integration.AuthFlowTest do
 
     _ = {u, p}
   end
+
+  # ── the passwordless era ───────────────────────────────────────────────
+
+  defp create_passwordless!(email) do
+    conn = post_json("/signup/email/request", %{email: email})
+    assert conn.status == 200
+    %{body: mail} = Mailer.Capture.last_to(email)
+    [_, code] = Regex.run(~r/\n\s+(\d{6})\n/, mail)
+
+    conn = post_json("/signup/email/confirm", %{email: email, code: code})
+    assert conn.status == 200
+    %{"email_proof" => proof} = body!(conn)
+
+    {:ok, issuer} =
+      LocalAccounts.create_admin("flowinv_#{System.unique_integer([:positive])}", "long-enough-pass")
+
+    {:ok, invite} = SukhiFedi.InviteCodes.issue(issuer.id)
+
+    {:ok, account} =
+      LocalAccounts.create(%{
+        "username" => "pwless_#{System.unique_integer([:positive])}",
+        "email_proof" => proof,
+        "invite_code" => invite.code
+      })
+
+    account
+  end
+
+  defp email_login_cookie!(email) do
+    conn = post_json("/login/email/request", %{email: email})
+    assert conn.status == 200
+    %{body: mail} = Mailer.Capture.last_to(email)
+    [_, code] = Regex.run(~r/\n\s+(\d{6})\n/, mail)
+
+    conn = post_json("/login/email", %{email: email, code: code})
+    assert conn.status == 200
+    session_cookie!(conn)
+  end
+
+  test "signup proof → passwordless account → email login → reauth-gated 2FA off" do
+    email = "pwless_#{System.unique_integer([:positive])}@example.test"
+    account = create_passwordless!(email)
+    assert is_nil(account.password_hash)
+
+    cookie = email_login_cookie!(email)
+
+    conn = get_json("/auth/state", [{"cookie", "session_token=#{cookie}"}])
+    assert %{"has_password" => false, "email_verified" => true} = body!(conn)
+
+    # adding a factor needs no reauth
+    conn = post_json("/settings/totp/setup", %{}, cookie)
+    assert conn.status == 200
+    %{"secret" => secret_b32} = body!(conn)
+    secret = Base.decode32!(secret_b32, padding: false)
+
+    conn = post_json("/settings/totp/enable", %{code: TOTP.code(secret, current_step())}, cookie)
+    assert conn.status == 200
+
+    # removing one without proof is refused
+    conn = post_json("/settings/totp/disable", %{}, cookie)
+    assert conn.status == 403
+    assert %{"error" => "reauth"} = body!(conn)
+
+    # ...but a fresh code to the verified address opens the gate
+    conn = post_json("/settings/reauth/request", %{}, cookie)
+    assert conn.status == 200
+    %{body: mail} = Mailer.Capture.last_to(email)
+    [_, reauth_code] = Regex.run(~r/\n\s+(\d{6})\n/, mail)
+
+    conn = post_json("/settings/totp/disable", %{reauth_code: reauth_code}, cookie)
+    assert conn.status == 200
+  end
+
+  test "password lifecycle: set without current, use, remove, email door stays" do
+    email = "pwlife_#{System.unique_integer([:positive])}@example.test"
+    account = create_passwordless!(email)
+    cookie = email_login_cookie!(email)
+
+    # first password asks for no current one
+    conn =
+      post_json(
+        "/settings/password",
+        %{new_password: "first-password", confirm_password: "first-password"},
+        cookie
+      )
+
+    assert conn.status == 200
+    assert %{"initial" => true} = body!(conn)
+
+    # the legacy door now opens too
+    assert is_binary(login!(account.username, "first-password"))
+
+    # retiring it requires the password itself
+    conn = post_json("/settings/password/remove", %{password: "wrong-password"}, cookie)
+    assert conn.status == 403
+    conn = post_json("/settings/password/remove", %{password: "first-password"}, cookie)
+    assert conn.status == 200
+
+    conn = post_json("/login", %{username: account.username, password: "first-password"})
+    assert conn.status == 401
+
+    conn = get_json("/auth/state", [{"cookie", "session_token=#{cookie}"}])
+    assert %{"has_password" => false, "email_verified" => true} = body!(conn)
+  end
 end

@@ -80,6 +80,12 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
           {:ok, {:error, :password_too_short}} ->
             ok(422, %{error: "password_too_short"})
 
+          # The signed mailbox proof (from /signup/email/confirm) was
+          # missing, garbled, or older than its 20 minutes — the SPA
+          # sends the user back to the code step.
+          {:ok, {:error, :email_proof_invalid}} ->
+            ok(422, %{error: "email_proof_invalid"})
+
           {:ok, {:error, {:validation, details}}} ->
             ok(422, %{error: "validation_failed", details: details})
 
