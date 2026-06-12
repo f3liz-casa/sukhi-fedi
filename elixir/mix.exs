@@ -42,6 +42,14 @@ defmodule SukhiFedi.MixProject do
       # `json_decoder` reference it directly (see config + router.ex).
       {:jason, "~> 1.4"},
 
+      # JSON-LD → RDF + canonicalization (URDNA2015/RDFC-1.0), for the
+      # RsaSignature2017 LD signatures in SukhiFedi.Fedi (the native
+      # replacement of the Bun fedify service). json_ld's default HTTP
+      # loader is never used: contexts are vendored in priv/fedify/contexts
+      # and served by Fedi.Canon.ContextLoader.
+      {:rdf, "~> 3.0"},
+      {:json_ld, "~> 1.0"},
+
       # Database
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.18"},

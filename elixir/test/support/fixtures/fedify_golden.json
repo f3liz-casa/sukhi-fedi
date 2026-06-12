@@ -1,0 +1,655 @@
+{
+  "actor": "https://sukhi.test/users/shiro",
+  "keyId": "https://sukhi.test/users/shiro#main-key",
+  "privateKeyJwk": {
+    "alg": "RS256",
+    "d": "AsDJ3LaaA5vrmi4hg0gU8j3H7w9u5jRCgJHNqF2Hywf8xWpHaM1fxn-0LU1VYG6vrOWhyvPLC0vJMc-53X70GDCb7t1-P5mLM07RbpXQTnxC8sCIzA43SN_-4lNlyO5US8umPqUWLKhaDT-1iFoTQI8MgAuuBYEjDwRzw70hk-lrKiiDvABbGi1HM8SYbgmuWaE6o1Zu2zpXmrFzgb4UAYWv72mlzek6s8BgL8UNhWHUsQnVmiMTKHza45xiG7RnhOKPNiB_dARLKjTrgjN8FefuuKHp-HxgjedcYFVVFdHllCSaL3hxIHf4NdIbNhtmOupmIhHuY8YcFiYUKfBNJO7Mp-SNF-EkwbiAPl1QYJeBW16yfnb6cy5PhuMFzUU9gh_s3aHsAi6dnvGjPoe4XJm0TjwCBfQ8rN5BZy843DLhxRx-WGikQN-WCVqNPpxuPCe-b4w_2G2pPtUtYxbE0DolOBe2knQ_KUdh2u1f7SDGWPvmgrzJFb92LDuuoTEUQEBUWIQDdVHtlaZx_3b1J2yxgWzXCqx6GGBi88CVASoa2rSDZ4oDIP2O7uAem2eakQEcZQ-PhnJ_M4440F1gQ1K8bTX4SUow9kHLwn7QXFtNpLBZAJJdYzndK-9q0XP1sM7ql6oXQ0iFX_sCCUqglCxiSgM4gqSfsN2Q7dkLzBE",
+    "dp": "o1wxILrluHuiu9-OAo6CBQ-V3cPjUlf6kJbBXgPa-wT7lejWV23-SIdfrWO263BJ9OyKCx78_umsXdivZf1e35MrtNu10YbfGN6HcgDdPKnqonG6D8aONu02RuXqhirkEyoeE_OtwR0kqceXAUh9xKm60VdnCJO7eMXXba4UVj43kmxmgynjy3P6GlsIR9tXoQwxuu6UP9iwqB2vbwTpfFTTNgE311gt7mcokL_MRJSACUvtoa_0SzQLUaLEORCmQbrJ7cPSyzUtOe3KAVM4w_d14AvxY4j81EoJJEmGV26UKImRyjXSraz6ZAA-ZjgmCZbwrL-Llpj8ErKLFxQp7Q",
+    "dq": "TWNe-FvIR20rfYMSCIjAJYTw4dKwThOIbHzJBcwxNoGvkg8zuYu16mjpRCYUQ115g4lxwFiqwuc4_u6FiX9AdOTEeoiIqn_1BCrfatwGwWzwCzyVDbM1qbn_8HO5SoPRle1Rfka7nvhceQADjYn2vEgHyua2u5VU9bIiHEJ0Ny70UaULyxKYjgdehyShGtKa7bX-yr3favYMqhsy7PM1RdZNOHkY8Siv0xNoPsug1OEKBz8VXBu-gGpewn3REh--_IyZCSU0U3_BlB0zemKX3KXpn-9JppirKD-1GaTNygTuR4JiH9FSCfQVdIMxsDZxF6FrEAA-Ky7hyyojCpKUAQ",
+    "e": "AQAB",
+    "ext": true,
+    "key_ops": [
+      "sign"
+    ],
+    "kty": "RSA",
+    "n": "tLhDKpy9r44QdvbY3D2KY6VyE8820nhwWcQWCa2PorkqQTLhqhMYHO02hI3T-reIsIT_tU5cndJI6uHuVf6OUUrchd8YJBKNjxj2SdpdcIadNpVCYIdUtfuURmLrGeJfDBvRH5S-l4EO1z1_UyJM8azhWrd3b5-BUIQ5iuDBi8IqxPxIcNhL-letMLzifVuCwCxmT8qLfL0pTkqcSmygTFUanxGQHoWT2ID9CBTYEX9xJPVovMeX9H5Hxc6cdomNQhMy3-NYUuYidYtffOoJRimAFK0IuIkiY365w5x6AZdB-saTkfXPqE2NyRD5ZvbIy5UWlbu2a1ZVKrwzr5sF5JSOHqAMABFYxQ47Vs6vTFrTZTFtPzp-iGeP5Vb9YZfJoXE0bTMkTR0SYDqKaXYdGxiMgwgBAj6w-lhjeGbG-veDyz_yopWZHRkEir6E82tQeQaD3fOOoQ1GlNgFgREGAxEBRV1mwuz4Fu-Bx7JMBbvNuSHNTBUMmjwscKk3H4rVcMHBgIKT6TquycYVPlRTxEp3wfnaSU2C8-DWZBUWxkPFbTCT_tvRUug2xwRnaiapYEe7RtZAUoGWaCoaiEUnaHOhAY_AD_v6xJKVcV_TyqateLLNqvM1avpMtw7Eje-Lpm8dU4xNsvxXn4viaGbxPZDnotOOxLkT1cXj60VgytM",
+    "p": "5EQZWlVKyOP-xlHGIgSs5Ck8eSNBQmaIFjB1Iw8lfdrPqsn_f9JbZ9tHRvbMlxQPnfZ0FTohXu63JwKM4SpZbqB3gz6TjXKBW5CGDliHFm20rdADrRUiUXoKb8jm4cIo-C9XF1wWxqDfmvADBIcNYP1B1OR1xApe7nyDaKRH2nYrNeTd8w4suId7ErS5YDnPcjH9hzN3XKyczqjq5wk_ucbRSE0wWgnU6o4lv5LR5vZG4QIZ29qGIsgLpWIz9gb2AK65xyg1REKMcfvDmxLoXJJ21UAepnzdEEq9yHM_ZYnLkyEk13GLzabbckavjH8tXfZtguvccjXVEzdYSiPVQw",
+    "q": "yq1Nir_XxE--TwtKGnaYXvz0nIRw8vHTenzyRu2TV5mYwSIa7vig9n6QgHv-dbSsiDbjSr73xUIV_xhFUePyyLqH2YEDy7Wu2wGsaqyzsp2kQe3_c1E4mll4QAmX4TKzqOjVO9QSED7OvtF6ksxR58Mm0qUCUKfHzlAe62wzAQO3_FTC8o_AK4nzDcga1qBN6pEmov53lDBdTQLqeiuP-EL6QjFIc-d1J1Ejiq3Tz5GqpG5Jm6x3cv8CbFKyQAIjpRxf0C_E_-DJ3E39n1NWarLOTNvCrdrcp2Ug_vSeRPA1KRdXbd3PLJWZn1oWyWnAopARh1FU55TBvVblsfsTMQ",
+    "qi": "XzTTa4AgEWNTKiu84Z8f1tRKA538oCK23oPjmu4qw1KhNj4pFCwdF6q9RqPNPtnwLGjxqZmLVwJ9jt2dfQFLgp8jllRE74dbPZTgajqdT9S1A1SvrmcwGlSo9YzBLlkDf5yyNW7vhcqq_KVh_SKYDcPXMhaloZXaM3AU2KCghFSbC7eSKdYGYhYVOLzvEsr4GV4DIVnU0VI9pfYb7snYPk_iINWnmGuwt_dVhJ0IkL-eryXqqD6WLVXm9hwuV5lM2wT7wSSs_FAO5ErmCzp1SPMkg9oAxYmHaLfWjBrJ0b_sGk2n5FJ1-i7sCxLjmdhjASuyD4JS1g0FkJRijlp3ug"
+  },
+  "publicKeyJwk": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "ext": true,
+    "key_ops": [
+      "verify"
+    ],
+    "kty": "RSA",
+    "n": "tLhDKpy9r44QdvbY3D2KY6VyE8820nhwWcQWCa2PorkqQTLhqhMYHO02hI3T-reIsIT_tU5cndJI6uHuVf6OUUrchd8YJBKNjxj2SdpdcIadNpVCYIdUtfuURmLrGeJfDBvRH5S-l4EO1z1_UyJM8azhWrd3b5-BUIQ5iuDBi8IqxPxIcNhL-letMLzifVuCwCxmT8qLfL0pTkqcSmygTFUanxGQHoWT2ID9CBTYEX9xJPVovMeX9H5Hxc6cdomNQhMy3-NYUuYidYtffOoJRimAFK0IuIkiY365w5x6AZdB-saTkfXPqE2NyRD5ZvbIy5UWlbu2a1ZVKrwzr5sF5JSOHqAMABFYxQ47Vs6vTFrTZTFtPzp-iGeP5Vb9YZfJoXE0bTMkTR0SYDqKaXYdGxiMgwgBAj6w-lhjeGbG-veDyz_yopWZHRkEir6E82tQeQaD3fOOoQ1GlNgFgREGAxEBRV1mwuz4Fu-Bx7JMBbvNuSHNTBUMmjwscKk3H4rVcMHBgIKT6TquycYVPlRTxEp3wfnaSU2C8-DWZBUWxkPFbTCT_tvRUug2xwRnaiapYEe7RtZAUoGWaCoaiEUnaHOhAY_AD_v6xJKVcV_TyqateLLNqvM1avpMtw7Eje-Lpm8dU4xNsvxXn4viaGbxPZDnotOOxLkT1cXj60VgytM"
+  },
+  "builders": {
+    "note": {
+      "note": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "misskey": "https://misskey-hub.net/ns#",
+            "fedibird": "http://fedibird.com/ns#",
+            "sensitive": "as:sensitive",
+            "votersCount": {
+              "@id": "toot:votersCount",
+              "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "Emoji": "toot:Emoji",
+            "Hashtag": "as:Hashtag",
+            "ChatMessage": "http://litepub.social/ns#ChatMessage",
+            "quote": {
+              "@id": "https://w3id.org/fep/044f#quote",
+              "@type": "@id"
+            },
+            "quoteUrl": "as:quoteUrl",
+            "_misskey_quote": "misskey:_misskey_quote",
+            "quoteUri": "fedibird:quoteUri",
+            "QuoteAuthorization": "https://w3id.org/fep/044f#QuoteAuthorization",
+            "QuoteRequest": "https://w3id.org/fep/044f#QuoteRequest",
+            "quoteAuthorization": {
+              "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+              "@type": "@id"
+            },
+            "emojiReactions": {
+              "@id": "fedibird:emojiReactions",
+              "@type": "@id"
+            }
+          }
+        ],
+        "id": "https://sukhi.test/notes/1/activity",
+        "type": "Create",
+        "actor": "https://sukhi.test/users/shiro",
+        "cc": "https://sukhi.test/users/shiro/followers",
+        "object": {
+          "id": "https://sukhi.test/notes/1",
+          "type": "Note",
+          "attributedTo": "https://sukhi.test/users/shiro",
+          "cc": "https://sukhi.test/users/shiro/followers",
+          "content": "<p>golden fixture — こんにちは</p>",
+          "inReplyTo": "https://remote.test/notes/8",
+          "published": "2026-06-12T06:53:26.709205509Z",
+          "to": "as:Public",
+          "_misskey_content": "<p>golden fixture — こんにちは</p>",
+          "quoteUrl": "https://remote.test/notes/9",
+          "_misskey_quote": "https://remote.test/notes/9",
+          "tag": [
+            {
+              "type": "Link",
+              "mediaType": "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"",
+              "href": "https://remote.test/notes/9",
+              "name": "RE: https://remote.test/notes/9",
+              "rel": "https://misskey-hub.net/ns#_misskey_quote"
+            }
+          ],
+          "attachment": [
+            {
+              "type": "Document",
+              "url": "https://media.sukhi.test/1.webp",
+              "mediaType": "image/webp",
+              "name": "alt text",
+              "width": 800,
+              "height": 600
+            }
+          ]
+        },
+        "to": "as:Public",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.743Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "KBl4oUXjYyF4bk2wTAXcU05SDrpm+KFiG15UYzWssYGRiL6QFTyhR0OTq6ZkqIl3+EZjvm5wNDrirZgZOnftOrpycSTP21X5yGOrdumjgsQPrwdkSxX2fikongM/QXTdfdr1NUbpYgf6ezWWd87Vxa7MxqJ8nosA9sdZ/5ZPPluh3FsJyY7fopqJUfuPBCWhj0qP0mgvvbZADeKSIFqPzDCcn1i3oOEwqrurx6IdMZc3N4Dz/BKPCiyNcKLsCFeQoBDrac59FStBoG7W+sDAoaBhHXlstDd7MZ5/CNs8uJE04altdJ0y+ezFFRYAS2T7nTNObrA8cf8Zon+RXzTYpHWL+ToelE/TC8rsBiswiP/Bloj4TZP9m3TTrT/0B2l3F0LCDvLCeMb8HPpXc7uzWV6vCDCHtjKtNOVdA96gKbKhagZ1xwnWG6I20mWKynXuoCQdToVruDt/3CsOiPx1FBtVqb2ITHw9QUSbjefzYQVA3Y9OHwkVPv+ibbUENyer9zcCXFhZH+e+KR7Jg3nHGpQ3OiUOrFOfR+6+I4aYFqJjrmoLGQ7hVa5ZTVJqk8JttnmlubzMbqLbbnEQzQ1rbIehY3UWH87qBIQwUIcrO8DkaB3ND++gS17io4FGzzF+bVODaM5UgPnWrG3Q0KAgNrGHW87tCpHbPV4VGZQjG6k="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "follow": {
+      "follow": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/v1",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://www.w3.org/ns/did/v1",
+          "https://w3id.org/security/multikey/v1",
+          "https://gotosocial.org/ns"
+        ],
+        "id": "https://sukhi.test/follows/1",
+        "type": "Follow",
+        "actor": "https://sukhi.test/users/shiro",
+        "object": "https://remote.test/users/friend",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.760Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "IxHZIfpqdG02qO5xwigZvwhdLAwJlhSBOwXq4+SK+jS1cOmHELD8V5eTCSFKaUi4fFfOjQon3Xj/9CuLiKvs3zmKKUJNZp+RSwvXf7SKm/8SfUGBTQSvar2fnE1zOWQ16TqbsBUduMwoIJBp8MTXveFyLDR740+I+23iQiedB/t9hUg9/F0yqvK+QmIs2qtB02Sn3+Q1ovGLA+ySTBQfow25dsoqvSSdjlQfCpnDrS1Nu3K61u6P1SngjpHmvrHAj2mUpSPHXthrx04HZGr+ExncSQQfNUyL5JE116OP9XfwspJuOtpwOhepiMDSu7Uj5LhwKZx3G09wvHQiT+AWwTKfYvY2hbTyY/6qec1IcQ9IHFGDxkI9OzrRKxJhMGzzWqYW9UD46p2Fj90+K8zjrjwU+ypOSx0tp+Ft9VMcuGDwx35uEsAXDIb/8cPAcKfm8ptIsfCSISkmIrcUENDHadLqEMZupUqHBzLz7wXJbxJXiRvKj7NU9v1NbkHS5PtJGlzc3tIk7d/VF3GfJO7wFkH39Dxr5NteaVDwneiu/MCuWyOtuThuzZM5RlWaYQZCW8IQ1J1D7wNc5Ik/3HMGziMvIZlGi+hTTP6mk/YeLa1a0OA08vymnz1srfzznBVcLAk8kE8TlQHK7Ht9xYQ1YUrrNgKic5i9rqp38ponvdc="
+        }
+      }
+    },
+    "announce": {
+      "announce": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "misskey": "https://misskey-hub.net/ns#",
+            "fedibird": "http://fedibird.com/ns#",
+            "sensitive": "as:sensitive",
+            "votersCount": {
+              "@id": "toot:votersCount",
+              "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "Emoji": "toot:Emoji",
+            "Hashtag": "as:Hashtag",
+            "quote": {
+              "@id": "https://w3id.org/fep/044f#quote",
+              "@type": "@id"
+            },
+            "quoteUrl": "as:quoteUrl",
+            "_misskey_quote": "misskey:_misskey_quote",
+            "quoteUri": "fedibird:quoteUri",
+            "QuoteAuthorization": "https://w3id.org/fep/044f#QuoteAuthorization",
+            "QuoteRequest": "https://w3id.org/fep/044f#QuoteRequest",
+            "quoteAuthorization": {
+              "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+              "@type": "@id"
+            },
+            "emojiReactions": {
+              "@id": "fedibird:emojiReactions",
+              "@type": "@id"
+            }
+          }
+        ],
+        "id": "https://sukhi.test/announces/1",
+        "type": "Announce",
+        "actor": "https://sukhi.test/users/shiro",
+        "cc": "https://sukhi.test/users/shiro/followers",
+        "object": "https://remote.test/notes/9",
+        "published": "2026-06-12T06:53:26.766206709Z",
+        "to": "as:Public",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.769Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "OlYApMcnVTWGCsLuvQTPloN+nxQha+ArDOPAIe6PkQBNe/P3ypHXyTvOGL9MXPR8+0n1dtidWlk7P9RsHhGR09feL7i0EuWh+AqYBJ/uPGPKPSDV/UjpxX3drOeRPoZ1hcUdc5A5xT9mvzoi/xaN+L8gme5MaYp7fFZiK5sAtJZbAHUu3wJmgc4MloiPGt8vDkFT5z9oJ1qBQDl9glQQADDC4WfsQMIN+OaEi1Ts7l5OyJBhVoU0x7/STSHKreR0kIV7BhU6qYE9fa52+uCz5tjEMoxJgCFBryTLNq2j50g0/je2xmUF6rFQVsgV/C9P3aSUPY15v1vlLWVHovT0vTxuQhzU9wYRY8ALefrJ6Qu+MFi0DzAsICN5B3aZiNXkvBRT9yjwWZQ+kWifXyrDgvWlsItEF1pI1ztoEpFQ0Qrw2xdEAEyvx0rnebpcjh9S0h6B8cfD8nehP5Z8k1JHKCI2vGAcZw9ovmWD/zCiTank0k+ncU6WdpW9qzXRY82JZFd4txqTZcsOUeO7zuuiWeeazZCzIsCtpyXXYEjnrmz/f4BmJzNhwG/bZbDxDqFk/ErrPvQnPTMweEo4YJTEP4jgmy/fTfETMBsdxdZULxDYg6ZiwJVfUuHCRgQ23iC3O5qH6f2MJ6Ganm7IFbpiR1P8l/uDiJhX3NGKjEUrg64="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "like": {
+      "like": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "Emoji": "toot:Emoji"
+          }
+        ],
+        "id": "https://sukhi.test/likes/1",
+        "type": "Like",
+        "actor": "https://sukhi.test/users/shiro",
+        "object": "https://remote.test/notes/9",
+        "published": "2026-06-12T06:53:26.774206766Z",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.777Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "RKSv+hyHHEeDoBuDiBb76xAFfJzMtzXzqJIlO/LHvXk9/9+nUUXC3LWcV+I03BWK1LFMA+HNttsiUblKkARmvybn7wY4Vzt0UiOXfKemikZCTxTHTPWJZE7do7MwxH++0bEfA30Y1mP2SdxnRP6CNWAcpoH4OWsZyrJtxeNalt+ghP/EJMHMi2JR0zGEV2PIhDKAsUnQncvySjuCzIgTnNhQvC7EcYAVDIhj2f5LBUz3fxxlvFg/1Iqh+Tv3Xp/LWuc/rVBpj31jJKaZi3sbeXwLTK2cTL7NStfzfPAYERxg+Du38wCDrDZ0T12dUp0jVAmVQuzy6kR93Hy6y1SWdKZkOcbut40lGz4yPcRCfousCx8kl80Iysx+/oIn3sZxmFTZE6kp9d/G28bBJwy92HOY3hrIS3ZXjhOdEnKZrxmGpB9RAdeW/tDWNIm9X2Y13Am6HmgwuV0csr6WZYSA4uAtkrhUVA7ORf/mYO7CfC+O0+Nkc1xsIuts/Mt4xbycj9mm+ubiIbfHrNchj4Gw2TIzDfqDFJt7XYa5+FgGURldhTAs0a8cqJ0m+YqWeMZrchp/N96+td//N8BXNiPlvNwkPriq9TIn9SAYC5Q9WQWbBG4NR0PJIppXl17a0FsiLztllIfVk7q0XASLHRsX/SGz4bZ6XKv8VLS0tEzPhVQ="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "emoji_react": {
+      "emojiReact": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "Emoji": "toot:Emoji"
+          }
+        ],
+        "id": "https://sukhi.test/likes/2",
+        "type": "Like",
+        "actor": "https://sukhi.test/users/shiro",
+        "content": ":blobcat:",
+        "object": "https://remote.test/notes/9",
+        "published": "2026-06-12T06:53:26.783206774Z",
+        "tag": {
+          "type": "Emoji",
+          "icon": {
+            "type": "Image",
+            "url": "https://sukhi.test/emoji/blobcat.png"
+          },
+          "name": ":blobcat:"
+        },
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.787Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "LDT3czG7d64SeN71PRuUOujWgYnrTYlfvoNcz5FAA1hMu3uyDXrN9l9ZylIWtqNo44ahMCRNcUY61aA0OF1LWY37ZvzyXZ4QEtjNxhy8Q5aqoJUFMri2jwfrtI3VpduEZRrh/dg/U1dJsQEJLHPRjldb2lGZWpJwlWoYi+6QaXdPaIUPfODYNJHsoI+ht8NguuqXJqa17iNzQ6Ih9yazRWr4BxS1NUTHZzHUx4GSYLowERBjdxGYgCRBpt0DTMc+/TJP4c3f+4FwrzHfeIewanEmIlpegd4uT3DxpRhCRW8dM1bMEB9TuEk/XvLKDu5lUEI8XWipBcn7KCjGA8M69YsidjIb1iKggTV9iHn9CTv4MSgnArFkQ5dDy0fMF/f4fAZzwiNDFDulMAg/rbmU91Ny0bLJVjZSAF+k3QfUk8ZvJMFws+c1YL25UPwv+L0Ye4EMAYVPCq69dXtrWEGfCCFS/Xin9+T0o3su6zmMWq/NrqL2Khk5tsSvVyL7GcsnaSGQlqiOVa5phxcv3oMcOJNY33dU/ReMDYbR2wqsoY37HxYSL475VXrvwdSOt0+qNTXxdGCDuwgy1k9zkB8YeRsQl4gJ7LgtNSvp7k7aCfMvWE2Y2XuglULJKaCc8rhHKRxqSanOX8AKOZpkcfCsZ/ur1zO0sPXlAPYKcNXQEyE="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "undo": {
+      "undo": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/v1",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://www.w3.org/ns/did/v1",
+          "https://w3id.org/security/multikey/v1",
+          "https://gotosocial.org/ns",
+          {
+            "litepub": "http://litepub.social/ns#",
+            "toot": "http://joinmastodon.org/ns#",
+            "EmojiReact": "litepub:EmojiReact",
+            "Emoji": "toot:Emoji"
+          }
+        ],
+        "id": "https://sukhi.test/undos/1",
+        "type": "Undo",
+        "actor": "https://sukhi.test/users/shiro",
+        "object": {
+          "id": "https://sukhi.test/likes/1",
+          "type": "Like",
+          "actor": "https://sukhi.test/users/shiro",
+          "object": "https://remote.test/notes/9"
+        },
+        "published": "2026-06-12T06:53:26.793206783Z",
+        "to": "https://remote.test/notes/9",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.796Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "Qa7czmRfc9yL1MoQl2/PuV99KyeTwcskmeeHoCZuH5nnqcV9mauIpjx8cEiQvQWPerdRpB36BigByvVTK4MYis0seLspeJTA783Mncx8hxTXLVBEb9Li3j4s6VJ1edlQCe6D65Z3+SuhERnrHnSsTSol79tSEaix48xvZstG4++UrWkxDsMwGCG1xjx5wKSlR39z5O216Du4YV/y9MyDMX0h86q/sAlapWKOVQPudBuzP+9TxhKrKOYXAoirNsjISGHB8DNSg2mNfP+upjejJ/jMVFLWafLMH1YjUArw4pMn2HeB2Z4i9R/T7Xgz0Dg4uGAyk17BKjBUeE1qe1S/b8+c0jzWge6mCTtm1RqqF+dJ4kVCBABc1ftioDqurajJULBru9eUYYqH3eB1HC305ujZ+/98JxS1nqtex5zsKa8eMgdLk+PoNN233zccz7R/CI2/Ndl32kjLdFbpN9sSUKvIkSvmGNpVy3Uzu8iM8tgMqzxolLn3NQMZUUkyGQd29sxCM0vUVESftvb9yEAP0C6rxsNe4IgqkLQ2meUkxfPKttt27YRYbw5daDdgHjHabMULqieoLFq6MB+VjNMPmQX4umaa5AbyjaJADhB7s/q/VGwKxJ4TNGKrDONQkm5p/b+MfkmltyPeQpIWkPi/HyvKfN1Y/9VDM+mK1TEnMRs="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "delete": {
+      "delete": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "misskey": "https://misskey-hub.net/ns#",
+            "fedibird": "http://fedibird.com/ns#",
+            "sensitive": "as:sensitive",
+            "votersCount": {
+              "@id": "toot:votersCount",
+              "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "Emoji": "toot:Emoji",
+            "Hashtag": "as:Hashtag",
+            "ChatMessage": "http://litepub.social/ns#ChatMessage",
+            "quote": {
+              "@id": "https://w3id.org/fep/044f#quote",
+              "@type": "@id"
+            },
+            "quoteUrl": "as:quoteUrl",
+            "_misskey_quote": "misskey:_misskey_quote",
+            "quoteUri": "fedibird:quoteUri",
+            "QuoteAuthorization": "https://w3id.org/fep/044f#QuoteAuthorization",
+            "QuoteRequest": "https://w3id.org/fep/044f#QuoteRequest",
+            "quoteAuthorization": {
+              "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+              "@type": "@id"
+            }
+          }
+        ],
+        "id": "https://sukhi.test/deletes/1",
+        "type": "Delete",
+        "actor": "https://sukhi.test/users/shiro",
+        "cc": "https://sukhi.test/users/shiro/followers",
+        "object": {
+          "id": "https://sukhi.test/notes/1",
+          "type": "Tombstone"
+        },
+        "published": "2026-06-12T06:53:26.802206793Z",
+        "to": "as:Public",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.806Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "gMCG01xagObAbWFfOSnLQGAC2yWgFTv/Y0Hg/g723yHA/w/snRKGTCNmSq3hqMIq5Vn5y1IpZj6O69imAR20qBkD3k5BL2UM0crxZTvkbYQ/Ur/urg1Ms2p9MRzC+BeTJPj6wFg3UvZyyMwuzNhXCEfL0S3HnsWyodcvsFU0qt33/WDTYmRga5ws+m1agTlvKKvz/IIhrYMQzb5GT6D3DAwmtgz/T0KREKoNiKPEzM9McII/FeyE1A6jXXy/G8WcFtBSN5nubZopyRakpC2R6ii3NWSp4Q5tfZYpQ32Rzu1YMKj96/tVq0pJLepIIwTPE0kbAoVGBX1h4cYecw0jRwdFirBoVtCbEN3+4HydEzvyJvh+U7zx8Ry9VmdPxzatYwlhwJMmnXHLgY5+7iyiDbllK4SHixEl6a2QhxsMZAE0vCWDL+TU55/TnJboNkiJZkIt9x/tRk4Ve761vtHj6UTQ6b1YFSSYlpSEVrpGVtzCAg2ls00/lLLYthxsE1eNgyhfiHUtCWqc0ECQr8DAj/miwqKNIZ62073+DpdMnb1C/cnye3ePfww2kkcLBES/kDujWN54e9H1Cv5mULucLUNVsXlMQc7D9pc+JBGZscGCSHZF8uUdpQ/LtUWhjYwD7zwOCaHih8xe5bztiOjwFq51/quexJWCgv4jnHeQQbc="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    },
+    "add": {
+      "activity": {
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns"
+        ],
+        "id": "https://sukhi.test/adds/1",
+        "type": "Add",
+        "actor": "https://sukhi.test/users/shiro",
+        "object": "https://sukhi.test/notes/1",
+        "target": "https://sukhi.test/users/shiro/collections/featured",
+        "signature": {
+          "@context": "https://w3id.org/identity/v1",
+          "creator": "https://sukhi.test/users/shiro#main-key",
+          "created": "2026-06-12T06:53:26.814Z",
+          "type": "RsaSignature2017",
+          "signatureValue": "Drwnfk235RDhUyRkF+zqQ7aCtaRB2VQjqdD53OzlPLELMmh7oidwd3wnWzou5OT4xCtvFvcOwbZhxAc6YjT9G+asWq++K3tyHRKgOVwuPN7DnfHDqzkVEQQll0cpdXqBNjYOYUtIL4m4Bm6dcYsJLjo4EE4I47fZKj0dvvH5dLZ7EZp1BjsQ183Ji4XhDqlWOaJvYW2D6sNf22eqFifDYOF4CNGQDlcvPul+NfmbWcy7E8zmnNVnuiIg/ymysIJs7iWL9hVoYzxNLWMemMLX3j2qW8AixHVptoy9T815M29HZ/LLoHQEnvqJB5UMR2dTG8ku29xFVfeMqn0hSNm17mpkatXm2rXzh0jgr1Zv2urnXgg6NSySorzzUKbqo2N5u0f9YnordLtuZib5Zx311/J8uJ+OBWZ/S/oRGCojizdlDnMtJ0cPD+pqZspQ/+0YG1DK4CxUecTh/wl5ol5ixrNVGFvwo/6fuXiJoqsaGSQfmA21IDndpp5lhK8j1wQ8yTxk9MoZLsSElJb/uK8SpEzuIxL5TctnV9criN8C202Xw7XADpMTyZamlihjvT7R9HIsp+X39sdkdiItiQloPAlklo+tSmEUAda97tonKvfhYjUkaDj3U1qt1Yd3zCcdhLn+XI2TbiAwRNIPkkpScxs0ZGj9kWiFB+53aIL6GYw="
+        }
+      },
+      "recipientInboxes": [
+        "https://remote.test/inbox"
+      ]
+    }
+  },
+  "http_signature": {
+    "url": "https://remote.test/inbox",
+    "method": "POST",
+    "body": "{\"hello\":\"world\"}",
+    "headers": {
+      "content-type": "application/activity+json",
+      "date": "Fri, 12 Jun 2026 06:53:26 GMT",
+      "digest": "SHA-256=k6I5cakU5erL8KjSUVTNownDwccvu5kU1Hxg88toFYg=",
+      "host": "remote.test",
+      "signature": "keyId=\"https://sukhi.test/users/shiro#main-key\",algorithm=\"rsa-sha256\",headers=\"(request-target) content-type date digest host\",signature=\"DHd3MtES+NFwilINc4b7pEKLa5mTMhaNU850yhL8MjsMmQTw7/prHNNlda//5TbVkAelKe5/Fm1jogUmfwmquHRbxhLHW69w0W1D1ENeCoY6t4cg6UB11a5RjruaNkm0laz9Wcdz3HdbqkdjWoFWd8RWd6nENjFAit5x1CeaZcLeDio+QxuSx9x+N2ZvTasBWYvofDbbtiqaI0vMLkhoUS9NLii5volmIIqbFFXyrsn1P8ZNPj3Sep4A73XETISYxBVkEnpNKtXA0c4Ly83mRUQROvKq52tTJLEYIb8RVxJPfhV0VXmWChnIC8w3wkZODL9JbS4biqn4LEqbEsFaEslwQabxEEZZ9/2vXVAoyj7odd7SZM6ol9JaFRRGjpn4Ocm82urMVYiJDZgIG/hMRyJVsnq9cyPUo3h9gmYKgwcv4nTsquyEQcw9WPWGOTTuJ6IEF+t855KU6N113Cb4ytNnEhbfAtEanbUMY6TVNbEzREfB9Ad/QwVu7v3cOW8lMka8MyDSYpiWJwN8lao8MRUjdxdimQLdvMCfFMtbA0sSg0Ozr6AAzIVOa7QSYdQxirSXeG2G5LmtZ5UahVprRrKEGNB5uT5SktPHjebM9KxVHjPwWrG0thnWGN6qiHjETLRIMRbQqWzlRYQnfNWlv4hzN895Ay8SCdkYhXyLfnU=\""
+    }
+  },
+  "http_signature_rfc9421": {
+    "url": "https://remote.test/inbox",
+    "method": "POST",
+    "body": "{\"hello\":\"world\"}",
+    "headers": {
+      "content-digest": "sha-256=:k6I5cakU5erL8KjSUVTNownDwccvu5kU1Hxg88toFYg=:",
+      "content-type": "application/activity+json",
+      "date": "Fri, 12 Jun 2026 06:53:26 GMT",
+      "host": "remote.test",
+      "signature": "sig1=:XIpROb4UAIJXRtQkochaF1GlYjcygqjpWxR/9hrzwme1nkPJ/+aoiKDNPxqZnLiuodj2H2h7CoXIf3Q9itVlMrP/srAlgDmA3Msn16Ljo8yhMwaiaW1CRHgPQuMCe63a5gteCegWNnPUFjGl05Y2GKftSEdKqpt/mydZ1419Mp44m+pXxDokdOjP9ubgCq9RklZqOfqA2NzIXEc/JO9OVnmBW5SYTtZvdmLptjMV8I8Yc1TA9VuNZQte6mfSsT45rzLlrgjWVELC2KtBARxJT0TcGNF8dc0W2AlJV34qa1mYPUCFQiVRdwS88xjfCAdtRD0ZoNQ6DvkvsF0zNYoqR7eCbo/xTe0rvhkpH8cfiP8eRGTofFW6p6XMrgQzvDtDsfKZbrbBaDWiuH+gvzGDPutxAn/mR+9VLh+loYytQidkXHd/NZAS9C6nJX9tVhKRk9757TaTGpMQxX3anPXNZwsp/P2QR4vuzSoxWKPRNYXYSOudXfsNSUc30K25PPTx8KsgKl3Lld0QRSgQZ4KifaJ4f1vI7sZMb5qBghHA5KkZcnGbTISyAVR7SHEWCsESLzQau4JGgQ/mOYbSDf3djSykZw9TBe3q8VY9ve4mDSaL5AQOHrQA+BeS9vc0RZ8oqUB+3Q7BY69x3R55408KWLkLzuI3aDosNWQBEqj4yQI=:",
+      "signature-input": "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"host\" \"date\" \"content-digest\");alg=\"rsa-v1_5-sha256\";keyid=\"https://sukhi.test/users/shiro#main-key\";created=1781247206"
+    }
+  },
+  "ld_signatures": {
+    "announce_canonical": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/security/v1",
+        "https://w3id.org/security/data-integrity/v1",
+        {
+          "toot": "http://joinmastodon.org/ns#",
+          "misskey": "https://misskey-hub.net/ns#",
+          "sensitive": "as:sensitive",
+          "Hashtag": "as:Hashtag",
+          "Emoji": "toot:Emoji",
+          "_misskey_content": "misskey:_misskey_content",
+          "_misskey_quote": "misskey:_misskey_quote",
+          "quoteUrl": "as:quoteUrl"
+        }
+      ],
+      "id": "https://sukhi.test/announces/2",
+      "type": "Announce",
+      "actor": "https://sukhi.test/users/shiro",
+      "object": "https://remote.test/notes/9",
+      "published": "2026-06-11T08:00:00Z",
+      "to": [
+        "https://www.w3.org/ns/activitystreams#Public"
+      ],
+      "cc": [
+        "https://sukhi.test/users/shiro/followers"
+      ],
+      "signature": {
+        "@context": "https://w3id.org/identity/v1",
+        "creator": "https://sukhi.test/users/shiro#main-key",
+        "created": "2026-06-12T06:53:26.819Z",
+        "type": "RsaSignature2017",
+        "signatureValue": "BzPwvgEeN1RESMxvxGA69sdafYYC4rGQEOcuO85GDSp1G12GTtIqyqCr3EZuPQ5ba5W7DUM7NFDqIV25he2nRGIfuEfwu8opzjM+lD2VMLKHmoHRL9R+dikCcWwX/o6+Pc0Obrq/pOapsPCNcYobzZNBHiUTZqV946jJ9mJsrYmRB3A95JxJjqwBi1L0GWzFTbhqSe0qQTdEB748wYc5R8wT00hdL2YcSqM7G17qxK92N6nonxxla10jnjuL6sb4SgTVsw9MLZMG6c0kbGPnlFUZiKSmebFbBav/zLlnLaEjqk3M90VO8BnUTOgQt0/zeXCZGqjKt3aaK1BN6R3HSAx4arxVWd/g33l2CLLt54wVAJh7So8oxxI8VmWn1wIid1cJm4JcxK8Y75c+MdcOQZFc0OBEpdL62FFGPYbj0SxLflH/WWxLTN4S3Pk1pOOfJklvKFCm8sXjExDgw/HXoXg+CxBgCN2rZTJZuXbr8jKtq/o4LLa5ZLpkEBGuEXLUPHlfcpvGkWgxgYCRFLKfMHqrGjAUVIMaiXdaTMqL7mjLjkZ02e6rNLQ40ywJcc5x1v9Vh+VwA27S2ec81/m2sNntEhyEgLaphFFeYGvUdFvZJWGud5UWr7nM6o6vB/ibQQYqvLjDi7baFgyMQyPg2vSICrTCTn8G1hileIwifvY="
+      }
+    },
+    "note_canonical": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/security/v1",
+        "https://w3id.org/security/data-integrity/v1",
+        {
+          "toot": "http://joinmastodon.org/ns#",
+          "misskey": "https://misskey-hub.net/ns#",
+          "sensitive": "as:sensitive",
+          "Hashtag": "as:Hashtag",
+          "Emoji": "toot:Emoji",
+          "_misskey_content": "misskey:_misskey_content",
+          "_misskey_quote": "misskey:_misskey_quote",
+          "quoteUrl": "as:quoteUrl"
+        }
+      ],
+      "id": "https://sukhi.test/notes/3/activity",
+      "type": "Create",
+      "actor": "https://sukhi.test/users/shiro",
+      "to": [
+        "https://www.w3.org/ns/activitystreams#Public"
+      ],
+      "cc": [
+        "https://sukhi.test/users/shiro/followers"
+      ],
+      "object": {
+        "id": "https://sukhi.test/notes/3",
+        "type": "Note",
+        "attributedTo": "https://sukhi.test/users/shiro",
+        "content": "<p>canonical timestamps — こんにちは</p>",
+        "published": "2026-06-11T08:00:00Z",
+        "to": [
+          "https://www.w3.org/ns/activitystreams#Public"
+        ],
+        "cc": [
+          "https://sukhi.test/users/shiro/followers"
+        ],
+        "inReplyTo": "https://remote.test/notes/8",
+        "tag": [
+          {
+            "type": "Emoji",
+            "name": ":blobcat:",
+            "icon": {
+              "type": "Image",
+              "url": "https://sukhi.test/emoji/blobcat.png"
+            }
+          }
+        ],
+        "attachment": [
+          {
+            "type": "Document",
+            "url": "https://media.sukhi.test/1.webp",
+            "mediaType": "image/webp",
+            "width": 800,
+            "height": 600
+          }
+        ]
+      },
+      "signature": {
+        "@context": "https://w3id.org/identity/v1",
+        "creator": "https://sukhi.test/users/shiro#main-key",
+        "created": "2026-06-12T06:53:26.826Z",
+        "type": "RsaSignature2017",
+        "signatureValue": "a8nq8nJtanBu7gxQTDnvn+hJaXGIWYIlKa/BhMXUhjczWc2MXL+Rn4Nfb/XVplwYfCXA/ZgVXLwUQDAzHTX0mwhDYZ94HVz70uQqA6PjFOXo5bTwJK77Jr+t/T0FHAC3M0V3iVj/YV3sdNfyLJ6O2QrOGFqaMaLZzCCL+nHPFpz/WiT6qK2QtrJbttdTfw14vIlMc5VLoHGWegI61upiSHEegci/PDpEWCtfD9UPMz6pRWBoYvuRjUuTNlP1wbAVyeqvKBbHNRkek3OZ9ORAVVQWw0+f7CmXAaCH3WnM8rseWYgA6oHS1W6zQKpUR0yO9pAO9iHFsGctlaqvUlpkmaITo6qZVi/BCmeK/FHcGbLk35c4bnE+T6LdS9Z5t/wo4+Gv2F5pXXBEo5QeHs6xV3hClBO+X1cMBUs5kmzQuQaVNyNxsVKiRqjNIALSv06ckBp3dyIVFDlznkv55EhXAEmK6tg+l5i8A4+eoN4X5xhy0QLIcCIeWXcYTEMF4Loa6XA1qfbZCGVZJjXKGa95OFkiRrfA3hJFZhThLu9qyUGaVutV9MfyfoMrJAAUWt2GX2pNNA9P5cmcH/5jp3DC3t4QZPGTrXaw5aVlSjYoqYC1Hb3xsGYnINfM353piAV2WNc7xMtK9GLLo0yNe5ug1YMtEeS5btKKiuRNnzIrBsY="
+      }
+    }
+  },
+  "oip": {
+    "keyId": "https://sukhi.test/users/shiro#ed25519-key",
+    "privateKeyJwk": {
+      "crv": "Ed25519",
+      "d": "SAPJAWCHRpvFcybT_UenpVNniueqtlnL9vNLjHLFnhs",
+      "ext": true,
+      "key_ops": [
+        "sign"
+      ],
+      "kty": "OKP",
+      "x": "B7_zN51jM22Ilv2RiU5LrRqUM8IjjU9PvlX_BQM8KHk",
+      "alg": "Ed25519"
+    },
+    "publicKeyJwk": {
+      "crv": "Ed25519",
+      "ext": true,
+      "key_ops": [
+        "verify"
+      ],
+      "kty": "OKP",
+      "x": "B7_zN51jM22Ilv2RiU5LrRqUM8IjjU9PvlX_BQM8KHk",
+      "alg": "Ed25519"
+    },
+    "multikey": {
+      "controller": "https://sukhi.test/users/shiro",
+      "publicKeyMultibase": "z6MkeyWfHn6UfwVpQHaS4iYBrAzw6Pc2NcBLX4kj3d7md2FA",
+      "type": "Multikey",
+      "id": "https://sukhi.test/users/shiro#ed25519-key",
+      "@context": "https://w3id.org/security/multikey/v1"
+    },
+    "actor_document": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/security/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/data-integrity/v1"
+      ],
+      "id": "https://sukhi.test/users/shiro",
+      "type": "Person",
+      "preferredUsername": "shiro",
+      "inbox": "https://sukhi.test/users/shiro/inbox",
+      "assertionMethod": [
+        {
+          "controller": "https://sukhi.test/users/shiro",
+          "publicKeyMultibase": "z6MkeyWfHn6UfwVpQHaS4iYBrAzw6Pc2NcBLX4kj3d7md2FA",
+          "type": "Multikey",
+          "id": "https://sukhi.test/users/shiro#ed25519-key",
+          "@context": "https://w3id.org/security/multikey/v1"
+        }
+      ]
+    },
+    "created": "2026-06-11T08:00:00Z",
+    "announce_with_proof": {
+      "@context": [
+        "https://w3id.org/identity/v1",
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/security/data-integrity/v1",
+        "https://gotosocial.org/ns",
+        {
+          "toot": "http://joinmastodon.org/ns#",
+          "misskey": "https://misskey-hub.net/ns#",
+          "fedibird": "http://fedibird.com/ns#",
+          "sensitive": "as:sensitive",
+          "votersCount": {
+            "@id": "toot:votersCount",
+            "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+          },
+          "Emoji": "toot:Emoji",
+          "Hashtag": "as:Hashtag",
+          "quote": {
+            "@id": "https://w3id.org/fep/044f#quote",
+            "@type": "@id"
+          },
+          "quoteUrl": "as:quoteUrl",
+          "_misskey_quote": "misskey:_misskey_quote",
+          "quoteUri": "fedibird:quoteUri",
+          "QuoteAuthorization": "https://w3id.org/fep/044f#QuoteAuthorization",
+          "QuoteRequest": "https://w3id.org/fep/044f#QuoteRequest",
+          "quoteAuthorization": {
+            "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+            "@type": "@id"
+          },
+          "emojiReactions": {
+            "@id": "fedibird:emojiReactions",
+            "@type": "@id"
+          }
+        }
+      ],
+      "id": "https://sukhi.test/announces/3",
+      "type": "Announce",
+      "proof": {
+        "type": "DataIntegrityProof",
+        "created": "2026-06-11T08:00:00Z",
+        "cryptosuite": "eddsa-jcs-2022",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z671Q7j7JnW2ZcGCv8YkGwVgRYybV5NeQxn8pnJSZD9bG3E4A1D7uXC4m9UhmqhLz6UpUYo5CgcT5ngH72D7sTsxM",
+        "verificationMethod": "https://sukhi.test/users/shiro#ed25519-key",
+        "@context": [
+          "https://w3id.org/identity/v1",
+          "https://www.w3.org/ns/activitystreams",
+          "https://w3id.org/security/data-integrity/v1",
+          "https://gotosocial.org/ns",
+          {
+            "toot": "http://joinmastodon.org/ns#",
+            "misskey": "https://misskey-hub.net/ns#",
+            "fedibird": "http://fedibird.com/ns#",
+            "sensitive": "as:sensitive",
+            "votersCount": {
+              "@id": "toot:votersCount",
+              "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "Emoji": "toot:Emoji",
+            "Hashtag": "as:Hashtag",
+            "quote": {
+              "@id": "https://w3id.org/fep/044f#quote",
+              "@type": "@id"
+            },
+            "quoteUrl": "as:quoteUrl",
+            "_misskey_quote": "misskey:_misskey_quote",
+            "quoteUri": "fedibird:quoteUri",
+            "QuoteAuthorization": "https://w3id.org/fep/044f#QuoteAuthorization",
+            "QuoteRequest": "https://w3id.org/fep/044f#QuoteRequest",
+            "quoteAuthorization": {
+              "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+              "@type": "@id"
+            },
+            "emojiReactions": {
+              "@id": "fedibird:emojiReactions",
+              "@type": "@id"
+            }
+          }
+        ]
+      },
+      "actor": "https://sukhi.test/users/shiro",
+      "cc": "https://sukhi.test/users/shiro/followers",
+      "object": "https://remote.test/notes/9",
+      "published": "2026-06-11T08:00:00Z",
+      "to": "https://www.w3.org/ns/activitystreams#Public"
+    }
+  }
+}

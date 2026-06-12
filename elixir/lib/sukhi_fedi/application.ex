@@ -22,6 +22,11 @@ defmodule SukhiFedi.Application do
        pools: %{
          default: [size: 50, count: 4]
        }},
+      # Native fedify.*.v1 NATS service (SukhiFedi.Fedi) — replaces the
+      # Bun sidecar. It shares the `fedify-workers` queue group with any
+      # Bun replica still running, so cutover is "stop the bun container".
+      # After Cache.Ets (key cache) and Finch (remote fetch).
+      {Gnat.ConsumerSupervisor, fedi_consumer_settings()},
       {Oban, [name: SukhiFedi.Oban] ++ Application.fetch_env!(:sukhi_fedi, Oban)}
     ]
 
@@ -36,6 +41,16 @@ defmodule SukhiFedi.Application do
     Task.start(fn -> SukhiFedi.Addons.Media.Bootstrap.ensure_bucket() end)
 
     result
+  end
+
+  defp fedi_consumer_settings do
+    %{
+      connection_name: :gnat,
+      module: SukhiFedi.Fedi.Service,
+      subscription_topics: [
+        %{topic: "fedify.>", queue_group: "fedify-workers"}
+      ]
+    }
   end
 
   defp nats_connection_settings do
