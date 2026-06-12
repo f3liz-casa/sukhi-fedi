@@ -51,6 +51,21 @@ top — those win.
 | `NATS_URL` | no | — | bun only. Full URL form, e.g. `nats://sukhi-fedi-nats:4222`. |
 | `METRICS_PORT` | no | `4001` | delivery only. Prometheus scrape port for delivery worker metrics. |
 
+## Transactional mail (gateway)
+
+Email verification + login codes go out through `SukhiFedi.Mailer`.
+With `SMTP_HOST` unset the log transport is used: mails land in the
+gateway log instead of a mailbox — fine for dev, visibly broken on
+purpose in prod.
+
+| Var | Required | Default | Notes |
+|---|---|---|---|
+| `SMTP_HOST` | no | — (log transport) | SMTP relay. OCI Email Delivery: `smtp.email.<region>.oci.oraclecloud.com` (Osaka: `ap-osaka-1`). Setting it makes the other four **required** (`fetch_env!`). |
+| `SMTP_PORT` | no | `587` | STARTTLS submission port. The Mailer always negotiates TLS and verifies the server certificate. |
+| `SMTP_USERNAME` | with `SMTP_HOST` | — | OCI: an IAM user's *SMTP credential* username (long OCID form). Treat as secret. |
+| `SMTP_PASSWORD` | with `SMTP_HOST` | — | Shown exactly once at credential generation. Treat as secret. |
+| `MAIL_FROM` | with `SMTP_HOST` | `no-reply@localhost` (dev) | The From/envelope sender. OCI: must be a registered **approved sender** in the same region; pair with the SPF/DKIM records on its domain. |
+
 ## Addons (gateway, api)
 
 The addon system gates feature surface (Mastodon API, federation
@@ -139,6 +154,13 @@ POSTGRES_USER=sukhi
 # Image source
 SUKHI_REPO_OWNER=f3liz-casa
 SUKHI_VERSION=v0
+
+# Mail (signup verification / login codes). Optional — but without it
+# codes only land in the gateway log, so real signups can't verify.
+SMTP_HOST=smtp.email.ap-osaka-1.oci.oraclecloud.com
+SMTP_USERNAME="<IAM user → SMTP credentials>"
+SMTP_PASSWORD="<shown once at generation>"
+MAIL_FROM=no-reply@sukhi.f3liz.casa
 ```
 
 Everything else has sane defaults wired into compose / Kamal config.

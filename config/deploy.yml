@@ -206,12 +206,22 @@ accessories:
         S3_ENDPOINT: http://sukhi-fedi-rustfs:9000
         S3_BUCKET: media
         S3_REGION: us-east-1
+        # Transactional mail (verification / login codes) via OCI Email
+        # Delivery, Osaka region. 587 = STARTTLS; the Mailer verifies the
+        # server cert. MAIL_FROM must be an *approved sender* in the same
+        # region, and SMTP_USERNAME/PASSWORD below come from an IAM
+        # user's "SMTP credentials" (see .kamal/secrets.example).
+        SMTP_HOST: smtp.email.ap-osaka-1.oci.oraclecloud.com
+        SMTP_PORT: "587"
+        MAIL_FROM: no-reply@sukhi.f3liz.casa
       secret:
         - DB_PASS
         - ERLANG_COOKIE
         - SECRET_KEY_BASE
         - S3_ACCESS_KEY_ID
         - S3_SECRET_ACCESS_KEY
+        - SMTP_USERNAME
+        - SMTP_PASSWORD
     options:
       # `elixir` hostname is still required: gateway's BEAM is
       # `gateway@elixir`. Other containers reach it via the
