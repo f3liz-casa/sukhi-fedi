@@ -322,6 +322,11 @@ accessories:
       memory: 512m
       cpus: "0.5"
 
+  # RETIRED 2026-06-12 (v0.3.0): the native SukhiFedi.Fedi service inside
+  # the gateway serves all fedify.*.v1 subjects now. The container is
+  # *stopped*, not removed — rollback is `kamal accessory start bun`
+  # (both share the fedify-workers queue group, so coexistence is safe).
+  # Drop this whole block once the native service has burned in.
   bun:
     image: 127.0.0.1:5000/sukhi-fedi-bun:v0
     host: 217.142.242.103
