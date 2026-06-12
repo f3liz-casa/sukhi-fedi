@@ -292,10 +292,9 @@ defmodule SukhiFedi.Addons.Media do
   defp hmac(key, data), do: :crypto.mac(:hmac, :sha256, key, data)
 
   defp public_url(key) do
-    if base = s3_public_url() do
-      "#{base}/#{key}"
-    else
-      "#{s3_endpoint()}/#{s3_bucket_name()}/#{key}"
+    case s3_public_url() do
+      nil -> "#{s3_endpoint()}/#{s3_bucket_name()}/#{key}"
+      base -> "#{base}/#{key}"
     end
   end
 

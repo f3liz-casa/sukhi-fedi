@@ -47,7 +47,7 @@ defmodule SukhiFedi.Web.ViewerController do
   def register_watcher(conn, _opts) do
     with raw when is_binary(raw) <- conn.params["domain"] || :missing,
          domain <- normalize_domain(raw),
-         true <- valid_domain?(domain) || :invalid,
+         true <- valid_domain?(domain),
          {:ok, snap} <- NodeinfoFetcher.fetch(domain) do
       status = if Repo.get_by(Account, monitored_domain: domain), do: :already_exists, else: :created
 
@@ -70,9 +70,6 @@ defmodule SukhiFedi.Web.ViewerController do
     else
       :missing ->
         send_json(conn, 400, %{error: "missing 'domain'"})
-
-      :invalid ->
-        send_json(conn, 400, %{error: "invalid domain"})
 
       false ->
         send_json(conn, 400, %{error: "invalid domain"})

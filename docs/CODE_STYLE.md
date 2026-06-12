@@ -152,8 +152,52 @@ Before opening a PR, walk the path of the new data:
 - [ ] Outbound URL influenced by remote data passes `UrlGuard.safe?/1`.
 - [ ] Durable side effects share the domain write's `Ecto.Multi`.
 - [ ] Each function sits on one row of the layer map (§1).
+- [ ] Matches assert rather than rebind: pins/literals in clauses, no
+      `=` inside `if` conditions, compile is warning-clean (§8).
 
-## 8. Known debt (recorded, not hidden)
+## 8. Pattern matching: the compiler holds the invariant
+
+C codebases write `if (true == a)` so the `=`/`==` typo refuses to
+compile. Same move here: write matches so a slip is a compile
+warning or a loud `MatchError`, never a silently-wrong branch.
+
+- **Branch on shape with matches, not `==` chains.** Function heads
+  and `case` literals fail loudly when reality changes; an
+  `if x == :thing` chain just takes the other branch. (`==` against
+  a literal to *build a value* is fine.)
+- **Pin what you compare.** In `case`/`with`/`receive` clauses a
+  bare variable always matches — it *binds*, it doesn't compare.
+  When the intent is "equals the existing binding", write
+  `^expected ->`. A bare-variable clause shadowing an outer binding
+  is a bug until proven otherwise (today: zero in tree; keep it so).
+- **Assert results with a literal on the left.** When failure is a
+  bug, `{:ok, x} = ...` / `:ok = ...` crashes at the cause.
+  Discarding with `_ = ...` needs a comment saying why the result
+  doesn't matter (`addons/web_push.ex:60` is the sanctioned shape).
+- **No `=` inside `if`/`unless` conditions.** `if x = f()` is one
+  keystroke from `if x == f()` and both compile. Bind on its own
+  line, then branch — or use `case` on the value
+  (`addons/media.ex:294`, `config/runtime.exs:62`).
+- **Don't launder falsy values through sentinels.** `with`'s
+  `true <- valid? || :invalid` breeds unreachable `false ->`
+  clauses; match the falsy value in `else` directly
+  (`web/viewer_controller.ex:50`).
+- **Normalize untrusted truthiness once, strictly, at the edge.**
+  Remote JSON booleans become exactly `value == true`
+  (`ap/instructions/dms.ex:157`); anything else is `false`. Inside
+  the boundary, booleans are booleans.
+- **No dead clauses.** A clause the type system proves unreachable
+  is recorded drift. `scripts/test-pglite.sh` compiles with
+  `--warnings-as-errors`, so these fail the suite instead of
+  scrolling past.
+- **Match every RPC result.** `GatewayRpc.call` answers `{:ok, inner}`
+  (inner shape = whatever the remote function returns, so `{:ok,
+  {:ok, _}}` is normal) or transport `{:error, _}` → `rpc_error/1`.
+  The type checker cannot see across `:rpc.call`, so these shapes are
+  held by hand — an ignored result turns a gateway outage into a
+  fake 200 (moderation, fixed 2026-06-12).
+
+## 9. Known debt (recorded, not hidden)
 
 Places that currently span layers; touch them by *shrinking* the mix,
 and don't copy their shape:

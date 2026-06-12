@@ -328,7 +328,6 @@ defmodule SukhiApi.Capabilities.OAuth do
     end
   end
 
-  defp parse_form_body(nil), do: %{}
   defp parse_form_body(""), do: %{}
 
   defp parse_form_body(body) when is_binary(body) do

@@ -44,6 +44,10 @@ for _ in $(seq 1 100); do
 done
 
 cd "$ROOT/elixir"
+# Unreachable clauses / dead matches surface as compiler warnings —
+# fail here, loudly, instead of scrolling past. See docs/CODE_STYLE.md §8.
+echo "→ compiling (warnings are errors)"
+mix compile --warnings-as-errors
 echo "→ migrating"
 mix sukhi.migrate
 echo "→ running tests"

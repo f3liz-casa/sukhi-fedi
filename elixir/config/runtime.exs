@@ -59,7 +59,9 @@ config :sukhi_fedi, :disabled_addons, disabled_addons
 # media.ex の uploads はこの bucket に PutObject される。endpoint /
 # 認証情報が無い env(test / 素の dev)では設定しない ─ persist_bytes が
 # {:error, :not_configured} を返す。
-if endpoint = System.get_env("S3_ENDPOINT") do
+endpoint = System.get_env("S3_ENDPOINT")
+
+if endpoint do
   uri = URI.parse(endpoint)
   scheme = "#{uri.scheme}://"
   port = uri.port || if(uri.scheme == "https", do: 443, else: 80)

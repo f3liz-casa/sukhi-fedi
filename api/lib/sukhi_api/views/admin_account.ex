@@ -12,7 +12,7 @@ defmodule SukhiApi.Views.AdminAccount do
   def render(nil), do: nil
 
   def render(account) do
-    base = MastodonAccount.render(account, %{}) || %{}
+    base = MastodonAccount.render(account, %{})
 
     Map.merge(base, %{
       is_admin: Map.get(account, :is_admin, false) || false,
