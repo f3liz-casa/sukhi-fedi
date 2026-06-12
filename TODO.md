@@ -103,6 +103,31 @@ endpoint surface is mapped out in [`docs/MISSKEY_API.md`](docs/MISSKEY_API.md).
       admin can be toggled independently from user-facing
       block/mute/report.
 
+## Auth factors — deferred (2026-06-12 メール認証 + アプリ2FA + パスキー)
+
+- [ ] **OCI Email Delivery の本番配線.** コードは SMTP_HOST /
+      SMTP_PORT / SMTP_USERNAME / SMTP_PASSWORD / MAIL_FROM を読む
+      だけの状態。OCI 側で approved sender + SMTP credentials を
+      発行し、`config/deploy.yml` の gateway env.secret に足す。
+      SPF/DKIM は OCI コンソール側の作業。未設定の間は log
+      transport に落ちて、メールは届かない(ログには出る)。
+- [ ] **パスキーの実機スモーク.** 検証は wax + 合成クレデンシャルの
+      テストまで。デプロイ後に iOS/Android/YubiKey の実機で
+      register → usernameless login を一往復しておく。
+- [ ] **TOTP リカバリコード.** TOTP を失った人の道は今のところ
+      「メールコードでログイン」(事実上の回復経路) か admin eval。
+      バックアップコード 10 枚方式を足すなら hashed-codes カラム
+      1 本 + 表示 UI。
+- [ ] **メール変更時の旧アドレスへの通知.** 乗っ取り検知の定石。
+      Mailer はあるので、confirm_verification の成功後に一通
+      送るだけ。
+- [ ] **ログイン時の suspension チェック.** password 経路が元々
+      見ていないのに合わせて email/passkey 経路も見ていない
+      (parity)。API 側の gate 任せでよいか、入口で締めるか決める。
+- [ ] **webauthn_challenges の掃除.** 今は take_challenge の
+      ついで掃除のみ(在庫は「進行中の儀式」分だけのはず)。
+      気になる量になったら Oban cron へ。
+
 ## Operational / hardening
 
 - [ ] **Presigned-URL media uploads (>8 MiB).** Inline POST caps at

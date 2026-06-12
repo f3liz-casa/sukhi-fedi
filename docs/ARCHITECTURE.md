@@ -118,6 +118,12 @@ sukhi-fedi/
 │   │   ├── notifications.ex               # Mastodon notifications context
 │   │   ├── conversations.ex               # DM thread index
 │   │   ├── social.ex                      # follow / unfollow / relationships
+│   │   ├── auth/                          # login factors: TOTP (RFC 6238),
+│   │   │                                    email codes (verify + login),
+│   │   │                                    passkeys (Wax/WebAuthn), and the
+│   │   │                                    2FA pending-token bridge
+│   │   ├── mailer.ex                      # transactional mail; SMTP (OCI
+│   │   │                                    Email Delivery) or log transport
 │   │   ├── federation/
 │   │   │   ├── actor_fetcher.ex           # remote actor GET + ETS cache
 │   │   │   ├── note_fetcher.ex            # remote note GET + mirror into notes
@@ -139,6 +145,9 @@ sukhi-fedi/
 │   │   └── web/                           # controllers + plugs
 │   │       ├── router.ex                  # + /oauth/*_ → PluginPlug,
 │   │       │                                /uploads/*path → static serve
+│   │       ├── auth/                      # /login (+/totp,/email,/passkey),
+│   │       │                                /settings factor management
+│   │       │                                (session-cookie gated), /auth/state
 │   │       ├── rate_limit_plug.ex
 │   │       ├── plugin_plug.ex             # :rpc to api plugin node
 │   │       ├── inbox_controller.ex
@@ -853,6 +862,7 @@ Custom metrics to emit as we build each feature:
 | `DOMAIN` / `INSTANCE_TITLE`      | api     | `localhost:4000` / `sukhi-fedi` | NodeInfo / WebFinger output |
 | `ENABLED_ADDONS` / `DISABLE_ADDONS` | all  | `all` / `""`            | Comma-separated addon ids          |
 | `MEDIA_DIR`                      | Elixir  | `priv/static/uploads`   | On-disk root for `/uploads/<key>`  |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `MAIL_FROM` | Elixir | _(unset → log transport)_ | Transactional mail (email verification / login codes). Point at OCI Email Delivery (`smtp.email.<region>.oci.oraclecloud.com:587`, approved sender as `MAIL_FROM`) or any SMTP relay |
 | `S3_BUCKET` / `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_REGION` / `S3_PUBLIC_URL` | Elixir | _(unset)_ | Optional S3/R2 presigned-URL flow (`Media.generate_upload_url/3`) |
 
 ## 11. Running locally
