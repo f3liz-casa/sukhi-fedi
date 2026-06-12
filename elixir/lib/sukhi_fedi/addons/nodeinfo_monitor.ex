@@ -73,6 +73,8 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor do
           public_key_jwk: keys.public_jwk,
           private_key_jwk: keys.private_jwk,
           public_key_pem: keys.public_pem,
+          ed25519_private_key_jwk: keys.ed25519_private_jwk,
+          ed25519_public_multibase: keys.ed25519_public_multibase,
           is_bot: true,
           monitored_domain: domain
         }

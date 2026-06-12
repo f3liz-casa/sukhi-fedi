@@ -2,6 +2,8 @@
 defmodule SukhiFedi.Web.InboxController do
   import Plug.Conn
 
+  require Logger
+
   alias SukhiFedi.AP.Instructions
   alias SukhiFedi.Federation.FedifyClient
   alias SukhiFedi.Schema.Account
@@ -55,6 +57,13 @@ defmodule SukhiFedi.Web.InboxController do
             # handlers and don't archive.
             send_resp(conn, 202, "")
 
+          not proof_acceptable?(raw_json) ->
+            # FEP-8b32: the body carries an Object Integrity Proof we can
+            # check and it does not check out. Downgrade safety — a broken
+            # proof must not silently fall through to HTTP-signature-only
+            # handling.
+            send_resp(conn, 401, JSON.encode!(%{error: "object integrity proof failed"}))
+
           true ->
             # The signature checks out. Record *who* signed (the key owner's
             # host) so Instructions can refuse to act on an activity whose
@@ -87,6 +96,29 @@ defmodule SukhiFedi.Web.InboxController do
         send_resp(conn, 400, JSON.encode!(%{error: inspect(reason)}))
     end
   end
+
+  # FEP-8b32 gate: a present-and-checkable proof must verify; absence (or
+  # a cryptosuite we don't implement) falls back to the HTTP signature,
+  # which already authenticated the request above.
+  defp proof_acceptable?(raw_json) when is_map(raw_json) do
+    case SukhiFedi.Fedi.Oip.verify_inbound(raw_json) do
+      :ok ->
+        true
+
+      :no_proof ->
+        true
+
+      :no_checkable_proof ->
+        Logger.info("inbox: only unsupported-cryptosuite proofs on #{raw_json["id"]}; relying on the HTTP signature")
+        true
+
+      {:error, reason} ->
+        Logger.warning("inbox: object integrity proof failed (#{inspect(reason)}) on #{raw_json["id"]}")
+        false
+    end
+  end
+
+  defp proof_acceptable?(_), do: true
 
   # True when the activity's actor lives on an instance-blocked domain.
   defp blocked_domain?(raw_json) when is_map(raw_json) do

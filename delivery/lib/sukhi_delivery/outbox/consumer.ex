@@ -561,10 +561,11 @@ defmodule SukhiDelivery.Outbox.Consumer do
       username = String.replace_prefix(actor_uri, expected_prefix, "")
 
       case SukhiDelivery.Accounts.by_local_username(username) do
-        %Account{private_key_jwk: jwk} when is_map(jwk) ->
+        %Account{private_key_jwk: jwk} = account when is_map(jwk) ->
           payload
           |> Map.put(:privateKeyJwk, jwk)
           |> Map.put(:keyId, "#{actor_uri}#main-key")
+          |> put_ed25519_signing(account, actor_uri)
 
         _ ->
           payload
@@ -575,6 +576,18 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp inject_signing_for(payload, _), do: payload
+
+  # The Ed25519 key signs a FEP-8b32 Object Integrity Proof alongside
+  # the RSA LD-sig. The keyId must match the `assertionMethod` Multikey
+  # id ActorJson publishes, or receivers can't resolve the proof.
+  defp put_ed25519_signing(payload, %Account{ed25519_private_key_jwk: jwk}, actor_uri)
+       when is_map(jwk) do
+    payload
+    |> Map.put(:ed25519PrivateKeyJwk, jwk)
+    |> Map.put(:ed25519KeyId, "#{actor_uri}#ed25519-key")
+  end
+
+  defp put_ed25519_signing(payload, _account, _actor_uri), do: payload
 
   defp follower_uri_to_account(follower_uri) when is_binary(follower_uri) do
     domain = SukhiDelivery.Config.domain!()

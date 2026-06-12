@@ -87,7 +87,9 @@ defmodule SukhiFedi.Release do
             monitored_domain: monitored_domain,
             public_key_pem: keys.public_pem,
             public_key_jwk: keys.public_jwk,
-            private_key_jwk: keys.private_jwk
+            private_key_jwk: keys.private_jwk,
+            ed25519_private_key_jwk: keys.ed25519_private_jwk,
+            ed25519_public_multibase: keys.ed25519_public_multibase
           })
           |> SukhiFedi.Repo.insert!()
 

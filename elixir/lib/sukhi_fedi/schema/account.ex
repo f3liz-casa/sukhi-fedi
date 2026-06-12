@@ -13,6 +13,12 @@ defmodule SukhiFedi.Schema.Account do
     # PEM-encoded SubjectPublicKeyInfo — read by actor_controller.ex for
     # ActivityPub actor JSON publication.
     field :public_key_pem, :string
+    # Ed25519 pair for FEP-8b32 Object Integrity Proofs. The public key
+    # is stored in its Multikey `publicKeyMultibase` form so both
+    # ActorJson modules publish `assertionMethod` by reading it — same
+    # precomputed pattern as `public_key_pem`.
+    field :ed25519_private_key_jwk, :map
+    field :ed25519_public_multibase, :string
     # Auto-created actors for the NodeInfo monitor bot.
     field :is_bot, :boolean, default: false
     field :monitored_domain, :string
@@ -107,7 +113,9 @@ defmodule SukhiFedi.Schema.Account do
       :password_hash,
       :public_key_pem,
       :public_key_jwk,
-      :private_key_jwk
+      :private_key_jwk,
+      :ed25519_private_key_jwk,
+      :ed25519_public_multibase
     ])
     |> put_change(:domain, nil)
     |> validate_required([:username, :password_hash, :public_key_pem])

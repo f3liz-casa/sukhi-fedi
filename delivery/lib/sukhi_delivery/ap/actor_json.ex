@@ -23,6 +23,8 @@ defmodule SukhiDelivery.AP.ActorJson do
       "@context" => [
         "https://www.w3.org/ns/activitystreams",
         "https://w3id.org/security/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/data-integrity/v1",
         %{
           "featured" => %{"@id" => "toot:featured", "@type" => "@id"},
           "toot" => "http://joinmastodon.org/ns#"
@@ -46,9 +48,27 @@ defmodule SukhiDelivery.AP.ActorJson do
         "publicKeyPem" => account.public_key_pem || ""
       }
     }
+    |> maybe_put_assertion_method(account, actor_uri)
     |> maybe_put_image("icon", account.avatar_url)
     |> maybe_put_image("image", account.banner_url)
   end
+
+  # FEP-521a: the Ed25519 key (FEP-8b32 Object Integrity Proofs) rides
+  # as an `assertionMethod` Multikey. Without this entry remote servers
+  # cannot resolve our proofs' verificationMethod and reject them.
+  defp maybe_put_assertion_method(map, %Account{ed25519_public_multibase: mb}, actor_uri)
+       when is_binary(mb) and mb != "" do
+    Map.put(map, "assertionMethod", [
+      %{
+        "id" => "#{actor_uri}#ed25519-key",
+        "type" => "Multikey",
+        "controller" => actor_uri,
+        "publicKeyMultibase" => mb
+      }
+    ])
+  end
+
+  defp maybe_put_assertion_method(map, _account, _actor_uri), do: map
 
   defp maybe_put_image(map, _key, nil), do: map
   defp maybe_put_image(map, _key, ""), do: map

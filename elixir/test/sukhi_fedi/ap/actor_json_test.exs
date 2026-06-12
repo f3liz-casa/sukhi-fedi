@@ -12,7 +12,7 @@ defmodule SukhiFedi.AP.ActorJsonTest do
   @expected_top_keys ~w(
     @context id type preferredUsername name summary inbox outbox
     followers following featured manuallyApprovesFollowers endpoints
-    publicKey icon image
+    publicKey assertionMethod icon image
   )
 
   setup do
@@ -28,6 +28,7 @@ defmodule SukhiFedi.AP.ActorJsonTest do
       display_name: "Alice",
       summary: "hello",
       public_key_pem: "PEM",
+      ed25519_public_multibase: "z6MkExample",
       avatar_url: "https://cdn.example/a.png",
       banner_url: "https://cdn.example/b.jpg",
       locked: true
@@ -44,6 +45,15 @@ defmodule SukhiFedi.AP.ActorJsonTest do
     assert MapSet.new(Map.keys(person["publicKey"])) ==
              MapSet.new(~w(id owner publicKeyPem))
 
+    assert person["assertionMethod"] == [
+             %{
+               "id" => "https://test.example/users/alice#ed25519-key",
+               "type" => "Multikey",
+               "controller" => "https://test.example/users/alice",
+               "publicKeyMultibase" => "z6MkExample"
+             }
+           ]
+
     for key <- ~w(icon image) do
       assert MapSet.new(Map.keys(person[key])) == MapSet.new(~w(type mediaType url))
       assert person[key]["type"] == "Image"
@@ -55,6 +65,8 @@ defmodule SukhiFedi.AP.ActorJsonTest do
     person = ActorJson.build_person(account)
     refute Map.has_key?(person, "icon")
     refute Map.has_key?(person, "image")
+    # No Ed25519 key minted yet (pre-backfill row) → no assertionMethod.
+    refute Map.has_key?(person, "assertionMethod")
     assert person["manuallyApprovesFollowers"] == false
   end
 

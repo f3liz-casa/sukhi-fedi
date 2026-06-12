@@ -1,22 +1,30 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 defmodule SukhiFedi.Addons.NodeinfoMonitor.KeyGen do
   @moduledoc """
-  RSA-2048 key generation for bot actors, producing the shapes
-  ActivityPub + HTTP Signature need:
+  Actor keypair generation (originally for bot actors, now every local
+  account), producing the shapes ActivityPub + HTTP Signature need:
 
     * `public_jwk`  — JSON Web Key (RFC 7517), for NATS sign/verify paths
     * `private_jwk` — full private JWK (n, e, d, p, q, dp, dq, qi)
     * `public_pem`  — PEM-wrapped SubjectPublicKeyInfo, for actor JSON's
                        `publicKey.publicKeyPem` field
+    * `ed25519_private_jwk`      — OKP JWK, signs FEP-8b32 Object
+                                   Integrity Proofs (eddsa-jcs-2022)
+    * `ed25519_public_multibase` — the Multikey `publicKeyMultibase`
+                                   form, for actor JSON's `assertionMethod`
 
-  Uses Erlang's standard `:public_key` so no extra dependencies.
+  Uses Erlang's standard `:public_key`/`:crypto` so no extra dependencies.
   """
+
+  alias SukhiFedi.Fedi.JWK
 
   @type jwk :: %{required(String.t() | atom()) => String.t()}
   @type result :: %{
           required(:public_jwk) => jwk(),
           required(:private_jwk) => jwk(),
-          required(:public_pem) => String.t()
+          required(:public_pem) => String.t(),
+          required(:ed25519_private_jwk) => jwk(),
+          required(:ed25519_public_multibase) => String.t()
         }
 
   @spec generate() :: result()
@@ -49,7 +57,22 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.KeyGen do
         "qi" => b64url_int(qi)
       })
 
-    %{public_jwk: public_jwk, private_jwk: private_jwk, public_pem: pem}
+    {ed_public, ed_private} = :crypto.generate_key(:eddsa, :ed25519)
+
+    ed25519_private_jwk = %{
+      "kty" => "OKP",
+      "crv" => "Ed25519",
+      "x" => Base.url_encode64(ed_public, padding: false),
+      "d" => Base.url_encode64(ed_private, padding: false)
+    }
+
+    %{
+      public_jwk: public_jwk,
+      private_jwk: private_jwk,
+      public_pem: pem,
+      ed25519_private_jwk: ed25519_private_jwk,
+      ed25519_public_multibase: JWK.ed25519_multibase(ed_public)
+    }
   end
 
   defp b64url_int(i) when is_integer(i) do

@@ -52,7 +52,9 @@ defmodule SukhiFedi.LocalAccounts do
         password_hash: hash,
         public_key_pem: keys.public_pem,
         public_key_jwk: keys.public_jwk,
-        private_key_jwk: keys.private_jwk
+        private_key_jwk: keys.private_jwk,
+        ed25519_private_key_jwk: keys.ed25519_private_jwk,
+        ed25519_public_multibase: keys.ed25519_public_multibase
       }
 
       Multi.new()
@@ -106,7 +108,9 @@ defmodule SukhiFedi.LocalAccounts do
         password_hash: hash,
         public_key_pem: keys.public_pem,
         public_key_jwk: keys.public_jwk,
-        private_key_jwk: keys.private_jwk
+        private_key_jwk: keys.private_jwk,
+        ed25519_private_key_jwk: keys.ed25519_private_jwk,
+        ed25519_public_multibase: keys.ed25519_public_multibase
       }
 
       %Account{}
