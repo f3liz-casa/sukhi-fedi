@@ -8,7 +8,12 @@ defmodule SukhiFedi.AP.Instructions.Extract do
   """
 
   @public_ns "https://www.w3.org/ns/activitystreams#Public"
-  @as_public "Public"
+  # Compact / prefixed spellings of the same collection. Inbox activities
+  # arrive expanded (bun/fedify verify), so `to` is the full URL — but a
+  # *fetched* object can keep the AS context's compact form (`as:Public`)
+  # or the bare term (`Public`). Missing these silently demoted fetched
+  # public posts to `direct`.
+  @public_aliases [@public_ns, "as:Public", "Public"]
 
   # fedify's `follow.toJsonLd({ contextLoader })` inlines the resolved
   # actor object (full Person JSON-LD) into the `actor` field instead of
@@ -99,7 +104,7 @@ defmodule SukhiFedi.AP.Instructions.Extract do
   def normalize_collection(str) when is_binary(str), do: [str]
   def normalize_collection(_), do: []
 
-  def public?(uri) when is_binary(uri), do: uri == @public_ns or uri == @as_public
+  def public?(uri) when is_binary(uri), do: uri in @public_aliases
   def public?(_), do: false
 
   @doc """
