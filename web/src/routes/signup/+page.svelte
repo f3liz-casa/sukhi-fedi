@@ -3,40 +3,118 @@
   import {
     goToCheck,
     saveSignupDraft,
-    loadSignupDraft
+    loadSignupDraft,
+    requestSignupEmailCode,
+    confirmSignupEmailCode
   } from '$lib/auth';
   import { t, locale } from '$lib/i18n';
   import LangSwitch from '$lib/components/LangSwitch.svelte';
 
+  // 加入は「メールボックスを開けられること」の証明から始まる。
+  // コードを確認すると署名つきの email_proof が貰え、それを持って
+  // /check へ進む。あいことばはレガシー・任意 ─ 折りたたみの中。
   let username = $state('');
   let password = $state('');
-  let email = $state('');
   let invite_code = $state('');
   let agreed = $state(false);
   let error = $state<string | null>(null);
+
+  let email = $state('');
+  let emailCode = $state('');
+  let emailPhase = $state<'input' | 'sent' | 'proven'>('input');
+  let emailProof = $state<string | null>(null);
+  let emailBusy = $state(false);
+  let restored = $state(false);
 
   // Send the consent links to the legal page in the current UI language.
   const termsHref = $derived($locale === 'ko' ? '/terms?lang=ko' : '/terms');
   const privacyHref = $derived($locale === 'ko' ? '/privacy?lang=ko' : '/privacy');
 
-  // /check で失敗して戻ってきた人のために下書きを復元するが、
-  // password だけは(/check が clearSignupPassword で落としてあるので)
-  // 復活しない。retry のときは合言葉だけもう一度打ってもらう。
+  // /check で失敗して戻ってきた人のために下書きを復元する。
+  // password だけは(/check が clearSignupPassword で落とすので)
+  // 復活しない。email_proof は残る ─ 20分のあいだは作り直し不要。
   onMount(() => {
     const d = loadSignupDraft();
     if (d) {
+      restored = true;
       username = d.username ?? '';
-      email = d.email ?? '';
       invite_code = d.invite_code ?? '';
-      if (!d.password) {
-        error = $t('signup.pwAgain');
+      email = d.email ?? '';
+      if (d.email_proof) {
+        emailProof = d.email_proof;
+        emailPhase = 'proven';
       }
     }
   });
 
-  function submit() {
+  function explainEmail(e: unknown): string {
+    const msg = e instanceof Error ? e.message : '';
+    switch (msg) {
+      case 'email':
+        return $t('security.emailInvalid');
+      case 'email_taken':
+        return $t('security.emailTaken');
+      case 'code':
+        return $t('security.codeWrong');
+      case 'expired':
+        return $t('security.codeExpired');
+      case 'rate_limited':
+      case 'too_many_attempts':
+        return $t('login.rateLimited');
+      case 'send_failed':
+        return $t('security.sendFailed');
+      default:
+        return $t('common.deliverFailed');
+    }
+  }
+
+  async function sendEmailCode() {
+    if (emailBusy) return;
+    emailBusy = true;
     error = null;
-    saveSignupDraft({ username, password, invite_code, email });
+    try {
+      await requestSignupEmailCode(email);
+      emailPhase = 'sent';
+    } catch (e) {
+      error = explainEmail(e);
+    } finally {
+      emailBusy = false;
+    }
+  }
+
+  async function confirmEmail() {
+    if (emailBusy) return;
+    emailBusy = true;
+    error = null;
+    try {
+      emailProof = await confirmSignupEmailCode(email, emailCode);
+      emailPhase = 'proven';
+    } catch (e) {
+      error = explainEmail(e);
+    } finally {
+      emailBusy = false;
+    }
+  }
+
+  function editEmail() {
+    emailPhase = 'input';
+    emailProof = null;
+    emailCode = '';
+  }
+
+  function submit() {
+    if (!emailProof) {
+      error = $t('signup.emailProofNeeded');
+      return;
+    }
+    error = null;
+    saveSignupDraft({
+      username,
+      invite_code,
+      email,
+      email_proof: emailProof,
+      ...(password ? { password } : {})
+    });
     goToCheck('signup');
   }
 
@@ -53,6 +131,9 @@
 {#if error}
   <p class="error">{error}</p>
 {/if}
+{#if restored}
+  <p class="prose-small">{$t('signup.draftRestored')}</p>
+{/if}
 
 <form
   class="form stack"
@@ -61,6 +142,59 @@
     submit();
   }}
 >
+  <!-- ① メールの確認 ─ ここが正面玄関 -->
+  {#if emailPhase === 'proven'}
+    <div class="stack-tight">
+      <span>{$t('signup.email')}</span>
+      <p class="proven">
+        <code>{email}</code>
+        <span class="muted">{$t('signup.emailProven')}</span>
+        <button type="button" class="chip" onclick={editEmail}>{$t('security.emailChange')}</button>
+      </p>
+    </div>
+  {:else}
+    <label class="stack-tight">
+      <span>{$t('signup.email')}</span>
+      <input
+        type="email"
+        bind:value={email}
+        autocomplete="email"
+        autocapitalize="none"
+        spellcheck="false"
+        disabled={emailPhase === 'sent'}
+        required
+      />
+      <span class="help">{$t('signup.emailHelp')}</span>
+    </label>
+
+    {#if emailPhase === 'sent'}
+      <label class="stack-tight">
+        <span>{$t('login.code')}</span>
+        <input
+          type="text"
+          bind:value={emailCode}
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          pattern="[0-9]{'{6}'}"
+        />
+      </label>
+      <div class="row">
+        <button type="button" disabled={emailBusy} onclick={() => void confirmEmail()}
+          >{$t('security.confirm')}</button
+        >
+        <button type="button" class="chip" disabled={emailBusy} onclick={() => void sendEmailCode()}
+          >{$t('login.sendAgain')}</button
+        >
+        <button type="button" class="chip" onclick={editEmail}>{$t('security.emailChange')}</button>
+      </div>
+    {:else}
+      <button type="button" disabled={emailBusy || !email} onclick={() => void sendEmailCode()}
+        >{$t('login.sendCode')}</button
+      >
+    {/if}
+  {/if}
+
+  <!-- ② なまえと招待コード -->
   <label class="stack-tight">
     <span>{$t('signup.id')}</span>
     <input
@@ -75,34 +209,19 @@
   </label>
 
   <label class="stack-tight">
-    <span>{$t('signup.password')}</span>
-    <input
-      type="password"
-      bind:value={password}
-      autocomplete="new-password"
-      minlength="8"
-      required
-    />
-    <span class="help">{$t('signup.passwordHelp')}</span>
-  </label>
-
-  <label class="stack-tight">
-    <span>{$t('signup.email')}</span>
-    <input
-      type="email"
-      bind:value={email}
-      autocomplete="email"
-      autocapitalize="none"
-      spellcheck="false"
-      required
-    />
-    <span class="help">{$t('signup.emailHelp')}</span>
-  </label>
-
-  <label class="stack-tight">
     <span>{$t('signup.inviteCode')}</span>
     <input type="text" bind:value={invite_code} autocomplete="off" required />
   </label>
+
+  <!-- ③ あいことば(レガシー・任意) ─ 折りたたみの中 -->
+  <details class="legacy-pw">
+    <summary>{$t('signup.passwordLegacy')}</summary>
+    <label class="stack-tight" style="margin-top: var(--space-2);">
+      <span>{$t('signup.password')}</span>
+      <input type="password" bind:value={password} autocomplete="new-password" minlength="8" />
+      <span class="help">{$t('signup.passwordOptionalHelp')}</span>
+    </label>
+  </details>
 
   <label class="agree">
     <input type="checkbox" bind:checked={agreed} required />
@@ -113,7 +232,7 @@
     >
   </label>
 
-  <button type="submit" disabled={!agreed}>{$t('signup.create')}</button>
+  <button type="submit" disabled={!agreed || emailPhase !== 'proven'}>{$t('signup.create')}</button>
 </form>
 
 <p class="prose-small">
@@ -136,5 +255,23 @@
   .agree input[type='checkbox'] {
     margin-top: 0.2rem;
     flex: 0 0 auto;
+  }
+  .proven {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin: 0;
+  }
+  .row {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .legacy-pw summary {
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
   }
 </style>

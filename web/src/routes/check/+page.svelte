@@ -36,14 +36,14 @@
     invite_used: 'check.err.invite_used',
     invite_expired: 'check.err.invite_expired',
     password_too_short: 'check.err.password_too_short',
+    email_proof_invalid: 'check.err.email_proof_invalid',
     validation_failed: 'check.err.validation_failed',
     client_credentials_required: 'check.err.client_credentials_required',
     token_mint_failed: 'check.err.token_mint_failed',
     gateway_not_connected: 'check.err.gateway_not_connected',
     gateway_rpc_failed: 'check.err.gateway_rpc_failed',
     internal_error: 'check.err.internal_error',
-    no_draft: 'check.err.no_draft',
-    password_missing: 'check.err.password_missing'
+    no_draft: 'check.err.no_draft'
   };
 
   // changeset の details: {username: ["...", ...]} の field を言語へ。
@@ -85,32 +85,32 @@
       } else {
         const draft = loadSignupDraft();
         if (!draft) throw new Error('no_draft');
-        if (!draft.password) throw new Error('password_missing');
+        if (!draft.email_proof) throw new Error('email_proof_invalid');
 
         const payload = {
           username: draft.username,
-          password: draft.password,
           invite_code: draft.invite_code,
-          email: draft.email
+          email_proof: draft.email_proof,
+          ...(draft.password ? { password: draft.password } : {})
         };
 
         // API call の直前に sessionStorage から password だけ消す。
-        // 成功でも失敗でも、もう password はそこに無い。retry の
-        // ときは合言葉だけ打ち直してもらう ─ docs: clearSignupPassword
+        // 成功でも失敗でも、もう password はそこに無い ─ docs:
+        // clearSignupPassword。proof は残る(秘密ではなく、20分の証明)。
         clearSignupPassword();
 
         await signup(payload);
 
-        // 同じ合言葉(まだメモリにある)で一人称の戸も開けておく。
-        // settings の「ログインと安全」(メール確認・2FA・パスキー)は
-        // session cookie 専用なので、ここで立てておかないと、加入
-        // 直後の人がメール確認のたびに /login へ回されてしまう。
-        // 失敗しても先へ進む ─ bearer は持っているので、必要に
-        // なったとき EmailNudge が「入りなおして」と案内する。
-        try {
-          await loginWithPassword(payload.username, payload.password);
-        } catch {
-          /* best-effort */
+        // あいことばを設定した人は、その場で一人称の戸も開けておく
+        // (settings の管理面は session cookie 専用)。あいことば無しの
+        // 人はここでは開けられないが、メールは確認済みで生まれるので
+        // 必要になったらメールコードで /login を通ればいい。
+        if (payload.password) {
+          try {
+            await loginWithPassword(payload.username, payload.password);
+          } catch {
+            /* best-effort */
+          }
         }
 
         clearSignupDraft();

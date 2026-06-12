@@ -47,11 +47,16 @@ const SCOPES = 'read write follow';
 // invite_code だけが残る形にしている。retry のとき再入力で済むのは
 // 招待コードと ID、合言葉は毎回打ち直し ─ XSS で password が
 // snapshot される窓を最小にするための取り決め。
+// email_proof は /signup/email/confirm が返す署名つきの「この
+// メールボックスを開けた」証明(20分有効)。サーバはこれ無しでは
+// アカウントを作らない。password はレガシー・任意。
 export type SignupDraft = {
   username: string;
   password?: string;
   invite_code: string;
+  // 表示用(どのアドレスを確認したか)。サーバに渡るのは proof のほう。
   email?: string;
+  email_proof?: string;
 };
 
 export function saveSignupDraft(d: SignupDraft): void {
@@ -248,10 +253,40 @@ export async function completeLogin(code: string, state: string): Promise<TokenS
   return t;
 }
 
+// 加入前のメールボックス証明。request はコードを送り、confirm は
+// 正しいコードと引き換えに署名つき email_proof を返す。これを
+// signup() に渡す ─ password は無くてもいい(レガシー・任意)。
+export async function requestSignupEmailCode(email: string): Promise<void> {
+  const res = await fetch('/signup/email/request', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  throw new Error((body as { error?: string })?.error ?? `signup_email_failed_${res.status}`);
+}
+
+export async function confirmSignupEmailCode(email: string, code: string): Promise<string> {
+  const res = await fetch('/signup/email/confirm', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, code })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((body as { error?: string })?.error ?? `signup_email_failed_${res.status}`);
+  }
+  return (body as { email_proof: string }).email_proof;
+}
+
 // Sign up via POST /api/v1/accounts. Called from `/check` AFTER Anubis
 // has set its cookie ─ never directly from the form, so the PoW is
 // always done before an account row is created.
-export async function signup(input: Required<Pick<SignupDraft, 'username' | 'password' | 'invite_code'>> & Pick<SignupDraft, 'email'>): Promise<TokenSet> {
+export async function signup(
+  input: Required<Pick<SignupDraft, 'username' | 'invite_code' | 'email_proof'>> &
+    Pick<SignupDraft, 'password'>
+): Promise<TokenSet> {
   const client = await loadOrRegisterClient();
 
   const ccRes = await fetch('/oauth/token', {
@@ -393,15 +428,17 @@ export async function loginWithPasskey(): Promise<void> {
   if (!res.ok) throw new Error('passkey');
 }
 
-// Change the signed-in account's password. Cookie-gated like /login (the
-// session_token minted at login), not the bearer. On success the server
-// revokes every session, so the caller should clearToken() and bounce to
-// /login. Throws 'current' | 'mismatch' | 'short' | 'unauthorized'.
+// Set or change the signed-in account's password. Cookie-gated like
+// /login (the session_token minted at login), not the bearer.
+// 初回設定(これまであいことば無し)は current 不要で、サーバは
+// {initial: true} を返しセッションも生きたまま。変更のときは全
+// セッションが失効するので、呼び元は clearToken() して /login へ。
+// Throws 'current' | 'mismatch' | 'short' | 'unauthorized'.
 export async function changePassword(
   current: string,
   newPassword: string,
   confirm: string
-): Promise<void> {
+): Promise<{ initial: boolean }> {
   const res = await fetch('/settings/password', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -412,7 +449,10 @@ export async function changePassword(
       confirm_password: confirm
     })
   });
-  if (res.ok) return;
+  if (res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { initial: !!(body as { initial?: boolean })?.initial };
+  }
   const body = await res.json().catch(() => ({}));
   throw new Error(body?.error ?? `password_failed_${res.status}`);
 }
@@ -430,6 +470,9 @@ export type AuthState = {
   manageable: boolean;
   email: string | null;
   email_verified: boolean;
+  // false = パスワード無し(いまの標準)。要素を外す操作の本人確認は
+  // password の代わりに reauth コード(メール)で行う。
+  has_password: boolean;
   totp_enabled: boolean;
   totp_pending: boolean;
   passkeys: {
@@ -439,6 +482,10 @@ export type AuthState = {
     last_used_at: string | null;
   }[];
 };
+
+// 要素を外す操作の本人確認。あいことばを持つ人は password、
+// 持たない人は requestReauthCode() で届く 6 桁を reauth_code に。
+export type Reauth = { password?: string; reauth_code?: string };
 
 function bearerHeaders(): Record<string, string> {
   const t = loadToken();
@@ -469,10 +516,15 @@ export async function fetchAuthState(): Promise<AuthState | null> {
   return (await res.json()) as AuthState;
 }
 
+// 本人確認コードを、登録ずみの確認済みメールへ送る。
+export async function requestReauthCode(): Promise<void> {
+  await settingsPost('/settings/reauth/request', {});
+}
+
 // メール登録/変更: コードを送る。すでに確認済みアドレスがある人が
-// 別のアドレスへ変えるときだけ password が要る。
-export async function requestEmailCode(email: string, password?: string): Promise<void> {
-  await settingsPost('/settings/email/request', password ? { email, password } : { email });
+// 別のアドレスへ変えるときだけ reauth(password か reauth_code)が要る。
+export async function requestEmailCode(email: string, reauth?: Reauth): Promise<void> {
+  await settingsPost('/settings/email/request', { email, ...(reauth ?? {}) });
 }
 
 export async function confirmEmailCode(code: string): Promise<void> {
@@ -487,8 +539,14 @@ export async function totpEnable(code: string): Promise<void> {
   await settingsPost('/settings/totp/enable', { code });
 }
 
-export async function totpDisable(password: string): Promise<void> {
-  await settingsPost('/settings/totp/disable', { password });
+export async function totpDisable(reauth: Reauth): Promise<void> {
+  await settingsPost('/settings/totp/disable', reauth);
+}
+
+// レガシーのあいことば: 初回設定(currentなし) / 退役。変更は
+// changePassword のまま。
+export async function removePassword(password: string): Promise<void> {
+  await settingsPost('/settings/password/remove', { password });
 }
 
 // パスキー登録: options → 認証器 → 登録、まで。
@@ -504,8 +562,8 @@ export async function registerPasskey(nickname: string): Promise<void> {
   await settingsPost('/settings/passkeys', { ref, nickname, ...payload });
 }
 
-export async function deletePasskey(id: number, password: string): Promise<void> {
-  await settingsPost(`/settings/passkeys/${id}/delete`, { password });
+export async function deletePasskey(id: number, reauth: Reauth): Promise<void> {
+  await settingsPost(`/settings/passkeys/${id}/delete`, reauth);
 }
 
 // Navigate to the shared check page. Anubis challenges this path; the

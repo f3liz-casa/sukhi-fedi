@@ -15,9 +15,12 @@
     totpDisable,
     registerPasskey,
     deletePasskey,
-    type AuthState
+    removePassword,
+    type AuthState,
+    type Reauth
   } from '$lib/auth';
   import { passkeySupported } from '$lib/webauthn';
+  import ReauthField from '$lib/components/ReauthField.svelte';
   import { t } from '$lib/i18n';
   import { renderSVG } from 'uqr';
 
@@ -51,10 +54,20 @@
     }
   }
 
+  // 本人確認の中身: あいことばを持つ人は password、持たない人は
+  // メールに届く reauth コード。サーバの reauth_ok と同じ分岐。
+  function reauthOf(password: string, code: string): Reauth {
+    return auth?.has_password ? { password } : { reauth_code: code };
+  }
+
   // 共通のエラー → ことば。鍵が無いものは「うまくいきませんでした」。
   function explain(e: unknown): string {
     const msg = e instanceof Error ? e.message : '';
     switch (msg) {
+      case 'reauth':
+        return auth?.has_password ? $t('security.wrongPassword') : $t('security.reauthFailed');
+      case 'no_verified_email':
+        return $t('security.noVerifiedEmail');
       case 'password':
         return $t('security.wrongPassword');
       case 'email':
@@ -80,6 +93,7 @@
   // ── メール ──────────────────────────────────────────────────────────
   let emailInput = $state('');
   let emailPassword = $state('');
+  let emailReauthCode = $state('');
   let emailCodeSent = $state(false);
   let emailCode = $state('');
   let emailBusy = $state(false);
@@ -100,7 +114,10 @@
     emailBusy = true;
     emailError = null;
     try {
-      await requestEmailCode(emailInput, auth?.email_verified ? emailPassword : undefined);
+      await requestEmailCode(
+        emailInput,
+        auth?.email_verified ? reauthOf(emailPassword, emailReauthCode) : undefined
+      );
       emailCodeSent = true;
     } catch (e) {
       emailError = explain(e);
@@ -129,6 +146,7 @@
   let totpQr = $derived(totp ? renderSVG(totp.otpauth) : null);
   let totpCode = $state('');
   let totpPassword = $state('');
+  let totpReauthCode = $state('');
   let totpBusy = $state(false);
   let totpError = $state<string | null>(null);
 
@@ -166,8 +184,9 @@
     totpBusy = true;
     totpError = null;
     try {
-      await totpDisable(totpPassword);
+      await totpDisable(reauthOf(totpPassword, totpReauthCode));
       totpPassword = '';
+      totpReauthCode = '';
       await load();
     } catch (e) {
       totpError = explain(e);
@@ -180,9 +199,10 @@
   let passkeyNickname = $state('');
   let passkeyBusy = $state(false);
   let passkeyError = $state<string | null>(null);
-  // 削除はうっかりが怖いので、行ごとにパスワード欄を開く。
+  // 削除はうっかりが怖いので、行ごとに本人確認欄を開く。
   let deletingId = $state<number | null>(null);
   let deletePassword = $state('');
+  let deleteReauthCode = $state('');
 
   async function addPasskey() {
     if (passkeyBusy) return;
@@ -208,14 +228,37 @@
     passkeyBusy = true;
     passkeyError = null;
     try {
-      await deletePasskey(id, deletePassword);
+      await deletePasskey(id, reauthOf(deletePassword, deleteReauthCode));
       deletingId = null;
       deletePassword = '';
+      deleteReauthCode = '';
       await load();
     } catch (e) {
       passkeyError = explain(e);
     } finally {
       passkeyBusy = false;
+    }
+  }
+
+  // ── あいことば(レガシー) ────────────────────────────────────────────
+  let pwRemoveOpen = $state(false);
+  let pwRemovePassword = $state('');
+  let pwBusy = $state(false);
+  let pwError = $state<string | null>(null);
+
+  async function doRemovePassword() {
+    if (pwBusy) return;
+    pwBusy = true;
+    pwError = null;
+    try {
+      await removePassword(pwRemovePassword);
+      pwRemoveOpen = false;
+      pwRemovePassword = '';
+      await load();
+    } catch (e) {
+      pwError = explain(e);
+    } finally {
+      pwBusy = false;
     }
   }
 
@@ -277,11 +320,11 @@
         </label>
 
         {#if auth.email_verified && !emailCodeSent}
-          <label class="stack-tight">
-            <span>{$t('security.passwordToConfirm')}</span>
-            <input type="password" bind:value={emailPassword} autocomplete="current-password" required />
-            <span class="help">{$t('security.passwordChangeHelp')}</span>
-          </label>
+          <ReauthField
+            hasPassword={auth.has_password}
+            bind:password={emailPassword}
+            bind:reauthCode={emailReauthCode}
+          />
         {/if}
 
         {#if emailCodeSent}
@@ -325,10 +368,11 @@
           void disableTotp();
         }}
       >
-        <label class="stack-tight">
-          <span>{$t('security.passwordToConfirm')}</span>
-          <input type="password" bind:value={totpPassword} autocomplete="current-password" required />
-        </label>
+        <ReauthField
+          hasPassword={auth.has_password}
+          bind:password={totpPassword}
+          bind:reauthCode={totpReauthCode}
+        />
         <button type="submit" disabled={totpBusy}>{$t('security.totpDisable')}</button>
       </form>
     {:else if totp}
@@ -395,12 +439,10 @@
                   void removePasskey(pk.id);
                 }}
               >
-                <input
-                  type="password"
-                  bind:value={deletePassword}
-                  placeholder={$t('security.passwordToConfirm')}
-                  autocomplete="current-password"
-                  required
+                <ReauthField
+                  hasPassword={auth.has_password}
+                  bind:password={deletePassword}
+                  bind:reauthCode={deleteReauthCode}
                 />
                 <button type="submit" disabled={passkeyBusy}>{$t('security.passkeyDelete')}</button>
                 <button
@@ -409,6 +451,7 @@
                   onclick={() => {
                     deletingId = null;
                     deletePassword = '';
+                    deleteReauthCode = '';
                   }}>{$t('security.cancel')}</button
                 >
               </form>
@@ -447,6 +490,63 @@
 
     {#if passkeyError}
       <p class="error">{passkeyError}</p>
+    {/if}
+  </section>
+
+  <!-- あいことば(レガシー) ─ いちばん奥の棚 -->
+  <section class="timeline sec">
+    <h2>{$t('security.passwordTitle')}</h2>
+
+    {#if auth.has_password}
+      <p class="muted">{$t('security.passwordOn')}</p>
+      <p>
+        <a class="chip" href="/settings/password">{$t('settings.changePassword')}</a>
+        {#if !pwRemoveOpen}
+          <button type="button" class="chip" onclick={() => (pwRemoveOpen = true)}
+            >{$t('security.passwordRemove')}</button
+          >
+        {/if}
+      </p>
+      {#if pwRemoveOpen}
+        <form
+          class="form stack"
+          onsubmit={(e) => {
+            e.preventDefault();
+            void doRemovePassword();
+          }}
+        >
+          <p class="prose-small">{$t('security.passwordRemoveHelp')}</p>
+          <label class="stack-tight">
+            <span>{$t('security.passwordToConfirm')}</span>
+            <input
+              type="password"
+              bind:value={pwRemovePassword}
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <div style="display: flex; gap: var(--space-2);">
+            <button type="submit" disabled={pwBusy}>{$t('security.passwordRemove')}</button>
+            <button
+              type="button"
+              class="chip"
+              onclick={() => {
+                pwRemoveOpen = false;
+                pwRemovePassword = '';
+              }}>{$t('security.cancel')}</button
+            >
+          </div>
+        </form>
+      {/if}
+    {:else}
+      <p class="muted">{$t('security.passwordNone')}</p>
+      <p>
+        <a class="chip" href="/settings/password">{$t('security.passwordSet')}</a>
+      </p>
+    {/if}
+
+    {#if pwError}
+      <p class="error">{pwError}</p>
     {/if}
   </section>
 
