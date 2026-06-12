@@ -84,56 +84,72 @@ defmodule SukhiApi.Router do
   # ── auth ──────────────────────────────────────────────────────────────────
 
   defp authenticate(req, opts) do
-    case Keyword.get(opts, :scope) do
-      nil ->
+    case {Keyword.get(opts, :scope), bearer_token(req)} do
+      {nil, {:error, :missing_token}} ->
+        # Public route, no token: anonymous.
         {:ok, req}
 
-      required_scope when is_binary(required_scope) ->
-        with {:ok, token} <- bearer_token(req),
-             :ok <- charge_rate_limit(token),
-             {:ok, {:ok, %{scopes: granted} = ctx}} <- TokenCache.verify(token),
-             :ok <- check_scope(required_scope, granted) do
-          assigns =
-            req
-            |> Map.get(:assigns, %{})
-            |> Map.merge(%{
-              current_account: ctx.account,
-              current_app: ctx.app,
-              scopes: granted
-            })
+      {nil, {:ok, token}} ->
+        # Public route, but auth is *optional*, not ignored: a caller
+        # presenting a token gets their viewer context (own DMs via
+        # /statuses/:id, favourite flags on public timelines, …). A
+        # token that is sent but does not verify is still a 401 —
+        # silently downgrading a logged-in caller to anonymous would
+        # 404 their own posts.
+        verify_and_attach(req, token, nil)
 
-          {:ok, Map.put(req, :assigns, assigns)}
-        else
-          {:error, :missing_token} ->
-            {:error, 401, %{error: "invalid_token", error_description: "missing bearer token"}}
+      {required_scope, {:ok, token}} when is_binary(required_scope) ->
+        verify_and_attach(req, token, required_scope)
 
-          {:ok, {:error, reason}} ->
-            {:error, 401, %{error: "invalid_token", error_description: to_string(reason)}}
+      {required_scope, {:error, :missing_token}} when is_binary(required_scope) ->
+        {:error, 401, %{error: "invalid_token", error_description: "missing bearer token"}}
+    end
+  end
 
-          {:error, :insufficient_scope} ->
-            {:error, 403,
-             %{
-               error: "insufficient_scope",
-               error_description: "this endpoint requires scope #{required_scope}",
-               scope: required_scope
-             }}
+  # Verify the bearer token and put `current_account` / `current_app` /
+  # `scopes` on assigns. `required_scope` is nil on public routes — a
+  # valid token then carries no scope requirement (`check_scope/2`).
+  defp verify_and_attach(req, token, required_scope) do
+    with :ok <- charge_rate_limit(token),
+         {:ok, {:ok, %{scopes: granted} = ctx}} <- TokenCache.verify(token),
+         :ok <- check_scope(required_scope, granted) do
+      assigns =
+        req
+        |> Map.get(:assigns, %{})
+        |> Map.merge(%{
+          current_account: ctx.account,
+          current_app: ctx.app,
+          scopes: granted
+        })
 
-          {:error, :not_connected} ->
-            {:error, 503, %{error: "gateway_not_connected"}}
+      {:ok, Map.put(req, :assigns, assigns)}
+    else
+      {:ok, {:error, reason}} ->
+        {:error, 401, %{error: "invalid_token", error_description: to_string(reason)}}
 
-          {:error, {:badrpc, reason}} ->
-            {:error, 503, %{error: "gateway_rpc_failed", detail: inspect(reason)}}
+      {:error, :insufficient_scope} ->
+        {:error, 403,
+         %{
+           error: "insufficient_scope",
+           error_description: "this endpoint requires scope #{required_scope}",
+           scope: required_scope
+         }}
 
-          {:error, :rate_limited, retry_after} ->
-            {:error, 429,
-             %{
-               error: "rate_limited",
-               retry_after: retry_after
-             }}
+      {:error, :not_connected} ->
+        {:error, 503, %{error: "gateway_not_connected"}}
 
-          _ ->
-            {:error, 401, %{error: "invalid_token"}}
-        end
+      {:error, {:badrpc, reason}} ->
+        {:error, 503, %{error: "gateway_rpc_failed", detail: inspect(reason)}}
+
+      {:error, :rate_limited, retry_after} ->
+        {:error, 429,
+         %{
+           error: "rate_limited",
+           retry_after: retry_after
+         }}
+
+      _ ->
+        {:error, 401, %{error: "invalid_token"}}
     end
   end
 
@@ -168,6 +184,8 @@ defmodule SukhiApi.Router do
         {:error, :missing_token}
     end
   end
+
+  defp check_scope(nil, _granted), do: :ok
 
   defp check_scope(required, granted) when is_list(granted) do
     needed = String.split(required, ~r/\s+/, trim: true)

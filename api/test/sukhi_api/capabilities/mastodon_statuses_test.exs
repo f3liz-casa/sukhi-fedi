@@ -218,6 +218,35 @@ defmodule SukhiApi.Capabilities.MastodonStatusesTest do
 
       assert resp.status == 404
     end
+
+    test "optional auth: a logged-in caller's viewer id reaches get_note" do
+      # Keyed on [id, viewer_id] — this entry only matches when
+      # authenticate/2 attached the token's account to this scope-less
+      # route. Without that, get_note is called with nil, the lookup
+      # misses, and the author's own DM 404s.
+      Application.put_env(:sukhi_api, :fake_notes, %{
+        {:get_note, ["7", 1]} => {:ok, note_fixture(%{id: 7, visibility: "direct"})}
+      })
+
+      req = authed_request("GET", "/api/v1/statuses/7", ["read"])
+      {:ok, resp} = Router.handle(req)
+
+      assert resp.status == 200
+      assert JSON.decode!(resp.body)["id"] == "7"
+    end
+
+    test "optional auth: an invalid token on a public route is 401, not anonymous" do
+      Application.put_env(:sukhi_api, :fake_oauth, %{verify_bearer: {:error, :revoked}})
+
+      {:ok, resp} =
+        Router.handle(%{
+          method: "GET",
+          path: "/api/v1/statuses/7",
+          headers: [{"authorization", "Bearer broken"}]
+        })
+
+      assert resp.status == 401
+    end
   end
 
   describe "DELETE /api/v1/statuses/:id" do
