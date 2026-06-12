@@ -49,14 +49,20 @@ defmodule SukhiFedi.Web.RateLimitPlug do
     end
   end
 
-  defp peer_id(%Plug.Conn{} = conn) do
-    # cloudflared is the sole ingress and Cloudflare's edge sets (and
-    # overwrites any client-supplied) `cf-connecting-ip` with the real
-    # client IP, so prefer it. Without this the socket peer is the tunnel
-    # container — identical for every external request — collapsing the
-    # whole instance into one bucket (no per-IP isolation, /login
-    # credential-stuffing rides under one shared ceiling). Mirrors
-    # AccessLogPlug.
+  @doc """
+  The requester's identity for rate buckets. Public because other
+  rate gates (e.g. `Auth.MailIpGate`) must bucket by the same notion
+  of "who" — two definitions of the client IP would drift.
+
+  cloudflared is the sole ingress and Cloudflare's edge sets (and
+  overwrites any client-supplied) `cf-connecting-ip` with the real
+  client IP, so prefer it. Without this the socket peer is the tunnel
+  container — identical for every external request — collapsing the
+  whole instance into one bucket (no per-IP isolation, /login
+  credential-stuffing rides under one shared ceiling). Mirrors
+  AccessLogPlug.
+  """
+  def peer_id(%Plug.Conn{} = conn) do
     case get_req_header(conn, "cf-connecting-ip") do
       [ip | _] when is_binary(ip) and ip != "" -> ip
       _ -> conn.remote_ip |> :inet.ntoa() |> to_string()

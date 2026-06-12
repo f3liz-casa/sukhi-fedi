@@ -42,6 +42,10 @@ config :sukhi_fedi, :mailer,
   transport: SukhiFedi.Mailer.Capture,
   from: "test@localhost"
 
+# Every test conn shares 127.0.0.1, so the per-IP mail gate would trip
+# across unrelated tests. The per-address limits stay exercised.
+config :sukhi_fedi, :mail_ip_limit, 1_000_000
+
 # Point ex_aws at the rustfs container from docker-compose.test.yml.
 config :ex_aws, :s3,
   scheme: "http://",

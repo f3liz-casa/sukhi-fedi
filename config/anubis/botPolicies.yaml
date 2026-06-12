@@ -1,20 +1,19 @@
 # Anubis bot policies for sukhi-fedi.
 #
-# 守る対象は二層:
-#   /check     … 加入・ログインの通り道(従来)。メールのコード入力も
-#                いまはこのページの上で行われる ─ 店先(/login /signup)
-#                は素通しのまま、PoW は遷移の中に隠れる。
-#   */email/*  … 実際にメールが出る XHR。/check を通った browser は
-#                cookie で素通り、cookie 無しの直叩き(bot/curl)は
-#                ここで止まる ─ 「メールは Anubis の後」の実体。
-#                第二の壁として per-address の Hammer レート制限が
-#                gateway 側に残っている。
+# 守る対象は `/check` だけ。ログインも加入も ─ そして 2026-06-13
+# からはメールの 6 桁コードの送信・入力も ─ ここを経由する。
+#
+# 教訓 (2026-06-13 深夜): メール送信 XHR (`*/email/*`) を CHALLENGE
+# にしてはいけない。/check を解いた直後の browser でも、fetch の
+# POST は challenge され直し(しかも cookie が消えて) reload ループに
+# なった。「SPA の fetch は JS challenge を解けない」 ─ 下に昔から
+# 書いてあるこの行は、XHR には cookie があっても効かない、の意味
+# でもあった。メール直叩き(bot/curl)への弁は gateway 側の IP 毎
+# レート制限 + per-address レート制限が持つ。
 #
 # ActivityPub 配送 (`/inbox`, `/users/*`, `/.well-known/*`,
 # `/nodeinfo/*`) と SPA の API/OAuth は素通し ─ ここを止めると
-# federation か signup が壊れる。ログイン済みの管理面
-# (/settings/email|reauth) も素通し: session cookie + レート制限が
-# 既にあり、Anubis cookie が切れただけの常連を弾きたくない。
+# federation か signup が壊れる。
 #
 # シンプルさを保つために `import:` は使わず、必要なルールだけを並べる。
 # 詳しい背景は docs/anubis.md を読む。
@@ -60,14 +59,6 @@ bots:
   # ── 守る対象 ────────────────────────────────────────────────────────
   - name: check-gate
     path_regex: ^/check$
-    action: CHALLENGE
-
-  - name: signup-email-gate
-    path_regex: ^/signup/email/(request|confirm)$
-    action: CHALLENGE
-
-  - name: login-email-gate
-    path_regex: ^/login/email(/request)?$
     action: CHALLENGE
 
   # ── 既定: それ以外は素通し ──────────────────────────────────────────

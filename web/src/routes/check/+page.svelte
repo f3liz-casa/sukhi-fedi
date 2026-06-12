@@ -112,12 +112,22 @@
     phase = 'error';
   }
 
-  // コード段のエラー(その場で直せるもの)。'anubis' は cookie 切れ ─
-  // /check 自体が challenge されているので、読み直せば PoW が再走する。
+  // コード段のエラー(その場で直せるもの)。'anubis' = XHR に challenge
+  // の HTML が返った。読み直しで直ることがある(PoW 再走)が、この
+  // Anubis は XHR を cookie 有りでも challenge し直すことが分かって
+  // いる(2026-06-13 の無限ループ)ので、reload は一回だけ ─ 二度目は
+  // ことばで止まる。ループより、止まるほうがいい。
+  const RELOADED_KEY = 'sf.check_reloaded';
+
   function stepFail(e: unknown): void {
     const msg = e instanceof Error ? e.message : '';
     if (msg === 'anubis') {
-      window.location.reload();
+      if (!sessionStorage.getItem(RELOADED_KEY)) {
+        sessionStorage.setItem(RELOADED_KEY, '1');
+        window.location.reload();
+      } else {
+        stepError = $t('common.deliverFailedRetry');
+      }
       return;
     }
     stepError =
@@ -300,6 +310,7 @@
 
     clearSignupDraft();
     sessionStorage.removeItem(SENT_KEY);
+    sessionStorage.removeItem(RELOADED_KEY);
     await goto('/timeline');
   }
 
@@ -351,6 +362,7 @@
     phase = 'working';
     clearLoginEmail();
     sessionStorage.removeItem(SENT_KEY);
+    sessionStorage.removeItem(RELOADED_KEY);
 
     // /oauth/authorize から弾かれて来ていた人は元の authorize URL へ、
     // そうでなければここから OAuth コードフローを始める(PoW は済み)。

@@ -15,9 +15,17 @@ defmodule SukhiFedi.Web.Auth.EmailLoginController do
   import Plug.Conn
 
   alias SukhiFedi.Auth.EmailAuth
-  alias SukhiFedi.Web.Auth.LoginController
+  alias SukhiFedi.Web.Auth.{LoginController, MailIpGate}
 
   def request(conn) do
+    if MailIpGate.ok?(conn) do
+      do_request(conn)
+    else
+      json(conn, 429, %{error: "rate_limited"})
+    end
+  end
+
+  defp do_request(conn) do
     email = to_string(conn.body_params["email"] || "")
 
     case EmailAuth.request_login_code(email) do
