@@ -15,10 +15,11 @@
   import { t } from '$lib/i18n';
   import LangSwitch from '$lib/components/LangSwitch.svelte';
 
-  // 入りかたは二つから選べる: パスワード、または(確認済みの)メールに
-  // 届くコード。アプリ 2FA を有効にしている人は、どちらの道でも
-  // そのあと totp の段が出る。パスキーは別の戸 ─ 一回で入れる。
-  let method = $state<'password' | 'email'>('password');
+  // 入りかたは二つから選べる: (確認済みの)メールに届くコード、または
+  // パスワード。メールが既定で先頭 ─ 覚えるものが少ない道を正面に。
+  // アプリ 2FA を有効にしている人は、どちらの道でもそのあと totp の
+  // 段が出る。パスキーは別の戸 ─ 一回で入れる。
+  let method = $state<'password' | 'email'>('email');
   let phase = $state<'first' | 'totp'>('first');
 
   let username = $state('');
@@ -200,23 +201,23 @@
       type="button"
       class="chip"
       role="tab"
-      aria-selected={method === 'password'}
-      onclick={() => {
-        method = 'password';
-        error = null;
-        notice = null;
-      }}>{$t('login.methodPassword')}</button
-    >
-    <button
-      type="button"
-      class="chip"
-      role="tab"
       aria-selected={method === 'email'}
       onclick={() => {
         method = 'email';
         error = null;
         notice = null;
       }}>{$t('login.methodEmail')}</button
+    >
+    <button
+      type="button"
+      class="chip"
+      role="tab"
+      aria-selected={method === 'password'}
+      onclick={() => {
+        method = 'password';
+        error = null;
+        notice = null;
+      }}>{$t('login.methodPassword')}</button
     >
   </div>
 
