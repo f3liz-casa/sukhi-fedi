@@ -28,7 +28,7 @@ defmodule SukhiFedi.LocalAccounts do
   @type signup_attrs :: %{
           required(:username) => String.t(),
           required(:password) => String.t(),
-          optional(:email) => String.t() | nil,
+          required(:email) => String.t(),
           optional(:display_name) => String.t() | nil,
           required(:invite_code) => String.t()
         }
@@ -135,18 +135,35 @@ defmodule SukhiFedi.LocalAccounts do
     email = get.(["email", :email]) |> trim_or_nil()
     display_name = get.(["display_name", :display_name]) |> trim_or_nil()
 
+    # Email is required at signup regardless of how the account will
+    # log in (2026-06). It lands unverified — the SPA nudges for the
+    # code round-trip afterwards; only verification claims the address
+    # (see the partial unique index + EmailAuth).
     cond do
-      is_nil(invite) -> {:error, :invite_missing}
-      is_nil(username) -> {:error, {:validation, %{username: ["を入れてください"]}}}
+      is_nil(invite) ->
+        {:error, :invite_missing}
+
+      is_nil(username) ->
+        {:error, {:validation, %{username: ["を入れてください"]}}}
+
+      is_nil(email) ->
+        {:error, {:validation, %{email: ["を入れてください"]}}}
+
       true ->
-        {:ok,
-         %{
-           username: String.downcase(username),
-           password: password || "",
-           invite_code: invite,
-           email: email,
-           display_name: display_name
-         }}
+        case SukhiFedi.Auth.EmailAuth.normalize_email(email) do
+          {:ok, norm} ->
+            {:ok,
+             %{
+               username: String.downcase(username),
+               password: password || "",
+               invite_code: invite,
+               email: norm,
+               display_name: display_name
+             }}
+
+          {:error, :invalid_email} ->
+            {:error, {:validation, %{email: ["の形が、メールアドレスに見えません"]}}}
+        end
     end
   end
 
@@ -186,6 +203,24 @@ defmodule SukhiFedi.LocalAccounts do
   def authenticate(_, _), do: {:error, :invalid}
 
   @doc """
+  Verify a password against the account's stored hash, with the dummy
+  verify on the miss path so timing stays flat. The single "are you
+  really you?" gate for factor-removing settings (TOTP off, passkey
+  delete, changing a verified email) — and the inner check of
+  `change_password/3`.
+  """
+  @spec check_password(Account.t(), term()) :: :ok | {:error, :invalid}
+  def check_password(%Account{password_hash: hash}, password)
+      when is_binary(hash) and is_binary(password) do
+    if Argon2.verify_pass(password, hash), do: :ok, else: {:error, :invalid}
+  end
+
+  def check_password(_, _) do
+    Argon2.no_user_verify()
+    {:error, :invalid}
+  end
+
+  @doc """
   Change a local account's password.
 
   Verifies `current` against the stored hash before swapping in a hash
@@ -203,37 +238,32 @@ defmodule SukhiFedi.LocalAccounts do
           {:ok, Account.t()}
           | {:error, :invalid_current}
           | {:error, :password_too_short}
-  def change_password(%Account{id: id, password_hash: hash} = account, current, new)
+  def change_password(%Account{id: id} = account, current, new)
       when is_binary(current) and is_binary(new) do
-    if is_binary(hash) and Argon2.verify_pass(current, hash) do
-      case hash_password(new) do
-        {:ok, new_hash} ->
-          Multi.new()
-          |> Multi.update(:account, Ecto.Changeset.change(account, %{password_hash: new_hash}))
-          |> Multi.delete_all(:sessions, from(s in Session, where: s.account_id == ^id))
-          # Also revoke the account's OAuth bearer tokens, so "change
-          # password" actually logs out every API client/device — not just
-          # cookie sessions. Otherwise a leaked, never-expiring token kept
-          # working after a password change.
-          |> Multi.update_all(
-            :tokens,
-            from(t in SukhiFedi.Schema.OauthAccessToken,
-              where: t.account_id == ^id and is_nil(t.revoked_at)
-            ),
-            set: [revoked_at: DateTime.utc_now() |> DateTime.truncate(:second)]
-          )
-          |> Repo.transaction()
-          |> case do
-            {:ok, %{account: a}} -> {:ok, a}
-            {:error, _step, reason, _} -> {:error, reason}
-          end
-
-        {:error, _} = err ->
-          err
+    with :ok <- check_password(account, current),
+         {:ok, new_hash} <- hash_password(new) do
+      Multi.new()
+      |> Multi.update(:account, Ecto.Changeset.change(account, %{password_hash: new_hash}))
+      |> Multi.delete_all(:sessions, from(s in Session, where: s.account_id == ^id))
+      # Also revoke the account's OAuth bearer tokens, so "change
+      # password" actually logs out every API client/device — not just
+      # cookie sessions. Otherwise a leaked, never-expiring token kept
+      # working after a password change.
+      |> Multi.update_all(
+        :tokens,
+        from(t in SukhiFedi.Schema.OauthAccessToken,
+          where: t.account_id == ^id and is_nil(t.revoked_at)
+        ),
+        set: [revoked_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+      )
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{account: a}} -> {:ok, a}
+        {:error, _step, reason, _} -> {:error, reason}
       end
     else
-      Argon2.no_user_verify()
-      {:error, :invalid_current}
+      {:error, :invalid} -> {:error, :invalid_current}
+      {:error, :password_too_short} -> {:error, :password_too_short}
     end
   end
 

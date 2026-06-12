@@ -40,6 +40,62 @@ defmodule SukhiFedi.Integration.LocalAccountsTest do
     end
   end
 
+  describe "create/1 (signup)" do
+    setup do
+      issuer = "inv_#{System.unique_integer([:positive])}"
+      {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
+      {:ok, invite} = SukhiFedi.InviteCodes.issue(issuer.id)
+      %{invite: invite.code}
+    end
+
+    defp signup_attrs(invite, overrides) do
+      n = System.unique_integer([:positive])
+
+      Map.merge(
+        %{
+          "username" => "signup_#{n}",
+          "password" => "long-enough-pass",
+          "email" => "signup_#{n}@example.test",
+          "invite_code" => invite
+        },
+        overrides
+      )
+    end
+
+    test "stores the email normalized and unverified", %{invite: invite} do
+      attrs = signup_attrs(invite, %{"email" => "  Mixed.Case@Example.TEST "})
+
+      assert {:ok, account} = LocalAccounts.create(attrs)
+      assert account.email == "mixed.case@example.test"
+      assert is_nil(account.email_verified_at)
+    end
+
+    test "email is required regardless of anything else", %{invite: invite} do
+      attrs = signup_attrs(invite, %{"email" => nil})
+      assert {:error, {:validation, %{email: [msg]}}} = LocalAccounts.create(attrs)
+      assert msg =~ "入れて"
+
+      attrs = signup_attrs(invite, %{"email" => "   "})
+      assert {:error, {:validation, %{email: _}}} = LocalAccounts.create(attrs)
+    end
+
+    test "a malformed email is refused", %{invite: invite} do
+      attrs = signup_attrs(invite, %{"email" => "not-an-email"})
+      assert {:error, {:validation, %{email: [msg]}}} = LocalAccounts.create(attrs)
+      assert msg =~ "メールアドレス"
+    end
+
+    test "two signups may carry the same (unverified) address", %{invite: invite} do
+      issuer = "inv2_#{System.unique_integer([:positive])}"
+      {:ok, issuer} = LocalAccounts.create_admin(issuer, "long-enough-pass")
+      {:ok, invite2} = SukhiFedi.InviteCodes.issue(issuer.id)
+
+      shared = "shared_#{System.unique_integer([:positive])}@example.test"
+      assert {:ok, _} = LocalAccounts.create(signup_attrs(invite, %{"email" => shared}))
+      assert {:ok, _} = LocalAccounts.create(signup_attrs(invite2.code, %{"email" => shared}))
+    end
+  end
+
   describe "change_password/3" do
     setup do
       name = "user_#{System.unique_integer([:positive])}"

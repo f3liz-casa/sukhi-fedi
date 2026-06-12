@@ -14,12 +14,11 @@ defmodule SukhiFedi.Web.Auth.PasswordController do
 
   import Plug.Conn
 
-  alias SukhiFedi.{Accounts, LocalAccounts}
-
-  @cookie "session_token"
+  alias SukhiFedi.LocalAccounts
+  alias SukhiFedi.Web.Auth.SessionCookie
 
   def submit(conn) do
-    case current_account(conn) do
+    case SessionCookie.account(conn) do
       nil ->
         json(conn, 401, %{error: "unauthorized"})
 
@@ -36,7 +35,7 @@ defmodule SukhiFedi.Web.Auth.PasswordController do
             case LocalAccounts.change_password(account, current, new) do
               {:ok, _} ->
                 conn
-                |> delete_resp_cookie(@cookie, path: "/")
+                |> SessionCookie.drop()
                 |> json(200, %{ok: true})
 
               {:error, :invalid_current} ->
@@ -47,11 +46,6 @@ defmodule SukhiFedi.Web.Auth.PasswordController do
             end
         end
     end
-  end
-
-  defp current_account(conn) do
-    conn = fetch_cookies(conn)
-    Accounts.get_account_by_session_token(conn.cookies[@cookie] || "")
   end
 
   defp json(conn, status, data) do

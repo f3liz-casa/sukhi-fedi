@@ -13,8 +13,11 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.StatsController
   alias SukhiFedi.Web.StreamingController
   alias SukhiFedi.Web.StreamingSseController
+  alias SukhiFedi.Web.Auth.EmailLoginController
   alias SukhiFedi.Web.Auth.LoginController
+  alias SukhiFedi.Web.Auth.PasskeyLoginController
   alias SukhiFedi.Web.Auth.PasswordController
+  alias SukhiFedi.Web.Auth.SecurityController
   alias SukhiFedi.Web.MediaProxyController
 
   plug(Plug.Logger)
@@ -75,6 +78,33 @@ defmodule SukhiFedi.Web.Router do
     LoginController.submit(conn)
   end
 
+  # Second step of password / email-code login when the account has
+  # app-2FA enabled. Takes the pending token from POST /login plus the
+  # 6-digit code, then mints the session cookie.
+  post "/login/totp" do
+    LoginController.totp(conn)
+  end
+
+  # Email-code login (the "メール認証" door). Request mails a code to a
+  # verified address; submit exchanges it for the cookie (or the TOTP
+  # step, same as the password door).
+  post "/login/email/request" do
+    EmailLoginController.request(conn)
+  end
+
+  post "/login/email" do
+    EmailLoginController.submit(conn)
+  end
+
+  # Passkey (WebAuthn discoverable credential) login.
+  post "/login/passkey/options" do
+    PasskeyLoginController.options(conn)
+  end
+
+  post "/login/passkey" do
+    PasskeyLoginController.submit(conn)
+  end
+
   post "/logout" do
     LoginController.logout(conn)
   end
@@ -89,6 +119,51 @@ defmodule SukhiFedi.Web.Router do
 
   post "/settings/password" do
     PasswordController.submit(conn)
+  end
+
+  # ── Login-factor management (cookie-gated; see SecurityController) ─────
+  # The page is the SPA; the POSTs are JSON. GET /auth/state also takes
+  # a read-scoped bearer so the SPA can decide whether to nudge for an
+  # email right after signup.
+
+  get "/auth/state" do
+    SecurityController.state(conn)
+  end
+
+  get "/settings/security" do
+    serve_spa(conn)
+  end
+
+  post "/settings/email/request" do
+    SecurityController.email_request(conn)
+  end
+
+  post "/settings/email/confirm" do
+    SecurityController.email_confirm(conn)
+  end
+
+  post "/settings/totp/setup" do
+    SecurityController.totp_setup(conn)
+  end
+
+  post "/settings/totp/enable" do
+    SecurityController.totp_enable(conn)
+  end
+
+  post "/settings/totp/disable" do
+    SecurityController.totp_disable(conn)
+  end
+
+  post "/settings/passkeys/options" do
+    SecurityController.passkey_options(conn)
+  end
+
+  post "/settings/passkeys" do
+    SecurityController.passkey_register(conn)
+  end
+
+  post "/settings/passkeys/:id/delete" do
+    SecurityController.passkey_delete(conn)
   end
 
   # ── Static assets for the SPA + login page ─────────────────────────────
