@@ -1,9 +1,20 @@
 # Anubis bot policies for sukhi-fedi.
 #
-# 守る対象は `/check` だけ。ログインも加入もここを経由してから
-# それぞれの続きへ進む。ActivityPub 配送 (`/inbox`, `/users/*`,
-# `/.well-known/*`, `/nodeinfo/*`) と SPA の API/OAuth は素通し ─
-# ここを止めると federation か signup が壊れる。
+# 守る対象は三層:
+#   /check            … 加入・ログインの本処理の通り道(従来)
+#   /login /signup    … メール送信フォームを抱くページ。ここで PoW を
+#                       済ませて cookie を持つ(合計の PoW 回数は同じ ─
+#                       /check は cookie 再利用で素通りになる)
+#   */email/*         … 実際にメールが出る XHR。cookie 無しの直叩き
+#                       (bot/curl)はここで止まる ─ 「メールは Anubis の
+#                       後」の実体。第二の壁として per-address の
+#                       Hammer レート制限が gateway 側に残っている。
+#
+# ActivityPub 配送 (`/inbox`, `/users/*`, `/.well-known/*`,
+# `/nodeinfo/*`) と SPA の API/OAuth は素通し ─ ここを止めると
+# federation か signup が壊れる。ログイン済みの管理面
+# (/settings/email|reauth) も素通し: session cookie + レート制限が
+# 既にあり、Anubis cookie が切れただけの常連を弾きたくない。
 #
 # シンプルさを保つために `import:` は使わず、必要なルールだけを並べる。
 # 詳しい背景は docs/anubis.md を読む。
@@ -42,13 +53,25 @@ bots:
     path_regex: ^/metrics$
     action: DENY
 
-  - name: login-pages
-    path_regex: ^/(login|logout|signup)$
+  - name: logout-allow
+    path_regex: ^/logout$
     action: ALLOW
 
   # ── 守る対象 ────────────────────────────────────────────────────────
   - name: check-gate
     path_regex: ^/check$
+    action: CHALLENGE
+
+  - name: auth-pages-gate
+    path_regex: ^/(login|signup)$
+    action: CHALLENGE
+
+  - name: signup-email-gate
+    path_regex: ^/signup/email/(request|confirm)$
+    action: CHALLENGE
+
+  - name: login-email-gate
+    path_regex: ^/login/email(/request)?$
     action: CHALLENGE
 
   # ── 既定: それ以外は素通し ──────────────────────────────────────────

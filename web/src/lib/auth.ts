@@ -253,6 +253,16 @@ export async function completeLogin(code: string, state: string): Promise<TokenS
   return t;
 }
 
+// メールを送る XHR は Anubis の CHALLENGE の内側に居る(botPolicies)。
+// ページ(/login /signup)を開いた時点で cookie は立っているはずだが、
+// フォームに長居して cookie が切れると、JSON の代わりに challenge の
+// HTML が返ってくる。それを検知したら 'anubis' を投げ、呼び元が
+// ページを読み直す(ページ自体の challenge が再走して cookie が戻る)。
+function ensureJsonOrAnubis(res: Response): void {
+  const ct = res.headers.get('content-type') ?? '';
+  if (!ct.includes('application/json')) throw new Error('anubis');
+}
+
 // 加入前のメールボックス証明。request はコードを送り、confirm は
 // 正しいコードと引き換えに署名つき email_proof を返す。これを
 // signup() に渡す ─ password は無くてもいい(レガシー・任意)。
@@ -262,6 +272,7 @@ export async function requestSignupEmailCode(email: string): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email })
   });
+  ensureJsonOrAnubis(res);
   if (res.ok) return;
   const body = await res.json().catch(() => ({}));
   throw new Error((body as { error?: string })?.error ?? `signup_email_failed_${res.status}`);
@@ -273,6 +284,7 @@ export async function confirmSignupEmailCode(email: string, code: string): Promi
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, code })
   });
+  ensureJsonOrAnubis(res);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error((body as { error?: string })?.error ?? `signup_email_failed_${res.status}`);
@@ -380,6 +392,7 @@ export async function requestEmailLoginCode(email: string): Promise<void> {
     credentials: 'same-origin',
     body: JSON.stringify({ email })
   });
+  ensureJsonOrAnubis(res);
   if (res.ok) return;
   const body = await res.json().catch(() => ({}));
   throw new Error(body?.error ?? `email_request_failed_${res.status}`);
@@ -395,6 +408,7 @@ export async function loginWithEmailCode(
     credentials: 'same-origin',
     body: JSON.stringify({ email, code })
   });
+  ensureJsonOrAnubis(res);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.error ?? `email_login_failed_${res.status}`);

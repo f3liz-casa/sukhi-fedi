@@ -93,6 +93,12 @@
       notice = $t('login.codeSentNotice');
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
+      if (msg === 'anubis') {
+        // ページ滞在中に Anubis cookie が切れた ─ 読み直せば PoW が
+        // 再走して戻ってくる。
+        window.location.reload();
+        return;
+      }
       error = msg === 'rate_limited' ? $t('login.rateLimited') : $t('login.failed');
     } finally {
       submitting = false;
@@ -107,6 +113,10 @@
       proceed(await loginWithEmailCode(email, emailCode));
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
+      if (msg === 'anubis') {
+        window.location.reload();
+        return;
+      }
       error =
         msg === 'too_many_attempts'
           ? $t('login.rateLimited')

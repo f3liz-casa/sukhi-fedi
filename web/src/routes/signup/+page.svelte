@@ -68,6 +68,18 @@
     }
   }
 
+  // Anubis の cookie がフォーム滞在中に切れていたら、ページを読み
+  // 直す ─ ページ自体が challenge されているので、PoW が再走して
+  // cookie が戻り、入力した下書きは sessionStorage から復元される。
+  function reloadIfAnubis(e: unknown): boolean {
+    if (e instanceof Error && e.message === 'anubis') {
+      saveSignupDraft({ username, invite_code, email });
+      window.location.reload();
+      return true;
+    }
+    return false;
+  }
+
   async function sendEmailCode() {
     if (emailBusy) return;
     emailBusy = true;
@@ -76,7 +88,7 @@
       await requestSignupEmailCode(email);
       emailPhase = 'sent';
     } catch (e) {
-      error = explainEmail(e);
+      if (!reloadIfAnubis(e)) error = explainEmail(e);
     } finally {
       emailBusy = false;
     }
@@ -90,7 +102,7 @@
       emailProof = await confirmSignupEmailCode(email, emailCode);
       emailPhase = 'proven';
     } catch (e) {
-      error = explainEmail(e);
+      if (!reloadIfAnubis(e)) error = explainEmail(e);
     } finally {
       emailBusy = false;
     }
