@@ -17,6 +17,7 @@
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import StatusCard from '$lib/components/Status.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
   import FollowButton from '$lib/components/FollowButton.svelte';
   import AddToListButton from '$lib/components/AddToListButton.svelte';
   import Composer from '$lib/components/Composer.svelte';
@@ -173,11 +174,7 @@
       <img class="profile-header" src={account.header} alt="" loading="lazy" />
     {/if}
     <div class="profile-id">
-      {#if account.avatar}
-        <img class="avatar avatar-lg" src={account.avatar} alt="" />
-      {:else}
-        <span class="avatar avatar-lg" aria-hidden="true"></span>
-      {/if}
+      <Avatar class="avatar avatar-lg" src={account.avatar} name={account.display_name || account.username} />
       <div class="stack-tight" style="flex: 1;">
         <p class="display-name" style="font-size: var(--text-lg);">
           {@html renderEmojis(phrase(account.display_name || account.username), account.emojis)}

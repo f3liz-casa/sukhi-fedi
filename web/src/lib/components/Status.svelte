@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Status } from '$lib/api';
   import Self from './Status.svelte';
+  import Avatar from './Avatar.svelte';
   import CircleBadge from './CircleBadge.svelte';
   import StatusActions from './StatusActions.svelte';
   import StatusMedia from './StatusMedia.svelte';
@@ -67,11 +68,7 @@
   </div>
 {:else}
 <article class="status">
-  {#if avatar}
-    <img class="avatar" src={avatar} alt="" loading="lazy" />
-  {:else}
-    <span class="avatar" aria-hidden="true"></span>
-  {/if}
+  <Avatar class="avatar" src={avatar} {name} />
 
   <div class="body">
     <header class="meta">
@@ -96,9 +93,11 @@
     {#if status.quote}
       <a class="quote-card" href={`/@${status.quote.account.acct}/${status.quote.id}`}>
         <div class="quote-head">
-          {#if status.quote.account.avatar}
-            <img class="quote-avatar" src={status.quote.account.avatar} alt="" loading="lazy" />
-          {/if}
+          <Avatar
+            class="quote-avatar"
+            src={status.quote.account.avatar}
+            name={status.quote.account.display_name || status.quote.account.username}
+          />
           <span class="quote-name"
             >{@html renderEmojis(
               phrase(status.quote.account.display_name || status.quote.account.username),
@@ -160,12 +159,6 @@
     gap: 0.375rem;
     margin-bottom: 0.25rem;
     font-size: var(--text-sm);
-  }
-  .quote-avatar {
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 50%;
-    object-fit: cover;
   }
   .quote-name {
     font-weight: 600;

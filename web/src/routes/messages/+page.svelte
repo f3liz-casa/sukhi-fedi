@@ -10,6 +10,7 @@
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
   import { t } from '$lib/i18n';
 
   let items = $state<Conversation[]>([]);
@@ -97,11 +98,7 @@
         <span class="conversation-people">
           {#each c.accounts as a (a.id)}
             <a class="conversation-person" href={`/@${a.acct}`}>
-              {#if a.avatar}
-                <img class="avatar avatar-sm" src={a.avatar} alt="" loading="lazy" />
-              {:else}
-                <span class="avatar avatar-sm" aria-hidden="true"></span>
-              {/if}
+              <Avatar class="avatar avatar-sm" src={a.avatar} name={a.display_name || a.username} />
             </a>
           {/each}
           <span class="display-name">{@html renderEmojis(phrase(withLabel(c)), c.accounts[0]?.emojis)}</span>

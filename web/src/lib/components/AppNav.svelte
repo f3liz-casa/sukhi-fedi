@@ -19,6 +19,7 @@
   import { page } from '$app/state';
   import { goto, afterNavigate } from '$app/navigation';
   import { isLoggedIn, signOutServer } from '$lib/auth';
+  import Avatar from './Avatar.svelte';
   import { requestCompose } from '$lib/compose';
   import { currentAccount, type Account } from '$lib/api';
   import {
@@ -166,8 +167,8 @@
 
         <NavMenu ariaLabel={$t('nav.account')} triggerClass="nav-avatar-trigger">
           {#snippet trigger()}
-            {#if me?.avatar}
-              <img class="nav-avatar" src={me.avatar} alt="" />
+            {#if me}
+              <Avatar class="nav-avatar" src={me.avatar} name={me.display_name || me.username} />
             {:else}
               <NavIcon name="user" />
             {/if}

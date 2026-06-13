@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Account, Relationship } from '$lib/api';
   import FollowButton from './FollowButton.svelte';
+  import Avatar from './Avatar.svelte';
   import CircleBadge from './CircleBadge.svelte';
   import { phrase } from '$lib/phrase';
   import { renderEmojis } from '$lib/emoji';
@@ -19,11 +20,7 @@
 
 <article class="account-row">
   <a class="account-row-link" href={`/@${account.acct}`}>
-    {#if account.avatar}
-      <img class="avatar" src={account.avatar} alt="" loading="lazy" />
-    {:else}
-      <span class="avatar" aria-hidden="true"></span>
-    {/if}
+    <Avatar class="avatar" src={account.avatar} {name} />
     <span class="stack-tight">
       <span class="display-name">{@html renderEmojis(phrase(name), account.emojis)}<CircleBadge accountId={account.id} /></span>
       <span class="muted">@{account.acct}</span>

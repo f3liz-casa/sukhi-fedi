@@ -12,6 +12,7 @@
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
   import { t } from '$lib/i18n';
 
   // ふたつのタブ(lib/notify.ts の層と同じ割り方):
@@ -164,11 +165,11 @@
     <article class="notif">
       <header class="notif-head">
         <a class="notif-who" href={`/@${n.account.acct}`}>
-          {#if n.account.avatar}
-            <img class="avatar avatar-sm" src={n.account.avatar} alt="" loading="lazy" />
-          {:else}
-            <span class="avatar avatar-sm" aria-hidden="true"></span>
-          {/if}
+          <Avatar
+            class="avatar avatar-sm"
+            src={n.account.avatar}
+            name={n.account.display_name || n.account.username}
+          />
           <span class="display-name"
             >{@html renderEmojis(
               phrase(n.account.display_name || n.account.username),

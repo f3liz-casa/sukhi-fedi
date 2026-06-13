@@ -690,6 +690,15 @@ img.twemoji {
   height: 1.5rem;
 }
 
+/* 引用カードの小さなアバター。Avatar コンポーネント内の要素に当てる
+   ため、scoped でなくここに置く(.avatar 系と同じ理由)。 */
+.quote-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 /* form 要素を最低限揃える。.composer や .settings-form など、.form
    クラスを付けていないところでも読みやすいように、textarea / select /
    input[type=file] の素の見た目を整える。 */

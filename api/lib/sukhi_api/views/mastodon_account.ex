@@ -17,8 +17,14 @@ defmodule SukhiApi.Views.MastodonAccount do
 
   alias SukhiApi.Views.Id
 
-  # 1x1 透明 PNG。avatar/header に既定 asset を置くまでの繋ぎ。
+  # 1x1 透明 PNG。header(バナー)の既定 ─ バナー無しは見えないままで
+  # いい。avatar は @default_avatar_path(やさしいシルエット)を使う。
   @default_image "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+  # 画像が無い人の avatar の既定。web はこの URL を「画像なし」の印に
+  # して頭文字 + 淡い色に描き替える ─ web/src/lib/avatar.ts と末尾を
+  # 揃えること。他クライアントにはこのシルエットがそのまま見える。
+  @default_avatar_path "/static/avatar-default.svg"
 
   @doc """
   Render a single account.
@@ -54,11 +60,12 @@ defmodule SukhiApi.Views.MastodonAccount do
 
     # Mastodon spec は avatar/header を「常に非 null の URL」と決めて
     # おり、Moshidon など Kotlin/Gson 系のクライアントは String non-null
-    # で受けるので、null を返すと NPE で即クラッシュする。サーバ側で
-    # 既定の missing.png を配るのが本筋だが、まだ asset を置いて
-    # いないので、最小の透明 PNG を data URL で返してフォールバック
-    # する(クラッシュさせないことが先)。落ち着いたら /static/missing.png
-    # にしてここを差し戻す。
+    # で受けるので、null を返すと NPE で即クラッシュする。だから画像の
+    # 無い人にも必ず既定 URL を返す:
+    #   avatar … /static/avatar-default.svg(やさしいシルエット)。web は
+    #            この URL を「画像なし」の印として頭文字 + 淡い色に描き
+    #            替える。他クライアントにはシルエットがそのまま見える。
+    #   header … バナー無しは何も無くていいので、見えない透明 PNG のまま。
     # リモートアカウントの画像は gateway の /proxy/{avatar,header}/:id に
     # 書き換える ─ 閲覧者の IP を相手サーバへ渡さないため。?v= は元 URL の
     # ハッシュで、actor 更新で画像 URL が変われば CF cache も自然に外れる。
@@ -66,7 +73,7 @@ defmodule SukhiApi.Views.MastodonAccount do
 
     avatar =
       proxy_image(remote?, "avatar", account.id, Map.get(account, :avatar_url)) ||
-        @default_image
+        "https://#{local_domain}#{@default_avatar_path}"
 
     header =
       proxy_image(remote?, "header", account.id, Map.get(account, :banner_url)) ||

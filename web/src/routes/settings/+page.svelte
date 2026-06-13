@@ -12,6 +12,7 @@
   } from '$lib/api';
   import { clearToken, isLoggedIn, loadToken } from '$lib/auth';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
   import LangSwitch from '$lib/components/LangSwitch.svelte';
   import { t } from '$lib/i18n';
 
@@ -228,8 +229,8 @@
       <span>{avatarPreview ? $t('settings.avatarNew') : $t('settings.avatarNow')}</span>
       {#if avatarPreview}
         <img class="avatar avatar-lg" src={avatarPreview} alt="" />
-      {:else if me.avatar}
-        <img class="avatar avatar-lg" src={me.avatar} alt="" />
+      {:else}
+        <Avatar class="avatar avatar-lg" src={me.avatar} name={me.display_name || me.username} />
       {/if}
       <input type="file" accept="image/*" onchange={onAvatar} />
     </label>
