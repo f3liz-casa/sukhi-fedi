@@ -13,19 +13,30 @@ const TWEMOJI_OPTS = { base: '/twemoji/', folder: 'svg', ext: '.svg', className:
 // `html` is assumed to already be safe — server-rendered status/bio HTML,
 // or text that went through `phrase()`. We only inject our own <img> and
 // escape the url/shortcode we put into attributes.
+//
+// Replacement is a single pass over the text, not one pass per emoji:
+// some peers send one Emoji tag per *occurrence*, so the array can hold
+// the same shortcode twice — a second pass would then match the
+// `alt=":x:"` inside the <img> the first pass inserted and nest broken
+// markup. First entry wins.
 export function renderEmojis(html: string, emojis?: Emoji[] | null): string {
   if (!html) return html;
 
-  let out = html;
+  const byShortcode = new Map<string, string>();
   for (const e of emojis ?? []) {
     if (!e.shortcode || !e.url) continue;
-    const token = `:${e.shortcode}:`;
-    if (!out.includes(token)) continue;
+    if (!byShortcode.has(e.shortcode)) byShortcode.set(e.shortcode, e.url);
+  }
 
-    const src = escapeAttr(e.url);
-    const alt = escapeAttr(token);
-    const img = `<img class="custom-emoji" src="${src}" alt="${alt}" title="${alt}" loading="lazy" />`;
-    out = out.split(token).join(img);
+  let out = html;
+  if (byShortcode.size > 0) {
+    out = out.replace(/:([^:\s]+):/g, (token, shortcode) => {
+      const url = byShortcode.get(shortcode);
+      if (!url) return token;
+      const src = escapeAttr(url);
+      const alt = escapeAttr(token);
+      return `<img class="custom-emoji" src="${src}" alt="${alt}" title="${alt}" loading="lazy" />`;
+    });
   }
 
   // Then unicode emoji → Twemoji images. Custom-emoji <img> we just inserted

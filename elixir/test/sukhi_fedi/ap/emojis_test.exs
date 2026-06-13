@@ -39,6 +39,16 @@ defmodule SukhiFedi.AP.EmojisTest do
       assert Emojis.from_tag(tag) == []
     end
 
+    test "deduplicates a shortcode the peer lists once per occurrence" do
+      skeb = %{
+        "type" => "Emoji",
+        "name" => ":skeb:",
+        "icon" => %{"type" => "Image", "url" => "https://e.example/skeb.png"}
+      }
+
+      assert [%{"shortcode" => "skeb"}] = Emojis.from_tag([skeb, skeb, skeb])
+    end
+
     test "non-list input is an empty list" do
       assert Emojis.from_tag(nil) == []
       assert Emojis.from_tag(%{}) == []

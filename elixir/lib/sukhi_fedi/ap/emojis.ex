@@ -14,10 +14,15 @@ defmodule SukhiFedi.AP.Emojis do
   swap `:blobcat:` for the image. `shortcode` is the bare name (no
   colons) so it matches the text; `static_url` falls back to `url` when
   the peer doesn't offer a separate still frame.
+
+  Some peers list the same emoji once per occurrence (name + bio both
+  wearing `:skeb:` gives two entries), so the list is deduplicated by
+  shortcode — first entry wins.
   """
 
   @spec from_tag(term()) :: [map()]
-  def from_tag(tag) when is_list(tag), do: Enum.flat_map(tag, &one/1)
+  def from_tag(tag) when is_list(tag),
+    do: tag |> Enum.flat_map(&one/1) |> Enum.uniq_by(& &1["shortcode"])
   def from_tag(_), do: []
 
   defp one(%{"type" => "Emoji", "name" => name} = entry) when is_binary(name) and name != "" do
