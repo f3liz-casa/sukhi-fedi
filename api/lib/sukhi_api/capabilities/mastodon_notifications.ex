@@ -105,9 +105,22 @@ defmodule SukhiApi.Capabilities.MastodonNotifications do
     |> maybe_put_list(:exclude_types, q["exclude_types[]"] || q["exclude_types"])
   end
 
+  # `URI.decode_query/1` keeps only the last value of a repeated key,
+  # but Mastodon clients send list filters as `types[]=a&types[]=b` —
+  # walk the pairs ourselves and collect repeats into lists, in order.
   defp decode_query(nil), do: %{}
   defp decode_query(""), do: %{}
-  defp decode_query(s) when is_binary(s), do: URI.decode_query(s)
+
+  defp decode_query(s) when is_binary(s) do
+    s
+    |> URI.query_decoder()
+    |> Enum.reduce(%{}, fn {k, v}, acc ->
+      Map.update(acc, k, v, fn
+        prev when is_list(prev) -> prev ++ [v]
+        prev -> [prev, v]
+      end)
+    end)
+  end
 
   defp maybe_put_list(opts, _key, nil), do: opts
   defp maybe_put_list(opts, key, v) when is_list(v), do: Map.put(opts, key, v)
