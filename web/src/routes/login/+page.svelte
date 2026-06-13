@@ -198,7 +198,7 @@
       }}
     >
       <label class="stack-tight">
-        <span>{$t('login.id')}</span>
+        <span>{$t('login.handle')}</span>
         <input
           type="text"
           bind:value={username}

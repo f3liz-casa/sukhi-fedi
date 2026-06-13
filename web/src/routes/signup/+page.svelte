@@ -86,16 +86,19 @@
   </label>
 
   <label class="stack-tight">
-    <span>{$t('signup.id')}</span>
-    <input
-      type="text"
-      bind:value={username}
-      autocomplete="username"
-      pattern="[a-z0-9_]{'{1,30}'}"
-      title={$t('signup.idTitle')}
-      required
-    />
-    <span class="help">{$t('signup.idHelpPre')}<code>usagi_05</code></span>
+    <span>{$t('signup.handle')}</span>
+    <div class="handle-field">
+      <span class="handle-at" aria-hidden="true">@</span>
+      <input
+        type="text"
+        bind:value={username}
+        autocomplete="username"
+        pattern="[a-z0-9_]{'{1,30}'}"
+        title={$t('signup.handleTitle')}
+        required
+      />
+    </div>
+    <span class="help">{$t('signup.handleHelpPre')}<code>@usagi_05</code></span>
   </label>
 
   <label class="stack-tight">

@@ -563,6 +563,34 @@ img.twemoji {
   border-color: var(--color-text);
 }
 
+/* signup のハンドル欄。@ を前に置いて、これは公開の宛先(@名前)だと
+   ひと目で分かるように。枠は wrapper が持ち、input は中で素になる。
+   送信値に @ は混ざらない(前置はあくまで見た目)。 */
+.handle-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding-left: var(--space-3);
+}
+.handle-field:focus-within {
+  border-color: var(--color-text);
+}
+.handle-at {
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.form .handle-field input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-1);
+}
+
 .form button[type='submit'] {
   font: inherit;
   padding: var(--space-2) var(--space-6);
