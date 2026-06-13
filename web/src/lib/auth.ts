@@ -113,6 +113,67 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// 同時に飛んだ複数の 401 が、それぞれ refresh を叩かないように
+// 1 本の grant に束ねる。refresh token はサーバ側で rotate する
+// (使うと revoke され新しいのが出る) ので、同じ古い token で並行に
+// 叩くと片方が invalid_grant で負ける ─ その取りこぼしを防ぐ。
+let refreshInFlight: Promise<TokenSet | null> | null = null;
+
+// 保存ずみの refresh token で access token を取り直す (RFC 6749 §6)。
+// 成功すれば新しい TokenSet を保存して返す。refresh token が無い・
+// サーバに弾かれた等で取れなければ null ─ 呼び元 (api.ts) はそれを
+// 見て login へ落とす。ここでは token は消さない (null = 「更新でき
+// なかった」だけを伝え、捨てる判断は呼び元に委ねる)。
+export function tryRefresh(): Promise<TokenSet | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<TokenSet | null> {
+  if (!browser) return null;
+  const current = loadToken();
+  const rawClient = localStorage.getItem(CLIENT_KEY);
+  if (!current?.refresh_token || !rawClient) return null;
+
+  let client: ClientCreds;
+  try {
+    client = JSON.parse(rawClient) as ClientCreds;
+  } catch {
+    return null;
+  }
+
+  try {
+    const res = await fetch('/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: current.refresh_token,
+        client_id: client.client_id,
+        client_secret: client.client_secret
+      })
+    });
+    if (!res.ok) return null;
+    const t = (await res.json()) as TokenSet;
+    saveToken(t);
+    return t;
+  } catch {
+    return null;
+  }
+}
+
+// セッションがもう戻せない (refresh token が無い・refresh も弾かれた)
+// ときの行き先。token を捨てて、ホームの「入る」と同じ `/login` の
+// 戸口へ送る。同期のハードナビゲーションなので、呼び元が保険で
+// 走らせる client 側遷移 (goto('/')) より先に確定する。
+export function redirectToLogin(): void {
+  clearToken();
+  if (browser) window.location.assign('/login');
+}
+
 // RFC 7009 revoke: tell the server to invalidate the bearer token, then
 // drop it locally. Best-effort — a failed/offline revoke still clears the
 // local state, so sign-out always completes. Without this, "sign out" only

@@ -1,4 +1,4 @@
-import { loadToken, clearToken } from './auth';
+import { loadToken, tryRefresh, redirectToLogin } from './auth';
 
 export type Field = {
   name: string;
@@ -120,9 +120,12 @@ export type TimelineKind = 'home' | 'public' | 'tag';
 
 // ── core ─────────────────────────────────────────────────────────────
 // Every call funnels through `req`. One place attaches the bearer (unless
-// `auth: false`), trips a logout on 401 for authed calls, optionally maps a
-// 404 to `not_found`, and turns any non-2xx into a thrown Error — its message
-// is the server's `error` field when present, otherwise `<label>_failed_<status>`.
+// `auth: false`); on a 401 for an authed call it tries a single
+// refresh-token grant and retries once with the fresh bearer, so an expired
+// access token renews silently. If the refresh fails too, the session is
+// dead and the user is bounced to login. It optionally maps a 404 to
+// `not_found`, and turns any non-2xx into a thrown Error — its message is the
+// server's `error` field when present, otherwise `<label>_failed_<status>`.
 // The thin `json` / `page` wrappers shape the success side; `pageQs` builds the
 // shared `limit` + `max_id` query for cursor-paginated lists.
 
@@ -146,23 +149,40 @@ type ReqInit = {
 
 async function req(method: string, path: string, label: string, init: ReqInit = {}): Promise<Response> {
   const attachAuth = init.auth !== false;
-  const headers: Record<string, string> = { accept: 'application/json' };
-  if (attachAuth) Object.assign(headers, authHeader());
 
   let body: BodyInit | undefined;
+  const baseHeaders: Record<string, string> = { accept: 'application/json' };
   if (init.json !== undefined) {
-    headers['content-type'] = 'application/json';
+    baseHeaders['content-type'] = 'application/json';
     body = JSON.stringify(init.json);
   } else if (init.form) {
     body = init.form;
   }
 
-  const res = await fetch(path, { method, headers, body });
+  // 送るたびに今の token を読む ─ refresh で差し替わった直後の再送が
+  // 古い bearer を掴まないように。
+  const send = () => {
+    const headers = { ...baseHeaders };
+    if (attachAuth) Object.assign(headers, authHeader());
+    return fetch(path, { method, headers, body });
+  };
 
-  if (init.auth !== false && init.auth !== 'optional' && res.status === 401) {
-    clearToken();
-    throw new Error('unauthorized');
+  let res = await send();
+
+  // authed (非 optional) な呼び出しが 401 = access token が切れたか
+  // revoke された。まず refresh で取り直し、取れたら新しい bearer で
+  // 一度だけ再送する (呼び元には透明)。取れない / 再送もまた 401 なら
+  // セッションは戻せないので login へ落とす。optional は従来どおり
+  // (匿名読みは 401 でもセッションを終わらせない) ので素通り。
+  if (attachAuth && init.auth !== 'optional' && res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await send();
+    if (res.status === 401) {
+      redirectToLogin();
+      throw new Error('unauthorized');
+    }
   }
+
   if (init.notFound && res.status === 404) throw new Error('not_found');
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
