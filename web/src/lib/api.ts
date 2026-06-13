@@ -527,9 +527,17 @@ export type Notification = {
 };
 
 export async function getNotifications(
-  opts: { maxId?: string | null; limit?: number } = {}
+  opts: {
+    maxId?: string | null;
+    limit?: number;
+    types?: NotificationType[];
+    excludeTypes?: NotificationType[];
+  } = {}
 ): Promise<Page<Notification>> {
-  return page<Notification>(await req('GET', `/api/v1/notifications?${pageQs(opts, 30)}`, 'notifications'));
+  const qs = pageQs(opts, 30);
+  for (const t of opts.types ?? []) qs.append('types[]', t);
+  for (const t of opts.excludeTypes ?? []) qs.append('exclude_types[]', t);
+  return page<Notification>(await req('GET', `/api/v1/notifications?${qs}`, 'notifications'));
 }
 
 export async function dismissNotification(id: string): Promise<void> {

@@ -22,6 +22,8 @@ export const ko: Dict = {
   // ── 공통 헤더 메뉴 ───────────────────────────────────
   'nav.label': '메인 메뉴',
   'nav.notifications': '알림',
+  'nav.notifDirect': '나에게 온 새 알림 {n} 건',
+  'nav.notifAmbient': '새로운 반응이 있어요',
   'nav.messages': '메시지',
   'nav.bookmarks': '북마크',
   'nav.favourites': '즐겨찾기',
@@ -328,9 +330,13 @@ export const ko: Dict = {
 
   // ── 알림 ─────────────────────────────────────────────
   'notif.title': '알림',
+  'notif.tabsLabel': '알림 종류',
+  'notif.tabToYou': '나에게',
+  'notif.tabReactions': '반응',
   'notif.clearAll': '모두 지우기',
   'notif.confirmClear': '알림을 모두 지울까요?',
-  'notif.empty': '아직 알림은 없어요.',
+  'notif.emptyToYou': '아직 나에게 온 알림은 없어요.',
+  'notif.emptyReactions': '아직 반응은 없어요.',
   'notif.dismiss': '이 알림 지우기',
   'notif.favourited': '님이 즐겨찾기에 담았어요',
   'notif.reblogged': '님이 부스트했어요',

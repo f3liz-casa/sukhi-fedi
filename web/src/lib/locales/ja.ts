@@ -19,6 +19,8 @@ export const ja = {
   // ── 共通ヘッダーのナビ ───────────────────────────────
   'nav.label': 'メインナビ',
   'nav.notifications': '通知',
+  'nav.notifDirect': 'あなたへの新しい通知が {n} 件',
+  'nav.notifAmbient': '新しい反応があります',
   'nav.messages': 'メッセージ',
   'nav.bookmarks': 'ブックマーク',
   'nav.favourites': 'お気に入り',
@@ -325,9 +327,13 @@ export const ja = {
 
   // ── 通知 ─────────────────────────────────────────────
   'notif.title': '通知',
+  'notif.tabsLabel': '通知の種類',
+  'notif.tabToYou': 'あなたへ',
+  'notif.tabReactions': '反応',
   'notif.clearAll': 'すべて消す',
   'notif.confirmClear': '通知を、すべて消しますか？',
-  'notif.empty': 'まだ、通知は、ありません。',
+  'notif.emptyToYou': 'まだ、あなた宛の通知は、ありません。',
+  'notif.emptyReactions': 'まだ、反応は、ありません。',
   'notif.dismiss': 'この通知を消す',
   'notif.favourited': 'がお気に入りにしました',
   'notif.reblogged': 'がブーストしました',

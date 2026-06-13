@@ -7,11 +7,18 @@
     clearNotifications,
     type Notification
   } from '$lib/api';
+  import { DIRECT_TYPES, markSeen, clearCounts, type Tier } from '$lib/notify';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
   import { t } from '$lib/i18n';
+
+  // ふたつのタブ(lib/notify.ts の層と同じ割り方):
+  //   あなたへ — 返信・DM・フォロー申請。会話だから、先に出る。
+  //   反応     — お気に入りやブーストの郵便受け。開きに来たとき
+  //              だけ中身が見える。
+  let tier = $state<Tier>('direct');
 
   let items = $state<Notification[]>([]);
   let nextMaxId = $state<string | null>(null);
@@ -29,6 +36,8 @@
 
   async function load(reset: boolean) {
     if (loading) return;
+    // 読んでいる途中でタブが切り替わっても、この一回はこのタブの分。
+    const target = tier;
     loading = true;
     error = null;
 
@@ -38,9 +47,16 @@
     }
 
     try {
-      const page = await getNotifications({ maxId: reset ? null : nextMaxId });
+      const page = await getNotifications({
+        maxId: reset ? null : nextMaxId,
+        types: target === 'direct' ? DIRECT_TYPES : undefined,
+        excludeTypes: target === 'ambient' ? DIRECT_TYPES : undefined
+      });
       items = reset ? page.items : [...items, ...page.items];
       nextMaxId = page.nextMaxId;
+      // 見せたところまでが「見た」。開いたタブの分だけ既読が進む —
+      // もう片方のタブの景色は、まだ動かさない。
+      if (reset) markSeen(target, page.items[0]?.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -53,6 +69,12 @@
       loading = false;
       initial = false;
     }
+  }
+
+  function selectTier(next: Tier) {
+    if (next === tier) return;
+    tier = next;
+    void load(true);
   }
 
   // ひとつ消す。消えたらその場で一覧から外す。失敗したらそのまま。
@@ -71,6 +93,8 @@
     try {
       await clearNotifications();
       items = [];
+      // サーバ側は両方のタブとも空になったので、ヘッダーの数も空に。
+      clearCounts();
     } catch {
       // 失敗したら何もしない。
     }
@@ -112,13 +136,28 @@
   {/if}
 </header>
 
+<nav class="tabs timeline" aria-label={$t('notif.tabsLabel')}>
+  <button
+    type="button"
+    aria-pressed={tier === 'direct'}
+    onclick={() => selectTier('direct')}
+  >{$t('notif.tabToYou')}</button>
+  <button
+    type="button"
+    aria-pressed={tier === 'ambient'}
+    onclick={() => selectTier('ambient')}
+  >{$t('notif.tabReactions')}</button>
+</nav>
+
 <section class="timeline">
   {#if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
     <p class="loading">{$t('common.loading')}</p>
   {:else if items.length === 0 && !loading}
-    <p class="prose-small">{$t('notif.empty')}</p>
+    <p class="prose-small">
+      {tier === 'direct' ? $t('notif.emptyToYou') : $t('notif.emptyReactions')}
+    </p>
   {/if}
 
   {#each items as n (n.id)}
