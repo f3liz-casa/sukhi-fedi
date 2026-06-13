@@ -1,20 +1,26 @@
 <script lang="ts">
-  // ログイン後の全ページにかかる共通ヘッダー。wordmark を左に、
-  // 行き先の chip を右に。これが入ったので、各ページの
-  // 「← タイムライン」往復リンクは持たない。
+  // ログイン後の全ページにかかる共通ナビ。
   //
-  // ログイン状態は localStorage なので、mount 時とページ遷移のたびに
-  // 見直す ─ ログイン直後・ログアウト直後の画面でも正しく出入りする。
+  //   上の帯(.nav-top)  — デスクトップでは「流れ」も「棚」も全部。
+  //     スマホでは流れを下へ譲り、棚(ライブラリ・アバター)だけが残る。
+  //   下の帯(.nav-bottom) — スマホだけ。親指の届くところに「流れ」
+  //     (ホーム・さがす・書く・通知・メッセージ)。fixed で消えない。
   //
-  // 通知 chip にはふたつの層がのる(lib/notify.ts):
-  //   direct(返信・DM・フォロー申請)= 数をそのまま。SSE で即。
-  //   ambient(お気に入りなど)= NotifGlyph の育つかたち。遷移の
-  //   境界でだけ数えなおすので、目の前で育つことはない。
+  // 棚はふたつのドロップダウンに畳んだ:
+  //   📁 ライブラリ — ブックマーク / お気に入り / リスト(自分の保存)
+  //   👤 アバター   — プロフィール / 設定 / ログアウト(自分のこと)
+  // 「いま来るもの」は親指の下、「ときどき訪ねるもの」は畳んで上に。
+  //
+  // ログイン状態は localStorage なので mount 時とページ遷移のたびに
+  // 見直す。下の帯が出ている間は <body> に has-bottom-nav を付けて、
+  // 本文の下に帯のぶんの余白を空ける。アバターは verify_credentials を
+  // 共有メモ(currentAccount)から一度だけ取る。
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto, afterNavigate } from '$app/navigation';
   import { isLoggedIn, signOutServer } from '$lib/auth';
   import { requestCompose } from '$lib/compose';
+  import { currentAccount, type Account } from '$lib/api';
   import {
     directUnseen,
     ambientUnseen,
@@ -22,39 +28,59 @@
     startStream,
     stopStream
   } from '$lib/notify';
+  import NavIcon, { type IconName } from '$lib/components/NavIcon.svelte';
+  import NavMenu from '$lib/components/NavMenu.svelte';
   import NotifGlyph from '$lib/components/NotifGlyph.svelte';
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
+
+  type FlowItem = {
+    key: TranslationKey;
+    icon: IconName;
+  } & ({ href: string } | { action: 'compose' });
+
+  const home: FlowItem = { href: '/timeline', key: 'nav.home', icon: 'home' };
+  const notif: FlowItem = { href: '/notifications', key: 'nav.notifications', icon: 'bell' };
+  const messages: FlowItem = { href: '/messages', key: 'nav.messages', icon: 'mail' };
+  const search: FlowItem = { href: '/search', key: 'nav.search', icon: 'search' };
+  const compose: FlowItem = { action: 'compose', key: 'nav.compose', icon: 'compose' };
+
+  // 上の帯の流れ(書くを先頭に)。下の帯は親指の並び(書くを中央に)。
+  const flowTop: FlowItem[] = [compose, home, notif, messages, search];
+  const flowBottom: FlowItem[] = [home, search, compose, notif, messages];
+
+  function hrefOf(item: FlowItem): string | null {
+    return 'href' in item ? item.href : null;
+  }
 
   let loggedIn = $state(false);
+  let me = $state<Account | null>(null);
 
   function sync() {
     loggedIn = isLoggedIn();
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('has-bottom-nav', loggedIn);
+    }
     if (loggedIn) {
       void refreshUnseen();
+      void currentAccount().then((a) => (me = a));
       startStream();
     } else {
+      me = null;
       stopStream();
     }
   }
 
   onMount(() => {
     sync();
-    return () => stopStream();
+    return () => {
+      stopStream();
+      if (typeof document !== 'undefined') document.body.classList.remove('has-bottom-nav');
+    };
   });
 
   afterNavigate(() => {
     sync();
   });
-
-  // 通知 chip は層の表示を持つので、ループの外で別に描く。
-  const links = [
-    { href: '/messages', key: 'nav.messages' },
-    { href: '/search', key: 'nav.search' },
-    { href: '/bookmarks', key: 'nav.bookmarks' },
-    { href: '/favourites', key: 'nav.favourites' },
-    { href: '/lists', key: 'nav.lists' },
-    { href: '/settings', key: 'nav.settings' }
-  ] as const;
 
   // 読み上げと hover には、かたちでなく言葉で正直に。
   const notifHint = $derived.by(() => {
@@ -64,7 +90,7 @@
     return parts.length > 0 ? parts.join(' / ') : null;
   });
 
-  async function compose() {
+  async function doCompose() {
     if (page.url.pathname !== '/timeline') await goto('/timeline');
     requestCompose();
   }
@@ -72,44 +98,95 @@
   async function signOut() {
     await signOutServer();
     loggedIn = false;
+    me = null;
     goto('/');
   }
 </script>
+
+<!-- 流れの一項目。リンク or「書く」ボタン。通知だけ未見の指標を抱える。 -->
+{#snippet flowLink(item: FlowItem)}
+  {@const href = hrefOf(item)}
+  {@const isNotif = href === '/notifications'}
+  {#if href}
+    <a
+      class="nav-link nav-flow"
+      {href}
+      aria-current={page.url.pathname === href ? 'page' : undefined}
+      aria-label={isNotif && notifHint ? `${$t(item.key)} — ${notifHint}` : undefined}
+      title={isNotif ? (notifHint ?? undefined) : undefined}
+    >
+      <NavIcon name={item.icon} />
+      <span class="nav-text">
+        <span class="nav-label">{$t(item.key)}</span>
+        {#if isNotif}
+          {#if $directUnseen > 0}<span class="notif-count">{$directUnseen}</span>{/if}
+          {#if $ambientUnseen > 0}<NotifGlyph count={$ambientUnseen} />{/if}
+        {/if}
+      </span>
+    </a>
+  {:else}
+    <button type="button" class="nav-link nav-flow nav-compose" onclick={doCompose}>
+      <NavIcon name={item.icon} />
+      <span class="nav-text"><span class="nav-label">{$t(item.key)}</span></span>
+    </button>
+  {/if}
+{/snippet}
+
+<!-- ドロップダウンの中の一行(行き先リンク)。 -->
+{#snippet menuLink(href: string, key: TranslationKey, icon: IconName)}
+  <a
+    class="nav-menu-item"
+    role="menuitem"
+    {href}
+    aria-current={page.url.pathname === href ? 'page' : undefined}
+  >
+    <NavIcon name={icon} />
+    <span>{$t(key)}</span>
+  </a>
+{/snippet}
 
 {#if loggedIn}
   <header class="app-nav">
     <div class="wrap app-nav-row">
       <a class="app-nav-name" href="/timeline">sukhi-fedi</a>
-      <nav class="page-nav" aria-label={$t('nav.label')}>
-        <button class="chip" onclick={compose}>{$t('nav.compose')}</button>
-        <a
-          class="chip"
-          href="/notifications"
-          aria-current={page.url.pathname === '/notifications' ? 'page' : undefined}
-          aria-label={notifHint ? `${$t('nav.notifications')} — ${notifHint}` : undefined}
-          title={notifHint ?? undefined}
-        >
-          {$t('nav.notifications')}{#if $directUnseen > 0}<span class="notif-count">{$directUnseen}</span
-            >{/if}{#if $ambientUnseen > 0}<NotifGlyph count={$ambientUnseen} />{/if}
-        </a>
-        {#each links as l (l.href)}
-          <a
-            class="chip"
-            href={l.href}
-            aria-current={page.url.pathname === l.href ? 'page' : undefined}
-          >{$t(l.key)}</a>
-        {/each}
-        <button class="chip" onclick={signOut}>{$t('nav.logout')}</button>
+      <nav class="nav-top" aria-label={$t('nav.label')}>
+        {#each flowTop as item (item.key)}{@render flowLink(item)}{/each}
+
+        <NavMenu ariaLabel={$t('nav.library')}>
+          {#snippet trigger()}
+            <NavIcon name="library" />
+            <span class="nav-label">{$t('nav.library')}</span>
+          {/snippet}
+          {#snippet children()}
+            {@render menuLink('/bookmarks', 'nav.bookmarks', 'bookmark')}
+            {@render menuLink('/favourites', 'nav.favourites', 'star')}
+            {@render menuLink('/lists', 'nav.lists', 'list')}
+          {/snippet}
+        </NavMenu>
+
+        <NavMenu ariaLabel={$t('nav.account')} triggerClass="nav-avatar-trigger">
+          {#snippet trigger()}
+            {#if me?.avatar}
+              <img class="nav-avatar" src={me.avatar} alt="" />
+            {:else}
+              <NavIcon name="user" />
+            {/if}
+          {/snippet}
+          {#snippet children()}
+            {#if me}{@render menuLink(`/@${me.acct}`, 'nav.profile', 'user')}{/if}
+            <div class="nav-menu-sep" role="separator"></div>
+            {@render menuLink('/settings', 'nav.settings', 'gear')}
+            <button type="button" class="nav-menu-item" role="menuitem" onclick={signOut}>
+              <NavIcon name="logout" />
+              <span>{$t('nav.logout')}</span>
+            </button>
+          {/snippet}
+        </NavMenu>
       </nav>
     </div>
   </header>
-{/if}
 
-<style>
-  /* direct の数。バッジにしない — 赤も、丸も、ふくらみもなし。
-     ただの数字が隣にいるだけ。色は chip の文字色に従う。 */
-  .notif-count {
-    margin-left: var(--space-1);
-    font-variant-numeric: tabular-nums;
-  }
-</style>
+  <nav class="nav-bottom" aria-label={$t('nav.bottomLabel')}>
+    {#each flowBottom as item (item.key)}{@render flowLink(item)}{/each}
+  </nav>
+{/if}

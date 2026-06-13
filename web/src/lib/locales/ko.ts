@@ -21,6 +21,11 @@ export const ko: Dict = {
 
   // ── 공통 헤더 메뉴 ───────────────────────────────────
   'nav.label': '메인 메뉴',
+  'nav.bottomLabel': '하단 메뉴',
+  'nav.home': '홈',
+  'nav.library': '라이브러리',
+  'nav.account': '계정',
+  'nav.profile': '프로필',
   'nav.notifications': '알림',
   'nav.notifDirect': '나에게 온 새 알림 {n} 건',
   'nav.notifAmbient': '새로운 반응이 있어요',

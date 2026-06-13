@@ -367,25 +367,31 @@ export async function verifyCredentials(): Promise<Account> {
   return json(await req('GET', '/api/v1/accounts/verify_credentials', 'verify'));
 }
 
-// Memoised id of the logged-in account, for "is this mine?" UI checks
-// (e.g. whether to offer delete on a status). Resolves null when logged
-// out or on a lookup miss; cached so a timeline of N statuses costs one
-// verify_credentials call, not N.
-let meIdPromise: Promise<string | null> | null = null;
+// Memoised logged-in account, for "is this mine?" UI checks (delete on a
+// status) and the nav avatar. Cached so a timeline of N statuses plus the
+// nav cost one verify_credentials call, not N+1. Resolves null when logged
+// out or on a lookup miss; the memo clears itself once the token is gone,
+// so a re-login fetches the new account fresh rather than the stale one.
+let mePromise: Promise<Account | null> | null = null;
 
-export function currentAccountId(): Promise<string | null> {
-  if (!loadToken()) return Promise.resolve(null);
-
-  if (!meIdPromise) {
-    meIdPromise = verifyCredentials()
-      .then((a) => a.id)
-      .catch(() => {
-        meIdPromise = null; // let a later call retry after a transient failure
-        return null;
-      });
+export function currentAccount(): Promise<Account | null> {
+  if (!loadToken()) {
+    mePromise = null;
+    return Promise.resolve(null);
   }
 
-  return meIdPromise;
+  if (!mePromise) {
+    mePromise = verifyCredentials().catch(() => {
+      mePromise = null; // let a later call retry after a transient failure
+      return null;
+    });
+  }
+
+  return mePromise;
+}
+
+export function currentAccountId(): Promise<string | null> {
+  return currentAccount().then((a) => a?.id ?? null);
 }
 
 export type CredentialsUpdate = {

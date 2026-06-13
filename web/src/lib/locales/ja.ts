@@ -18,6 +18,11 @@ export const ja = {
 
   // ── 共通ヘッダーのナビ ───────────────────────────────
   'nav.label': 'メインナビ',
+  'nav.bottomLabel': '下メニュー',
+  'nav.home': 'ホーム',
+  'nav.library': 'ライブラリ',
+  'nav.account': 'アカウント',
+  'nav.profile': 'プロフィール',
   'nav.notifications': '通知',
   'nav.notifDirect': 'あなたへの新しい通知が {n} 件',
   'nav.notifAmbient': '新しい反応があります',

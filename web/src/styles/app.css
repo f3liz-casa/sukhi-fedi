@@ -104,9 +104,10 @@ main.wrap {
 
 /* ── 共通ヘッダー ─────────────────────────────────────────────────
    ログイン後の全ページにかかる屋根(AppNav.svelte)。wordmark を左に、
-   行き先の chip を右に。罫線は画面の端まで通し、中身は .wrap 幅に
-   そろえる。狭い画面では chip が折り返して並ぶだけで、別レイアウトは
-   持たない。 */
+   行き先の nav-link を右に。罫線は画面の端まで通し、中身は .wrap 幅に
+   そろえる。広い画面ではここに「流れ」も「棚」も全部出る。狭い画面
+   では「流れ」を下の帯(.nav-bottom)に移し、ここには「棚」だけが
+   アイコンで残る。 */
 .app-nav {
   border-bottom: 1px solid var(--color-border);
 }
@@ -127,6 +128,216 @@ main.wrap {
 
 .app-nav-name:hover {
   text-decoration: underline;
+}
+
+/* ── ナビのリンク(アイコン＋ことば) ───────────────────────────
+   縁(chrome)は墨のまま。アイコンは NavIcon の currentColor 線画で、
+   色は持たない ── 彩りは中身(Twemoji のリアクション)にだけ置く。
+   上の帯と下の帯で同じ .nav-link を使い、見え方だけ媒体で変える。 */
+.nav-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.nav-link:hover {
+  color: var(--color-text);
+}
+
+.nav-link[aria-current='page'] {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.nav-ico {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+  display: block;
+}
+
+/* ラベルと未見の指標(数字・glyph)は一塊。上の帯では icon の隣に
+   一行で、下の帯では icon の下に一行で ── どちらも同じ並び。 */
+.nav-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nav-label {
+  white-space: nowrap;
+}
+
+/* 「書く」だけは行為なので、そっと面を持たせて他と見分ける ──
+   大きな彩りではなく、薄い塗りで「押せる一点」だと分かる程度に。 */
+.nav-compose {
+  color: var(--color-text);
+  background: var(--fill-soft);
+  border-radius: 999px;
+  padding-inline: var(--space-3);
+}
+.nav-compose:hover {
+  background: var(--fill-hover);
+}
+
+/* direct の未見数。バッジにしない ── 赤も丸もなく、ただの数字。 */
+.notif-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 下の帯は、広い画面では存在しない。 */
+.nav-bottom {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  /* 「流れ」は下の帯へ。上の帯には「棚」だけが、ことばを伏せて
+     アイコンで残る(読み上げには .nav-label が生きている)。 */
+  .nav-top .nav-flow {
+    display: none;
+  }
+  .nav-top .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .nav-top .nav-link {
+    padding-inline: var(--space-1);
+  }
+
+  /* 親指の帯。fixed で下に貼りつき、スクロールしても消えない。 */
+  .nav-bottom {
+    display: flex;
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .nav-bottom .nav-link {
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-2) 0;
+    border-radius: 0;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+  .nav-bottom .nav-ico {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+  /* 下の帯では「書く」も他と同じ佇まいで、列を乱さない。 */
+  .nav-bottom .nav-compose {
+    background: none;
+    border-radius: 0;
+    padding-inline: 0;
+  }
+
+  /* 本文が帯の下に隠れないよう、ぶんだけ余白を空ける。 */
+  body.has-bottom-nav main {
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* メール催促の浮き札も、帯の上に持ち上げる。 */
+  body.has-bottom-nav .email-nudge {
+    bottom: calc(3.75rem + var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ── ナビのドロップダウン(ライブラリ / アバター) ───────────────
+   棚を畳んだ二つの小さなメニュー。開くまで何も主張しない。面は
+   StatusActions の .menu と同じ作法(枠だけ・影なし)で平らに。 */
+.nav-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+/* アバターの引き金だけは、丸い画像にそって詰める。 */
+.nav-avatar-trigger {
+  padding: var(--space-1);
+  border-radius: 999px;
+}
+.nav-avatar {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  object-fit: cover;
+  display: block;
+}
+
+.nav-menu-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 40;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.nav-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nav-menu-item:hover {
+  background: var(--fill-soft);
+  color: var(--color-text);
+}
+.nav-menu-item[aria-current='page'] {
+  color: var(--color-text);
+}
+.nav-menu-item .nav-ico {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+.nav-menu-sep {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border);
 }
 
 /* chip — どの画面にも出る小さなピル。ナビにもボタンにも使う。 */
