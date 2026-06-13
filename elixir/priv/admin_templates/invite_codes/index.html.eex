@@ -24,7 +24,14 @@
 <% else %>
 <%= for c <- codes do %>
     <tr>
-      <td><code><%= h(c.code) %></code></td>
+      <td>
+        <code><%= h(c.code) %></code>
+<%= if is_nil(c.consumed_at) do %>
+        <button type="button" style="margin-left: 8px; font-size: 12px;"
+          data-code="<%= h(c.code) %>"
+          onclick="navigator.clipboard.writeText(location.origin + '/invite/' + this.dataset.code); this.textContent = 'Copied!';">Copy link</button>
+<% end %>
+      </td>
       <td><%= h(c.created_at) %></td>
       <td><%= h(c.note) %></td>
       <td>

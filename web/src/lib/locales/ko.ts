@@ -173,6 +173,23 @@ export const ko: Dict = {
   'signup.haveAccountPost': '.',
   'signup.backToFront': '첫 페이지로 돌아가기',
 
+  // ── 초대 링크 현관（invite）────────────────────────────
+  'invite.checking': '초대를 확인하고 있어요…',
+  'invite.welcomePre': '어서 오세요, ',
+  'invite.welcomePost': '에.',
+  'invite.invitedBy': '{who} 님이 당신을 초대했어요.',
+  'invite.invitedAnon': '당신은 이 서버에 초대받았어요.',
+  'invite.intro': '여기는 작고 조용한 곳이에요. 괜찮으시면, 앉았다 가세요.',
+  'invite.join': '참여하기',
+  'invite.deadTitle': '이 초대 링크는…',
+  'invite.dead.invalid': '찾을 수 없었어요.',
+  'invite.dead.already_used': '이미 사용된 것 같아요.',
+  'invite.dead.expired': '이미 만료되었어요.',
+  'invite.deadHelp': '혹시 짐작 가는 데가 있으면, 초대해 준 사람에게 다시 한번 물어봐 주세요.',
+  'invite.toSignup': '초대 코드를 직접 입력해서 시작하기',
+  'invite.error': '잘 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+  'invite.retry': '다시 시도하기',
+
   // ── 들어가기(login)──────────────────────────────────
   'login.title': '들어가기',
   'login.tagline': '들어가는 방법을 골라 주세요.',

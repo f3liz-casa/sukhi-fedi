@@ -60,20 +60,60 @@ defmodule SukhiFedi.InviteCodes do
       nil ->
         {:error, :invalid}
 
-      %InviteCode{consumed_at: %DateTime{}} ->
-        {:error, :already_used}
-
-      %InviteCode{expires_at: exp} = ic when not is_nil(exp) ->
-        if DateTime.compare(exp, now) == :gt do
-          mark_consumed(ic, consumer_id, now)
-        else
-          {:error, :expired}
-        end
-
       %InviteCode{} = ic ->
-        mark_consumed(ic, consumer_id, now)
+        case classify(ic, now) do
+          :ok -> mark_consumed(ic, consumer_id, now)
+          err -> {:error, err}
+        end
     end
   end
+
+  @doc """
+  Read a code's liveness without consuming it. The `/invite/:code`
+  landing page calls this (over RPC) to greet a visitor before signup —
+  it reports who issued the code but leaves `consumed_at` untouched; the
+  actual claim still happens inside the signup transaction via `consume/2`.
+
+    * `{:ok, %{issuer_handle: ..., issuer_display_name: ...}}` when live
+    * `{:error, :invalid | :already_used | :expired}` otherwise
+  """
+  @spec preview(String.t()) ::
+          {:ok, %{issuer_handle: String.t() | nil, issuer_display_name: String.t() | nil}}
+          | {:error, :invalid | :already_used | :expired}
+  def preview(code) when is_binary(code) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    case Repo.get_by(InviteCode, code: code) do
+      nil ->
+        {:error, :invalid}
+
+      %InviteCode{} = ic ->
+        case classify(ic, now) do
+          :ok ->
+            %{issued_by: issuer} = Repo.preload(ic, :issued_by)
+
+            {:ok,
+             %{
+               issuer_handle: issuer && issuer.username,
+               issuer_display_name: issuer && issuer.display_name
+             }}
+
+          err ->
+            {:error, err}
+        end
+    end
+  end
+
+  # コードの生死を「読むだけ」で分類する ─ consume はこれが :ok の
+  # ときだけ atomic UPDATE に進み、preview はこれをそのまま返す。
+  # 生死の判定を一箇所に集めて、consume と preview で二度書かない。
+  defp classify(%InviteCode{consumed_at: %DateTime{}}, _now), do: :already_used
+
+  defp classify(%InviteCode{expires_at: %DateTime{} = exp}, now) do
+    if DateTime.compare(exp, now) == :gt, do: :ok, else: :expired
+  end
+
+  defp classify(%InviteCode{}, _now), do: :ok
 
   # Atomic claim: a conditional UPDATE guarded on `consumed_at IS NULL`,
   # requiring exactly one affected row. Under concurrent signups with the

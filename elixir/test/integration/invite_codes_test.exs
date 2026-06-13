@@ -28,4 +28,31 @@ defmodule SukhiFedi.Integration.InviteCodesTest do
     c = account!("inv_consumer3")
     assert {:error, :invalid} = InviteCodes.consume("does-not-exist", c.id)
   end
+
+  test "preview reports the issuer and leaves the code consumable" do
+    issuer = account!("inv_previewer")
+    {:ok, code} = InviteCodes.issue(issuer.id)
+
+    assert {:ok, %{issuer_handle: "inv_previewer", issuer_display_name: "inv_previewer"}} =
+             InviteCodes.preview(code.code)
+
+    # preview は読むだけ ─ そのあと、まだ consume できる。
+    consumer = account!("inv_preview_consumer")
+    assert {:ok, _} = InviteCodes.consume(code.code, consumer.id)
+  end
+
+  test "preview rejects used, expired, and unknown codes" do
+    issuer = account!("inv_preview_issuer2")
+    consumer = account!("inv_preview_consumer2")
+
+    {:ok, used} = InviteCodes.issue(issuer.id)
+    {:ok, _} = InviteCodes.consume(used.code, consumer.id)
+    assert {:error, :already_used} = InviteCodes.preview(used.code)
+
+    past = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+    {:ok, expired} = InviteCodes.issue(issuer.id, expires_at: past)
+    assert {:error, :expired} = InviteCodes.preview(expired.code)
+
+    assert {:error, :invalid} = InviteCodes.preview("does-not-exist")
+  end
 end

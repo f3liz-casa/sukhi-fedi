@@ -299,6 +299,12 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  # 招待リンクの玄関。`:code` は SPA 側が URL から読むので、ここでは
+  # shell を返すだけ(signup と同じ)。生死の確認は GET /api/v1/invite/:code。
+  get "/invite/:code" do
+    serve_spa(conn)
+  end
+
   get "/timeline" do
     serve_spa(conn)
   end

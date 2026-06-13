@@ -170,6 +170,23 @@ export const ja = {
   'signup.haveAccountPost': '。',
   'signup.backToFront': '表のページに戻る',
 
+  // ── 招待リンクの玄関（invite）──────────────────────────
+  'invite.checking': '招待を確認しています…',
+  'invite.welcomePre': 'ようこそ、',
+  'invite.welcomePost': ' へ。',
+  'invite.invitedBy': '{who} さんが、あなたを招待してくれました。',
+  'invite.invitedAnon': 'あなたは、このサーバに招待されています。',
+  'invite.intro': 'ここは、小さくて、しずかな場所です。よかったら、すわっていってください。',
+  'invite.join': '参加する',
+  'invite.deadTitle': 'この招待リンクは…',
+  'invite.dead.invalid': '見つかりませんでした。',
+  'invite.dead.already_used': 'もう使われたみたいです。',
+  'invite.dead.expired': 'もう古くなっています。',
+  'invite.deadHelp': 'もし心当たりがあれば、招待してくれた人に、もう一度たずねてみてください。',
+  'invite.toSignup': '招待コードを手で入れて、はじめる',
+  'invite.error': 'うまく確認できませんでした。すこし待って、もう一度ためしてください。',
+  'invite.retry': 'もう一度ためす',
+
   // ── 入る（login）─────────────────────────────────────
   'login.title': '入る',
   'login.tagline': '入りかたを、選んでください。',
