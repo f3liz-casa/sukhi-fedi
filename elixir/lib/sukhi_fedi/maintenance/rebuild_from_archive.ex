@@ -81,7 +81,12 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   """
   @spec run_polls(:dry_run | :execute) :: map()
   def run_polls(mode \\ :dry_run) do
-    events = note_events()
+    # Newest archived Question per note wins: a poll accrues an `Update`
+    # on every vote, so the latest snapshot carries the real tallies.
+    # `backfill_poll` is create-only and skips a note that already has a
+    # poll, so processing newest-first means the freshest counts land and
+    # the older refreshes fall to `:already`.
+    events = note_events() |> Enum.reverse()
     Logger.info("rebuild_from_archive run_polls: #{length(events)} event(s), mode=#{mode}")
 
     results =
@@ -303,10 +308,10 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   Backfill the poll for the local note matching `note["id"]` from an
   archived `Question` (`oneOf`/`anyOf`). The inbound Question was mirrored
   as a plain note before v0.4.7, so notes from before then carry no poll.
-  Idempotent: a note that already owns a poll is left alone. Ascending
-  `received_at` means a note's first archived Question wins; later tally
-  refreshes are skipped, matching the snapshot semantics of ingest.
-  Exposed for testing.
+  Idempotent and create-only: a note that already owns a poll is left
+  alone, so the first Question the caller feeds for a given note wins and
+  later ones fall to `:already`. The caller picks the order — `run_polls`
+  goes newest-first so the freshest tallies land. Exposed for testing.
   """
   @spec backfill_poll(map(), :dry_run | :execute) :: atom()
   def backfill_poll(%{"id" => ap_id} = note, mode) when is_binary(ap_id) do
