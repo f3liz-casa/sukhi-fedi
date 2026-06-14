@@ -79,6 +79,8 @@ export const ko: Dict = {
   'status.hoursAgo': '{n}시간 전',
   'status.daysAgo': '{n}일 전',
   'status.tapToShow': '눌러서 보기',
+  'status.readMore': '계속 읽기',
+  'status.readArticle': '글 읽기',
   'status.imageZoom': '이미지 확대',
   'status.openAttachment': '첨부 파일 열기',
   'status.close': '닫기',
@@ -450,8 +452,12 @@ export const ko: Dict = {
   'profile.postsSuffix': '게시물',
   'profile.pinned': '고정됨',
   'profile.empty': '아직 게시물이 없어요.',
+  'profile.tabsLabel': '게시물과 글 전환',
+  'profile.tabPosts': '게시물',
+  'profile.tabArticles': '글',
 
   // ── 스레드 ───────────────────────────────────────────
   'thread.noteNotFound': '그 글은 찾을 수 없었어요.',
+  'thread.note': '글',
   'thread.reply': '답장하기'
 };

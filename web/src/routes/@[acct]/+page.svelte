@@ -36,6 +36,13 @@
   let error = $state<string | null>(null);
   let initial = $state(true);
 
+  // 記事（Article）を持つ人にだけ、プロフィールに「記事」タブを出す。
+  // 読み込み時に一度だけ記事を引いて、あればタブを立てる。
+  let tab = $state<'posts' | 'articles'>('posts');
+  let articleItems = $state<Status[]>([]);
+  let articleNextMaxId = $state<string | null>(null);
+  let hasArticles = $derived(articleItems.length > 0);
+
   let acct = $derived($page.params.acct ?? '');
   let isSelf = $derived(!!account && !!me && me.id === account.id);
 
@@ -117,16 +124,18 @@
           rel = rs[0] ?? null;
         }
       }
-      const [page1, pins] = await Promise.all([
+      const empty = { items: [] as Status[], nextMaxId: null };
+      const [page1, pins, articles] = await Promise.all([
         getAccountStatuses(account.id),
         // ピン留めは featured collection。取れなくてもプロフィール本体は出す。
-        getAccountStatuses(account.id, { pinned: true }).catch(() => ({
-          items: [] as Status[],
-          nextMaxId: null
-        }))
+        getAccountStatuses(account.id, { pinned: true }).catch(() => empty),
+        // 記事タブの種。あればタブを出す。無ければ静かに空のまま。
+        getAccountStatuses(account.id, { articles: true }).catch(() => empty)
       ]);
       items = page1.items;
       nextMaxId = page1.nextMaxId;
+      articleItems = articles.items;
+      articleNextMaxId = articles.nextMaxId;
       // featured 由来＝定義上ピン留め済み。サーバの viewer flag を待たず
       // フラグを立て、メニューが「外す」を出せるようにする。
       pinnedItems = pins.items.map((s) => ({ ...s, pinned: true }));
@@ -157,6 +166,20 @@
       nextMaxId = p.nextMaxId;
     } catch {
       // 続きが取れなかったら静かに止める。
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadMoreArticles() {
+    if (!account || loading) return;
+    loading = true;
+    try {
+      const p = await getAccountStatuses(account.id, { articles: true, maxId: articleNextMaxId });
+      articleItems = [...articleItems, ...p.items];
+      articleNextMaxId = p.nextMaxId;
+    } catch {
+      // 同上、静かに止める。
     } finally {
       loading = false;
     }
@@ -239,43 +262,72 @@
     <Composer {replyTo} prefillMention={!!replyTo} onposted={onPosted} oncancel={onCancel} />
   {/if}
 
-  {#if pinnedItems.length > 0}
-    <section class="timeline pinned">
-      <p class="pinned-label"><Twemoji emoji="📌" /> {$t('profile.pinned')}</p>
-      {#each pinnedItems as s (s.id)}
+  {#if hasArticles}
+    <!-- 記事を持つ人だけ、投稿と記事を分けて見られるように。 -->
+    <nav class="profile-tabs" aria-label={$t('profile.tabsLabel')}>
+      <button class="tab" class:active={tab === 'posts'} onclick={() => (tab = 'posts')}>
+        {$t('profile.tabPosts')}
+      </button>
+      <button class="tab" class:active={tab === 'articles'} onclick={() => (tab = 'articles')}>
+        {$t('profile.tabArticles')}
+      </button>
+    </nav>
+  {/if}
+
+  {#if tab === 'articles'}
+    <section class="timeline">
+      {#each articleItems as s (s.id)}
         <StatusCard
           status={s}
           canReply
           onreply={onReply}
-          onupdate={onPinUpdate}
-          ondelete={(d) => (pinnedItems = pinnedItems.filter((it) => it.id !== d.id))}
+          ondelete={(d) => (articleItems = articleItems.filter((it) => it.id !== d.id))}
         />
       {/each}
+
+      {#if articleNextMaxId && !loading}
+        <button class="load-more" onclick={loadMoreArticles}>{$t('common.loadMore')}</button>
+      {/if}
+    </section>
+  {:else}
+    {#if pinnedItems.length > 0}
+      <section class="timeline pinned">
+        <p class="pinned-label"><Twemoji emoji="📌" /> {$t('profile.pinned')}</p>
+        {#each pinnedItems as s (s.id)}
+          <StatusCard
+            status={s}
+            canReply
+            onreply={onReply}
+            onupdate={onPinUpdate}
+            ondelete={(d) => (pinnedItems = pinnedItems.filter((it) => it.id !== d.id))}
+          />
+        {/each}
+      </section>
+    {/if}
+
+    <section class="timeline">
+      {#if items.length === 0 && !loading}
+        <p class="prose-small">{$t('profile.empty')}</p>
+      {/if}
+
+      {#each items as s (s.id)}
+        <StatusCard
+          status={s}
+          canReply
+          onreply={onReply}
+          ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
+        />
+      {/each}
+
+      {#if !initial && loading}
+        <p class="loading">{$t('common.loading')}</p>
+      {/if}
+
+      {#if nextMaxId && !loading}
+        <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
+      {/if}
     </section>
   {/if}
-
-  <section class="timeline">
-    {#if items.length === 0 && !loading}
-      <p class="prose-small">{$t('profile.empty')}</p>
-    {/if}
-
-    {#each items as s (s.id)}
-      <StatusCard
-        status={s}
-        canReply
-        onreply={onReply}
-        ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
-      />
-    {/each}
-
-    {#if !initial && loading}
-      <p class="loading">{$t('common.loading')}</p>
-    {/if}
-
-    {#if nextMaxId && !loading}
-      <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
-    {/if}
-  </section>
 {/if}
 
 <style>
@@ -323,5 +375,25 @@
   .pinned-label {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  /* 投稿 / 記事 の切り替え。控えめに、下線で今いる場所だけ示す。 */
+  .profile-tabs {
+    display: flex;
+    gap: var(--space-1);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .profile-tabs .tab {
+    padding: 0.5rem 0.9rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .profile-tabs .tab.active {
+    color: var(--color-text);
+    border-bottom-color: var(--color-text);
   }
 </style>

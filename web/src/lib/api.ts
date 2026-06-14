@@ -56,6 +56,10 @@ export type Status = {
   id: string;
   created_at: string;
   content: string;
+  // Sukhi extension: an Article's bare title (hackers.pub long-form post).
+  // Present ⇒ this status is an article; we route it to its reader page.
+  // The same title is also folded into `content` as a leading <h2>.
+  title?: string | null;
   emojis?: Emoji[];
   spoiler_text?: string;
   sensitive?: boolean;
@@ -448,10 +452,12 @@ export async function getAccount(id: string): Promise<Account> {
 
 export async function getAccountStatuses(
   id: string,
-  opts: { maxId?: string | null; limit?: number; pinned?: boolean } = {}
+  opts: { maxId?: string | null; limit?: number; pinned?: boolean; articles?: boolean } = {}
 ): Promise<Page<Status>> {
   const qs = pageQs(opts, 20);
   if (opts.pinned) qs.set('pinned', 'true');
+  // Sukhi extension: the profile's Articles tab (notes with a title).
+  if (opts.articles) qs.set('only_articles', 'true');
   const path = `/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`;
   // 'optional' so a logged-in viewer sees their own followers-only posts
   // (and accepted-follower posts) on the profile, plus fav/reaction flags.

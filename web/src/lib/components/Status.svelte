@@ -16,12 +16,15 @@
     // 返信ボタンを出すか。タイムラインでは true、プロフィール一覧では false
     // など、置き場ごとに切り替えたい。
     canReply = false,
+    // リーダーページ（記事ページ）では全文を出したいので、折りたたみを切る。
+    full = false,
     onreply,
     onupdate,
     ondelete
   }: {
     status: Status;
     canReply?: boolean;
+    full?: boolean;
     onreply?: (s: Status) => void;
     onupdate?: (s: Status) => void;
     // 自分のノートを削除したとき。置き場ごとに一覧から外したい。
@@ -36,6 +39,21 @@
 
   // CW（spoiler）を開いているか。閉じている間は本文だけでなく添付も隠す。
   let cwOpen = $state(false);
+
+  // 長い本文（主に hackers.pub の Article）はタイムラインを埋めないよう
+  // 数行で畳み、「続きを読む」で全文を出す。記事だと知らせるフラグは無い
+  // ので、描画後の実際の高さで判断する（背が高ければ畳む）。
+  const COLLAPSE_PX = 360;
+  let contentEl: HTMLDivElement | undefined = $state();
+  let collapsible = $state(false);
+  let expanded = $state(false);
+
+  $effect(() => {
+    // status.content を読むことで、別の投稿に差し替わったら測り直す。
+    void status.content;
+    // リーダーページでは畳まない。それ以外で背が高ければ畳む。
+    collapsible = !full && !!contentEl && contentEl.scrollHeight > COLLAPSE_PX;
+  });
 
   function formatTime(
     iso: string,
@@ -87,7 +105,23 @@
         <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
       </details>
     {:else}
-      <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
+      <div
+        class="content-wrap"
+        class:collapsed={collapsible && !expanded}
+        class:reader={full}
+      >
+        <div class="content" bind:this={contentEl}>
+          {@html renderEmojis(status.content, status.emojis)}
+        </div>
+      </div>
+      {#if !full}
+        {#if status.title}
+          <!-- 記事は専用のリーダーページで読む。短い記事でも入口を出す。 -->
+          <a class="read-more" href={`/articles/${status.id}`}>{$t('status.readArticle')}</a>
+        {:else if collapsible && !expanded}
+          <button class="read-more" onclick={() => (expanded = true)}>{$t('status.readMore')}</button>
+        {/if}
+      {/if}
     {/if}
 
     {#if status.quote}
@@ -129,6 +163,59 @@
 {/if}
 
 <style>
+  /* 長文（Article）を畳むとき。下端をふわっと薄くして「まだ続く」を示す。 */
+  .content-wrap.collapsed {
+    max-height: 22rem;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent);
+    mask-image: linear-gradient(to bottom, black 70%, transparent);
+  }
+
+  /* リーダー（記事ページ）の本文。畳まず、ゆったり読める行間と段落の間。 */
+  .content-wrap.reader :global(.content) {
+    line-height: 1.85;
+  }
+  .content-wrap.reader :global(.content p) {
+    margin: 0.85rem 0;
+  }
+  .content-wrap.reader :global(.content h2:first-child) {
+    font-size: 1.4rem;
+    margin-top: 0;
+  }
+
+  .read-more {
+    display: inline-block;
+    margin-top: 0.25rem;
+    padding: 0.2rem 0.7rem;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    background: var(--fill-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .read-more:hover {
+    color: var(--color-text);
+  }
+
+  /* Article の本文には見出し（差し込んだ <h2> や本文中の h2/h3）が来る。
+     ブラウザ既定の特大サイズだとタイムラインで浮くので、静かに整える。 */
+  .content :global(h2),
+  .content :global(h3),
+  .content :global(h4) {
+    font-size: var(--text-base, 1rem);
+    font-weight: 600;
+    margin: 0.6rem 0 0.3rem;
+    line-height: 1.4;
+  }
+  .content :global(h2) {
+    font-size: 1.1rem;
+  }
+  .content :global(pre) {
+    overflow-x: auto;
+  }
+
   .boost-by {
     display: block;
     padding: 0.25rem 1rem 0;

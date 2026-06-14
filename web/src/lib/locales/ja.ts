@@ -76,6 +76,8 @@ export const ja = {
   'status.hoursAgo': '{n} 時間前',
   'status.daysAgo': '{n} 日前',
   'status.tapToShow': 'タップで表示',
+  'status.readMore': '続きを読む',
+  'status.readArticle': '記事を読む',
   'status.imageZoom': '画像を拡大',
   'status.openAttachment': '添付ファイルを開く',
   'status.close': '閉じる',
@@ -447,9 +449,13 @@ export const ja = {
   'profile.postsSuffix': '投稿',
   'profile.pinned': 'ピン留め',
   'profile.empty': 'まだ、投稿は、ありません。',
+  'profile.tabsLabel': '投稿と記事の切り替え',
+  'profile.tabPosts': '投稿',
+  'profile.tabArticles': '記事',
 
   // ── スレッド ─────────────────────────────────────────
   'thread.noteNotFound': 'そのノートは、見つかりませんでした。',
+  'thread.note': 'ノート',
   'thread.reply': '返信する'
 } as const;
 
