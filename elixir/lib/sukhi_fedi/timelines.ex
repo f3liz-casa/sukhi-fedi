@@ -102,6 +102,16 @@ defmodule SukhiFedi.Timelines do
     |> Enum.take(limit)
   end
 
+  @doc """
+  Boosts made by a single account, wrapped as reblog rows for that
+  account's profile timeline. Same visibility/cursor/paging rules as the
+  home feed (it's `home_boosts` over a one-account list), so a profile and
+  the home feed agree on what a boost looks like and how it pages.
+  """
+  @spec account_boosts(integer(), map(), integer(), integer() | nil) :: [map()]
+  def account_boosts(account_id, opts, limit, viewer_id),
+    do: home_boosts([account_id], opts, limit, viewer_id)
+
   # Boosts by `account_ids`, wrapped for the reblog render. Only reblogs of
   # public/unlisted notes surface — a followers-only or direct note must not
   # leak into the home feed via someone else's boost. Paged in the same

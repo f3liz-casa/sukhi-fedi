@@ -434,9 +434,10 @@ defmodule SukhiFedi.Accounts do
   Opts (all optional):
     * `:max_id`, `:since_id`, `:min_id`, `:limit`
     * `:exclude_replies` — drop notes with `in_reply_to_ap_id`
-    * `:exclude_reblogs` — currently a no-op (notes table has no boost
-      flag; boosts live in their own table and aren't surfaced here yet)
+    * `:exclude_reblogs` — drop the account's boosts (which are otherwise
+      interleaved as reblog rows, the same shape the home feed uses)
     * `:only_media` — keep only notes with at least one attached Media
+      (boosts are not surfaced on the media tab)
 
   Returns the page as a list (newest first).
   """
@@ -485,10 +486,23 @@ defmodule SukhiFedi.Accounts do
       |> Repo.preload([:account, :media, :tags])
       |> SukhiFedi.Notes.with_refs()
 
-    if Map.get(opts, :only_media, false) do
-      Enum.filter(notes, fn n -> length(n.media || []) > 0 end)
-    else
-      notes
+    cond do
+      # Media tab: own media only, no boosts (matches Mastodon).
+      Map.get(opts, :only_media, false) ->
+        Enum.filter(notes, fn n -> length(n.media || []) > 0 end)
+
+      # Pinned (position order) and reblog-excluded tabs stay notes-only.
+      Map.get(opts, :pinned, false) or Map.get(opts, :exclude_reblogs, false) ->
+        notes
+
+      # Default profile feed: interleave the account's boosts as reblog rows,
+      # sharing one time-sortable id space with notes so id paging holds.
+      true ->
+        boosts = SukhiFedi.Timelines.account_boosts(account_id, opts, limit, viewer_id)
+
+        (notes ++ boosts)
+        |> Enum.sort_by(& &1.id, :desc)
+        |> Enum.take(limit)
     end
   end
 

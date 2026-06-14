@@ -467,6 +467,31 @@ defmodule SukhiFedi.Integration.NotesTest do
       # lists direct messages (those live in conversations).
       assert vis.(author.id) == ["followers", "public", "unlisted"]
     end
+
+    test "list_statuses interleaves the account's boosts as reblog rows" do
+      booster = create_account!("boost_ls_booster")
+      author = create_account!("boost_ls_author")
+
+      {:ok, own} = Notes.create_status(booster, %{"status" => "my own post"})
+      {:ok, theirs} = Notes.create_status(author, %{"status" => "someone else's post"})
+      {:ok, _} = Notes.reblog(booster, theirs.id)
+
+      rows = SukhiFedi.Accounts.list_statuses(booster.id, [])
+
+      # Own note appears as a plain Note; the boost appears as a wrapper
+      # carrying the boosted note — that's what renders as a reblog Status.
+      assert own.id in Enum.map(rows, & &1.id)
+
+      boost = Enum.find(rows, &Map.get(&1, :__boost__))
+      assert boost
+      assert boost.note.id == theirs.id
+      assert boost.account.id == booster.id
+
+      # exclude_reblogs drops the boost but keeps the own note.
+      no_reblogs = SukhiFedi.Accounts.list_statuses(booster.id, exclude_reblogs: true)
+      assert own.id in Enum.map(no_reblogs, & &1.id)
+      refute Enum.any?(no_reblogs, &Map.get(&1, :__boost__))
+    end
   end
 
   describe "block / mute enforcement (C2)" do
