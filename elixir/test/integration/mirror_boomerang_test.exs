@@ -15,9 +15,9 @@ defmodule SukhiFedi.Integration.MirrorBoomerangTest do
   import Ecto.Query
 
   alias SukhiFedi.AP.Instructions.Mirror
-  alias SukhiFedi.Notes
+  alias SukhiFedi.{Notes, Polls}
   alias SukhiFedi.Repo
-  alias SukhiFedi.Schema.{Account, Note}
+  alias SukhiFedi.Schema.{Account, Note, Poll}
 
   test "our own Create delivered back to our inbox does not mint a second row" do
     alice = create_account!("boomerang_alice")
@@ -49,8 +49,120 @@ defmodule SukhiFedi.Integration.MirrorBoomerangTest do
     assert [] = Repo.all(from(n in Note, where: n.ap_id == ^canonical))
   end
 
+  describe "maybe_handle_update/1 — Update(Question)" do
+    test "refreshes a mirrored poll's tallies from a newer snapshot" do
+      {note, _author} = remote_poll_note!("https://remote.example/notes/q1")
+
+      :ok =
+        Polls.ingest_remote_poll(note.id, %{
+          "oneOf" => [
+            %{"name" => "A", "replies" => %{"totalItems" => 0}},
+            %{"name" => "B", "replies" => %{"totalItems" => 0}}
+          ],
+          "votersCount" => 0
+        })
+
+      update = %{
+        "type" => "Update",
+        "actor" => "https://remote.example/users/voter",
+        "object" => %{
+          "type" => "Question",
+          "id" => "https://remote.example/notes/q1",
+          "oneOf" => [
+            %{"name" => "A", "replies" => %{"totalItems" => 5}},
+            %{"name" => "B", "replies" => %{"totalItems" => 2}}
+          ],
+          "votersCount" => 7
+        }
+      }
+
+      assert :ok = Mirror.maybe_handle_update(update)
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      assert ctx.tallies[Enum.at(ctx.options, 0).id] == 5
+      assert ctx.tallies[Enum.at(ctx.options, 1).id] == 2
+      assert ctx.voters_count == 7
+    end
+
+    test "self-heals a note that was mirrored without its poll" do
+      {note, _author} = remote_poll_note!("https://remote.example/notes/q2")
+      refute Polls.has_poll?(note.id)
+
+      update = %{
+        "type" => "Update",
+        "actor" => "https://remote.example/users/voter",
+        "object" => %{
+          "type" => "Question",
+          "id" => "https://remote.example/notes/q2",
+          "oneOf" => [
+            %{"name" => "x", "replies" => %{"totalItems" => 3}},
+            %{"name" => "y", "replies" => %{"totalItems" => 1}}
+          ],
+          "votersCount" => 4
+        }
+      }
+
+      assert :ok = Mirror.maybe_handle_update(update)
+      assert Polls.has_poll?(note.id)
+    end
+
+    test "refuses an Update whose object lives on a different host than the actor" do
+      {note, _author} = remote_poll_note!("https://remote.example/notes/q3")
+
+      :ok =
+        Polls.ingest_remote_poll(note.id, %{
+          "oneOf" => [%{"name" => "A", "replies" => %{"totalItems" => 0}}, %{"name" => "B"}],
+          "votersCount" => 0
+        })
+
+      # actor on evil.example tries to refresh remote.example's poll
+      update = %{
+        "type" => "Update",
+        "actor" => "https://evil.example/users/attacker",
+        "object" => %{
+          "type" => "Question",
+          "id" => "https://remote.example/notes/q3",
+          "oneOf" => [
+            %{"name" => "A", "replies" => %{"totalItems" => 999}},
+            %{"name" => "B", "replies" => %{"totalItems" => 999}}
+          ],
+          "votersCount" => 999
+        }
+      }
+
+      assert :ok = Mirror.maybe_handle_update(update)
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      # untouched — the cross-host update was refused
+      assert ctx.voters_count == 0
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()
+  end
+
+  defp remote_poll_note!(ap_id) do
+    author =
+      Repo.insert!(%Account{
+        username: "rq_#{System.unique_integer([:positive])}",
+        display_name: "rq",
+        summary: "",
+        domain: "remote.example",
+        actor_uri: "https://remote.example/users/rq"
+      })
+
+    note =
+      Repo.insert!(%Note{
+        account_id: author.id,
+        content: "q",
+        visibility: "public",
+        ap_id: ap_id
+      })
+
+    {note, author}
   end
 end

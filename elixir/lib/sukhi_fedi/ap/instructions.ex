@@ -50,6 +50,7 @@ defmodule SukhiFedi.AP.Instructions do
       Boosts.materialize_boost(object_data)
       Pins.maybe_handle_pin_unpin(object_data)
       Mirror.maybe_handle_delete(object_data)
+      Mirror.maybe_handle_update(object_data)
       maybe_handle_undo(object_data)
     else
       # Forwarded/relayed: the signer is not the activity's actor. Only

@@ -114,6 +114,34 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
 
   def maybe_handle_delete(_), do: :ok
 
+  @doc """
+  Inbound `Update(Question)`: keep a mirrored remote poll's tallies live.
+  A poll accrues an `Update` on every vote, so the freshest counts ride
+  these. Create the poll if we have the note but missed its poll (notes
+  mirrored before poll ingest existed self-heal on the next vote), refresh
+  the cached counts if it's already there. Same host binding as Delete —
+  only the object's own origin may touch it. `Update(Note)` (post edits)
+  is not handled yet.
+  """
+  def maybe_handle_update(%{
+        "type" => "Update",
+        "actor" => actor_uri,
+        "object" => %{"type" => "Question"} = object
+      })
+      when is_binary(actor_uri) do
+    with ap_id when is_binary(ap_id) <- Extract.extract_object_id(object),
+         true <- Extract.same_host?(ap_id, actor_uri),
+         %Note{id: nid} <- Repo.get_by(Note, ap_id: ap_id) do
+      if Polls.has_poll?(nid),
+        do: Polls.refresh_remote_poll_counts(nid, object),
+        else: Polls.ingest_remote_poll(nid, object)
+    end
+
+    :ok
+  end
+
+  def maybe_handle_update(_), do: :ok
+
   # Best-effort: pull the reply parent and the quoted note so threading
   # (`in_reply_to_id`) and quote rendering resolve to local rows.
   # NoteFetcher checks the DB first, so this only hits the network on a
