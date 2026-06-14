@@ -474,6 +474,7 @@ defmodule SukhiFedi.Accounts do
         {:since_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)
         {:min_id, v}, q when not is_nil(v) -> from(n in q, where: n.id > ^v)
         {:exclude_replies, true}, q -> from(n in q, where: is_nil(n.in_reply_to_ap_id))
+        {:only_articles, true}, q -> from(n in q, where: not is_nil(n.title))
         _, q -> q
       end)
 
@@ -491,8 +492,10 @@ defmodule SukhiFedi.Accounts do
       Map.get(opts, :only_media, false) ->
         Enum.filter(notes, fn n -> length(n.media || []) > 0 end)
 
-      # Pinned (position order) and reblog-excluded tabs stay notes-only.
-      Map.get(opts, :pinned, false) or Map.get(opts, :exclude_reblogs, false) ->
+      # Pinned (position order), reblog-excluded, and the Articles tab stay
+      # notes-only — no boost interleave.
+      Map.get(opts, :pinned, false) or Map.get(opts, :exclude_reblogs, false) or
+          Map.get(opts, :only_articles, false) ->
         notes
 
       # Default profile feed: interleave the account's boosts as reblog rows,

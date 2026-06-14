@@ -31,6 +31,14 @@ defmodule SukhiApi.Views.MastodonStatusTest do
     end
   end
 
+  describe "Article title extension" do
+    test "an article carries its title; a plain note renders title: nil" do
+      article = Map.put(note("public"), :title, "On calm timelines")
+      assert MastodonStatus.render(article).title == "On calm timelines"
+      assert MastodonStatus.render(note("public")).title == nil
+    end
+  end
+
   describe "boost wrapper renders as a reblog Status" do
     defp boost do
       %{

@@ -62,6 +62,11 @@ defmodule SukhiApi.Views.MastodonStatus do
       favourites_count: Map.get(counts, :favourites, 0),
       edited_at: nil,
       content: render_content(note),
+      # Sukhi extension: an Article's bare title (nil for a plain Note).
+      # The same title is also folded into `content` as a leading <h2> for
+      # Mastodon clients; our web client reads this key to route the post
+      # to its reader page and to set the page <title>.
+      title: Map.get(note, :title),
       reblog: nil,
       # Quote post (Fedibird-compatible): the quoted status nested one
       # level deep. nil when there's no quote or we don't hold the quoted

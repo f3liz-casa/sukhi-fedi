@@ -357,6 +357,9 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
     |> Map.put(:exclude_reblogs, parsed["exclude_reblogs"] in ["true", "1"])
     |> Map.put(:only_media, parsed["only_media"] in ["true", "1"])
     |> Map.put(:pinned, parsed["pinned"] in ["true", "1"])
+    # Sukhi extension: the profile's Articles tab. Only notes with a title
+    # (inbound `Article`s); never interleaves boosts.
+    |> Map.put(:only_articles, parsed["only_articles"] in ["true", "1"])
   end
 
   # ── followers / following ────────────────────────────────────────────────
