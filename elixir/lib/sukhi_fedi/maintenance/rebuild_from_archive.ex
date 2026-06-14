@@ -70,6 +70,37 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     summary
   end
 
+  @doc """
+  Poll-only variant of `run/1`: walk the archived `Create`/`Update`
+  events and attach any poll that was dropped before v0.4.7, touching
+  nothing else (no note recreation, media or boost passes). Use this to
+  backfill remote polls in isolation after the ingest fix.
+
+      bin/sukhi_fedi eval 'SukhiFedi.Maintenance.RebuildFromArchive.run_polls(:dry_run)'
+      bin/sukhi_fedi eval 'SukhiFedi.Maintenance.RebuildFromArchive.run_polls(:execute)'
+  """
+  @spec run_polls(:dry_run | :execute) :: map()
+  def run_polls(mode \\ :dry_run) do
+    events = note_events()
+    Logger.info("rebuild_from_archive run_polls: #{length(events)} event(s), mode=#{mode}")
+
+    results =
+      Enum.map(events, fn ev ->
+        case fetch_inner_note(ev) do
+          {:ok, note} ->
+            backfill_poll(note, mode)
+
+          {:error, reason} ->
+            Logger.warning("  skip #{ev.object_key}: #{inspect(reason)}")
+            :error
+        end
+      end)
+
+    summary = %{polls: tally(results), mode: mode}
+    Logger.info("rebuild_from_archive run_polls done: #{inspect(summary)}")
+    summary
+  end
+
   # Recreate remote notes that are gone from `notes` but still in the
   # archive — *unless* the archive also holds a `Delete` for them (an
   # intentional removal we must not resurrect). Replays each surviving
