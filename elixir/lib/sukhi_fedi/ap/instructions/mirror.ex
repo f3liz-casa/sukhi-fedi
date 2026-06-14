@@ -61,7 +61,8 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
            {:ok, %Account{id: account_id}} <- Resolve.resolve_or_ingest_actor(attributed_to) do
         attrs = %{
           "account_id" => account_id,
-          "content" => note["content"] || "",
+          "content" => Extract.content_with_title(note),
+          "title" => Extract.article_title(note),
           "ap_id" => ap_id,
           "visibility" => Extract.visibility_from(note),
           "cw" => Extract.content_warning(note),
@@ -120,8 +121,7 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
   these. Create the poll if we have the note but missed its poll (notes
   mirrored before poll ingest existed self-heal on the next vote), refresh
   the cached counts if it's already there. Same host binding as Delete —
-  only the object's own origin may touch it. `Update(Note)` (post edits)
-  is not handled yet.
+  only the object's own origin may touch it.
   """
   def maybe_handle_update(%{
         "type" => "Update",
@@ -135,6 +135,41 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
       if Polls.has_poll?(nid),
         do: Polls.refresh_remote_poll_counts(nid, object),
         else: Polls.ingest_remote_poll(nid, object)
+    end
+
+    :ok
+  end
+
+  # Inbound `Update(Note)` / `Update(Article)`: a remote post (or
+  # hackers.pub article) was edited. Refresh the mirror's text in place —
+  # body (with the Article title re-folded), title column, content
+  # warning, sensitivity, custom emoji, MFM source — and re-extract
+  # hashtags. We rebuild every field from the incoming object rather than
+  # diffing, so the title can't double-prepend. Same host binding as
+  # Delete; only the object's own origin may edit it. Attached media and
+  # polls are not re-synced on edit.
+  def maybe_handle_update(%{
+        "type" => "Update",
+        "actor" => actor_uri,
+        "object" => %{"type" => type} = object
+      })
+      when is_binary(actor_uri) and type in ["Note", "Article"] do
+    with ap_id when is_binary(ap_id) <- Extract.extract_object_id(object),
+         true <- Extract.same_host?(ap_id, actor_uri),
+         %Note{} = note <- Repo.get_by(Note, ap_id: ap_id) do
+      attrs = %{
+        "content" => Extract.content_with_title(object),
+        "title" => Extract.article_title(object),
+        "cw" => Extract.content_warning(object),
+        "sensitive" => object["sensitive"] == true,
+        "emojis" => Emojis.from_tag(object["tag"]),
+        "mfm" => Extract.extract_mfm(object)
+      }
+
+      case note |> Note.changeset(attrs) |> Repo.update() do
+        {:ok, %Note{id: nid}} -> SukhiFedi.Tags.upsert_for_note(nid, object["content"])
+        _ -> :ok
+      end
     end
 
     :ok

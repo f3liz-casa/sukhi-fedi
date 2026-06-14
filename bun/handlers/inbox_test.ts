@@ -4,6 +4,8 @@ import { strictEqual, notStrictEqual } from "node:assert/strict";
 import { handleInbox } from "./inbox.ts";
 
 import mastodonCreateNote from "./__fixtures__/mastodon_create_note.json" with { type: "json" };
+import hackerspubCreateArticle from "./__fixtures__/hackerspub_create_article.json" with { type: "json" };
+import hackerspubUpdateArticle from "./__fixtures__/hackerspub_update_article.json" with { type: "json" };
 import mastodonAnnounce from "./__fixtures__/mastodon_announce.json" with { type: "json" };
 import mastodonLike from "./__fixtures__/mastodon_like.json" with { type: "json" };
 import iceshrimpDelete from "./__fixtures__/iceshrimp_delete.json" with { type: "json" };
@@ -79,6 +81,36 @@ test("handleInbox Create(Note) — dispatches to generic save", async () => {
   if (result.action === "save") {
     const obj = result.object as Record<string, unknown>;
     expect(obj["type"]).toBe("Create");
+  }
+});
+
+// hackers.pub long-form posts arrive as Create(Article). The Elixir mirror
+// folds the Article's `name` (title) into the stored HTML, so the round-trip
+// through fedify must keep both the inner `type: "Article"` and its `name`.
+test("handleInbox Create(Article) — keeps the inner Article type and title", async () => {
+  const result = await handleInbox({ raw: hackerspubCreateArticle as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Create");
+    const inner = obj["object"] as Record<string, unknown>;
+    expect(inner["type"]).toBe("Article");
+    expect(inner["name"]).toBe("On calm timelines");
+  }
+});
+
+// An edited article arrives as Update(Article). The Elixir mirror rebuilds
+// the stored text from the inner object, so the round-trip must keep the
+// updated `name` (title) and `content`.
+test("handleInbox Update(Article) — keeps the edited title and body", async () => {
+  const result = await handleInbox({ raw: hackerspubUpdateArticle as Record<string, unknown> });
+  expect(result.action).toBe("save");
+  if (result.action === "save") {
+    const obj = result.object as Record<string, unknown>;
+    expect(obj["type"]).toBe("Update");
+    const inner = obj["object"] as Record<string, unknown>;
+    expect(inner["type"]).toBe("Article");
+    expect(inner["name"]).toBe("On calm timelines (revised)");
   }
 });
 

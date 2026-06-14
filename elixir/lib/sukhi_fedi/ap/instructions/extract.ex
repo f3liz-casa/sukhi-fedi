@@ -100,6 +100,47 @@ defmodule SukhiFedi.AP.Instructions.Extract do
   def content_warning(%{"summary" => s}) when is_binary(s) and s != "", do: s
   def content_warning(_), do: nil
 
+  @doc """
+  The HTML body we store for an object, with an Article's title folded in.
+
+  An `Article` (hackers.pub long-form post) carries a human title in
+  `name` that a plain `Note` never has. We don't give the title a column
+  or an API field of its own; instead we prepend it as a leading `<h2>`
+  so every client — our web SPA and plain Mastodon apps alike — shows the
+  title above the body. `name` is plain text per AS2, so it's HTML-escaped
+  before wrapping; the changeset's sanitiser then keeps the `<h2>`.
+  Non-Article objects (and titleless Articles) return the bare content.
+  """
+  def content_with_title(%{"type" => "Article", "name" => name} = obj)
+      when is_binary(name) do
+    case String.trim(name) do
+      "" -> content_body(obj)
+      title -> "<h2>" <> Plug.HTML.html_escape(title) <> "</h2>" <> content_body(obj)
+    end
+  end
+
+  def content_with_title(obj) when is_map(obj), do: content_body(obj)
+
+  defp content_body(obj), do: obj["content"] || ""
+
+  @doc """
+  The bare title of an `Article` (AP `name`), trimmed, or `nil`.
+
+  This is the structured companion to `content_with_title/1`: the same
+  title also rides in `content` as a leading `<h2>` (so plain Mastodon
+  clients see it), but the column lets our client know a note *is* an
+  article — route it to its reader page, use it as the page `<title>` —
+  without parsing HTML. A non-Article object (or a blank name) is `nil`.
+  """
+  def article_title(%{"type" => "Article", "name" => name}) when is_binary(name) do
+    case String.trim(name) do
+      "" -> nil
+      title -> title
+    end
+  end
+
+  def article_title(_), do: nil
+
   def normalize_collection(list) when is_list(list), do: list
   def normalize_collection(str) when is_binary(str), do: [str]
   def normalize_collection(_), do: []

@@ -5,6 +5,10 @@ defmodule SukhiFedi.Schema.Note do
 
   schema "notes" do
     field(:content, :string)
+    # An Article's human title (AP `name`); NULL for a plain Note. Kept
+    # structured alongside the `<h2>` we also fold into `content`, so the
+    # client can detect an article and route it to its reader page.
+    field(:title, :string)
     field(:visibility, :string, default: "public")
     field(:ap_id, :string)
     field(:cw, :string)
@@ -38,6 +42,7 @@ defmodule SukhiFedi.Schema.Note do
     note
     |> cast(attrs, [
       :content,
+      :title,
       :visibility,
       :account_id,
       :cw,
@@ -54,8 +59,10 @@ defmodule SukhiFedi.Schema.Note do
     # Cap content length (the only schema field that lacked one): bounds
     # unbounded storage + tag-row amplification from a multi-MB local post
     # or federated note. Oversized federated inserts simply fail the
-    # changeset and are dropped.
-    |> validate_length(:content, max: 5_000)
+    # changeset and are dropped. The ceiling is generous enough to hold a
+    # hackers.pub `Article` (long-form HTML, title folded in) — a 5 000-char
+    # cap silently dropped those — while still bounding multi-MB abuse.
+    |> validate_length(:content, max: 100_000)
     |> validate_inclusion(:visibility, ["public", "followers", "direct"])
   end
 end

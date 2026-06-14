@@ -16,6 +16,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   """
 
   alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
+  alias SukhiFedi.AP.Instructions.Extract
   alias SukhiFedi.{Polls, Repo}
   alias SukhiFedi.Schema.{Account, Note}
   alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
@@ -137,7 +138,8 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   defp do_insert_note(note_json, account_id, uri) do
     attrs = %{
       "account_id" => account_id,
-      "content" => note_json["content"] || "",
+      "content" => Extract.content_with_title(note_json),
+      "title" => Extract.article_title(note_json),
       "ap_id" => uri,
       "visibility" => visibility_from(note_json),
       "cw" => content_warning(note_json),
