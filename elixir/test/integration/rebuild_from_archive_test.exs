@@ -4,7 +4,10 @@ defmodule SukhiFedi.Integration.RebuildFromArchiveTest do
 
   @moduletag :integration
 
+  import Ecto.Query
+
   alias SukhiFedi.Maintenance.RebuildFromArchive
+  alias SukhiFedi.Polls
   alias SukhiFedi.Schema.{Account, Note}
 
   describe "rebuild_note/2" do
@@ -95,6 +98,58 @@ defmodule SukhiFedi.Integration.RebuildFromArchiveTest do
                RebuildFromArchive.rebuild_note(%{"id" => ap_id, "published" => "2021-01-02T03:04:05Z"}, :execute)
 
       assert Repo.get!(Note, note.id).emojis == kept
+    end
+  end
+
+  describe "backfill_poll/2" do
+    test "ingests the poll for a pre-v0.4.7 remote note that has none" do
+      ap_id = "https://hackers.pub/notes/arch-poll"
+      note = insert_remote_note(ap_id, created_at: ~U[2026-06-01 00:00:00Z])
+
+      question = %{
+        "id" => ap_id,
+        "type" => "Question",
+        "oneOf" => [
+          %{"type" => "Note", "name" => "yes", "replies" => %{"totalItems" => 4}},
+          %{"type" => "Note", "name" => "no", "replies" => %{"totalItems" => 1}}
+        ],
+        "votersCount" => 5
+      }
+
+      assert :would_attach = RebuildFromArchive.backfill_poll(question, :dry_run)
+      refute Polls.has_poll?(note.id)
+
+      assert :attached = RebuildFromArchive.backfill_poll(question, :execute)
+
+      [pid] =
+        Repo.all(from p in SukhiFedi.Schema.Poll, where: p.note_id == ^note.id, select: p.id)
+
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      assert Enum.map(ctx.options, & &1.title) == ["yes", "no"]
+      assert ctx.tallies[Enum.at(ctx.options, 0).id] == 4
+      assert ctx.voters_count == 5
+    end
+
+    test "is idempotent — a note that already has a poll is left alone" do
+      ap_id = "https://hackers.pub/notes/arch-poll-twice"
+      insert_remote_note(ap_id, created_at: ~U[2026-06-01 00:00:00Z])
+
+      question = %{
+        "id" => ap_id,
+        "oneOf" => [
+          %{"type" => "Note", "name" => "a", "replies" => %{"totalItems" => 1}},
+          %{"type" => "Note", "name" => "b", "replies" => %{"totalItems" => 2}}
+        ]
+      }
+
+      assert :attached = RebuildFromArchive.backfill_poll(question, :execute)
+      assert :already = RebuildFromArchive.backfill_poll(question, :execute)
+    end
+
+    test "a non-poll note object is skipped" do
+      ap_id = "https://hackers.pub/notes/arch-plain"
+      insert_remote_note(ap_id, created_at: ~U[2026-06-01 00:00:00Z])
+      assert :no_poll = RebuildFromArchive.backfill_poll(%{"id" => ap_id}, :execute)
     end
   end
 

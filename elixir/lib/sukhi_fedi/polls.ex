@@ -18,6 +18,11 @@ defmodule SukhiFedi.Polls do
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Poll, PollOption, PollVote}
 
+  @doc "Whether a note already owns a poll (used by the archive backfill to stay idempotent)."
+  @spec has_poll?(integer()) :: boolean()
+  def has_poll?(note_id) when is_integer(note_id),
+    do: Repo.exists?(from p in Poll, where: p.note_id == ^note_id)
+
   @spec get_with_results(integer() | String.t(), integer() | nil) ::
           {:ok, map()} | {:error, :not_found}
   def get_with_results(poll_id, viewer_id \\ nil) do

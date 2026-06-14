@@ -31,7 +31,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   require Logger
 
   alias SukhiFedi.AP.{Emojis, Instructions, MediaIngest, Published}
-  alias SukhiFedi.Repo
+  alias SukhiFedi.{Polls, Repo}
   alias SukhiFedi.Schema.{InboundEvent, Note}
 
   @note_activities ~w(Create Update)
@@ -49,11 +49,11 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
       Enum.map(events, fn ev ->
         case fetch_inner_note(ev) do
           {:ok, note} ->
-            {rebuild_note(note, mode), backfill_media(note, mode)}
+            {rebuild_note(note, mode), backfill_media(note, mode), backfill_poll(note, mode)}
 
           {:error, reason} ->
             Logger.warning("  skip #{ev.object_key}: #{inspect(reason)}")
-            {:error, :error}
+            {:error, :error, :error}
         end
       end)
 
@@ -61,6 +61,7 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
       notes: notes,
       fields: tally(Enum.map(results, &elem(&1, 0))),
       media: tally(Enum.map(results, &elem(&1, 1))),
+      polls: tally(Enum.map(results, &elem(&1, 2))),
       boosts: backfill_boosts(mode),
       mode: mode
     }
@@ -266,6 +267,40 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   end
 
   def backfill_media(_, _), do: :no_object_id
+
+  @doc """
+  Backfill the poll for the local note matching `note["id"]` from an
+  archived `Question` (`oneOf`/`anyOf`). The inbound Question was mirrored
+  as a plain note before v0.4.7, so notes from before then carry no poll.
+  Idempotent: a note that already owns a poll is left alone. Ascending
+  `received_at` means a note's first archived Question wins; later tally
+  refreshes are skipped, matching the snapshot semantics of ingest.
+  Exposed for testing.
+  """
+  @spec backfill_poll(map(), :dry_run | :execute) :: atom()
+  def backfill_poll(%{"id" => ap_id} = note, mode) when is_binary(ap_id) do
+    case Repo.get_by(Note, ap_id: ap_id) do
+      %Note{} = existing ->
+        cond do
+          not poll_object?(note) -> :no_poll
+          Polls.has_poll?(existing.id) -> :already
+          mode == :dry_run -> :would_attach
+
+          true ->
+            Polls.ingest_remote_poll(existing.id, note)
+            :attached
+        end
+
+      nil ->
+        :no_local_note
+    end
+  end
+
+  def backfill_poll(_, _), do: :no_object_id
+
+  defp poll_object?(%{"oneOf" => list}) when is_list(list), do: list != []
+  defp poll_object?(%{"anyOf" => list}) when is_list(list), do: list != []
+  defp poll_object?(_), do: false
 
   defp has_attachment?(list) when is_list(list), do: list != []
   defp has_attachment?(%{}), do: true
