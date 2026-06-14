@@ -10,7 +10,7 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
 
   alias SukhiFedi.AP.Instructions.{Extract, Resolve}
   alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
-  alias SukhiFedi.{Notifications, Repo}
+  alias SukhiFedi.{Notifications, Polls, Repo}
   alias SukhiFedi.Schema.{Account, Note}
 
   @doc """
@@ -79,6 +79,7 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
           {:ok, %Note{id: nid}} when not is_nil(nid) ->
             SukhiFedi.Tags.upsert_for_note(nid, note["content"])
             MediaIngest.attach(nid, account_id, note["attachment"])
+            Polls.ingest_remote_poll(nid, note)
             if notify?, do: notify_mentions(note, nid, account_id)
             fetch_referenced_notes(attrs)
             :ok

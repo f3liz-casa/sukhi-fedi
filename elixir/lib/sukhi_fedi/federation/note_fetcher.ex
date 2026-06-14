@@ -16,7 +16,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
   """
 
   alias SukhiFedi.AP.{Emojis, MediaIngest, Published}
-  alias SukhiFedi.Repo
+  alias SukhiFedi.{Polls, Repo}
   alias SukhiFedi.Schema.{Account, Note}
   alias SukhiFedi.Federation.{ActorFetcher, FedifyClient, RemoteAccounts}
 
@@ -160,6 +160,7 @@ defmodule SukhiFedi.Federation.NoteFetcher do
 
       {:ok, %Note{} = n} ->
         MediaIngest.attach(n.id, account_id, note_json["attachment"])
+        Polls.ingest_remote_poll(n.id, note_json)
         {:ok, n}
 
       {:error, _} = err ->

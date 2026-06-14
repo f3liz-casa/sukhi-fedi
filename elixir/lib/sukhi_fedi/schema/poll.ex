@@ -6,6 +6,9 @@ defmodule SukhiFedi.Schema.Poll do
   schema "polls" do
     field :expires_at, :utc_datetime
     field :multiple, :boolean, default: false
+    # Authoritative voter count for a remote poll (from the AP `votersCount`);
+    # stays 0 for local polls, which count distinct `poll_votes` instead.
+    field :voters_count, :integer, default: 0
     belongs_to :note, SukhiFedi.Schema.Note
     has_many :options, SukhiFedi.Schema.PollOption
     has_many :votes, SukhiFedi.Schema.PollVote
@@ -15,7 +18,7 @@ defmodule SukhiFedi.Schema.Poll do
 
   def changeset(poll, attrs) do
     poll
-    |> cast(attrs, [:expires_at, :multiple, :note_id])
+    |> cast(attrs, [:expires_at, :multiple, :voters_count, :note_id])
     |> validate_required([:note_id])
   end
 end

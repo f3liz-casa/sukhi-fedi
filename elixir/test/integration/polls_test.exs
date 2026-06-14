@@ -7,7 +7,7 @@ defmodule SukhiFedi.Integration.PollsTest do
   import Ecto.Query
 
   alias SukhiFedi.{Notes, Polls}
-  alias SukhiFedi.Schema.{Account, Poll, PollOption}
+  alias SukhiFedi.Schema.{Account, Note, Poll, PollOption}
 
   describe "create_status with poll[…]" do
     test "JSON shape: poll: %{options, expires_in, multiple}" do
@@ -154,8 +154,71 @@ defmodule SukhiFedi.Integration.PollsTest do
     end
   end
 
+  describe "ingest_remote_poll/2 (inbound AP Question)" do
+    test "snapshots a single-choice poll's options, tallies, voters and expiry" do
+      note = remote_note!("https://hackers.pub/notes/abc")
+
+      question = %{
+        "type" => "Question",
+        "oneOf" => [
+          %{"type" => "Note", "name" => "Elixir", "replies" => %{"totalItems" => 3}},
+          %{"type" => "Note", "name" => "Rust", "replies" => %{"totalItems" => 5}}
+        ],
+        "endTime" => "2099-01-01T00:00:00Z",
+        "votersCount" => 8
+      }
+
+      assert :ok = Polls.ingest_remote_poll(note.id, question)
+
+      [%Poll{id: pid, multiple: false}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      assert Enum.map(ctx.options, & &1.title) == ["Elixir", "Rust"]
+      assert ctx.tallies[Enum.at(ctx.options, 0).id] == 3
+      assert ctx.tallies[Enum.at(ctx.options, 1).id] == 5
+      assert ctx.voters_count == 8
+    end
+
+    test "anyOf marks the poll multiple-choice" do
+      note = remote_note!("https://hackers.pub/notes/multi")
+
+      question = %{
+        "type" => "Question",
+        "anyOf" => [
+          %{"type" => "Note", "name" => "A", "replies" => %{"totalItems" => 1}},
+          %{"type" => "Note", "name" => "B", "replies" => %{"totalItems" => 2}}
+        ]
+      }
+
+      assert :ok = Polls.ingest_remote_poll(note.id, question)
+
+      [%Poll{id: pid, multiple: true, voters_count: vc}] =
+        Repo.all(from p in Poll, where: p.note_id == ^note.id)
+
+      # No votersCount given → fall back to the sum of option tallies.
+      assert vc == 3
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      assert ctx.poll.multiple == true
+    end
+
+    test "an object without oneOf/anyOf is a no-op" do
+      note = remote_note!("https://hackers.pub/notes/plain")
+      assert :ok = Polls.ingest_remote_poll(note.id, %{"type" => "Note"})
+      assert [] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
+    |> Repo.insert!()
+  end
+
+  # A remote note owns an `ap_id`; that's what flips poll rendering onto the
+  # cached AP tallies instead of local `poll_votes`.
+  defp remote_note!(ap_id) do
+    author = create_account!("remote_q_#{System.unique_integer([:positive])}")
+
+    %Note{account_id: author.id, content: "q", visibility: "public", ap_id: ap_id}
     |> Repo.insert!()
   end
 end

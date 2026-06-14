@@ -54,23 +54,107 @@ defmodule SukhiFedi.Polls do
     voted_option_ids =
       if is_integer(viewer_id), do: voted_options(pid, viewer_id), else: []
 
-    voters_count =
-      Repo.aggregate(
-        from(v in PollVote, where: v.poll_id == ^pid, select: v.account_id),
-        :count,
-        :account_id,
-        distinct: true
-      )
+    # A remote poll's authoritative tallies ride on the cached option/poll
+    # counts (the origin owns the count of votes cast on every server); a
+    # local poll counts its own `poll_votes` rows. A viewer's own choice is
+    # still highlighted from our `poll_votes` either way.
+    {tallies, voters_count} =
+      if remote_poll?(poll) do
+        {Map.new(options, fn o -> {o.id, o.votes_count} end), poll.voters_count}
+      else
+        {tally_for_poll(pid), local_voters_count(pid)}
+      end
 
     %{
       poll: poll,
       options: options,
-      tallies: tally_for_poll(pid),
+      tallies: tallies,
       voters_count: voters_count,
       voted_option_ids: voted_option_ids,
       voted?: voted_option_ids != []
     }
   end
+
+  # The owning note carries an `ap_id` only when it came from another server.
+  defp remote_poll?(%Poll{note: %{ap_id: ap_id}}), do: not is_nil(ap_id)
+  defp remote_poll?(_), do: false
+
+  defp local_voters_count(pid) do
+    Repo.aggregate(
+      from(v in PollVote, where: v.poll_id == ^pid, select: v.account_id),
+      :count,
+      :account_id,
+      distinct: true
+    )
+  end
+
+  @doc """
+  Ingest the poll carried by an inbound AP `Question` into a `Poll` plus
+  its `poll_options`, snapshotting the tallies the activity reports. A
+  no-op when the object isn't a poll (no `oneOf`/`anyOf`). Call it only
+  on a freshly inserted note — the options are written once, not merged.
+
+  Single-choice polls travel as `oneOf`, multiple-choice as `anyOf`. Each
+  entry is a Note whose `name` is the option label and whose
+  `replies.totalItems` is that option's running count. `endTime` (or
+  `closed`) is the deadline; `votersCount` the distinct voter total.
+  """
+  @spec ingest_remote_poll(integer(), map()) :: :ok
+  def ingest_remote_poll(note_id, %{} = object) do
+    {choices, multiple?} =
+      case object do
+        %{"oneOf" => list} when is_list(list) -> {list, false}
+        %{"anyOf" => list} when is_list(list) -> {list, true}
+        _ -> {nil, false}
+      end
+
+    if is_list(choices) and choices != [] do
+      rows =
+        choices
+        |> Enum.with_index()
+        |> Enum.map(fn {choice, idx} ->
+          %{title: option_title(choice), position: idx, votes_count: option_count(choice)}
+        end)
+
+      total = Enum.reduce(rows, 0, fn r, acc -> acc + r.votes_count end)
+
+      {:ok, %Poll{id: pid}} =
+        %Poll{}
+        |> Poll.changeset(%{
+          note_id: note_id,
+          multiple: multiple?,
+          expires_at: parse_end_time(object["endTime"] || object["closed"]),
+          voters_count: parse_count(object["votersCount"]) || total
+        })
+        |> Repo.insert()
+
+      Repo.insert_all("poll_options", Enum.map(rows, &Map.put(&1, :poll_id, pid)))
+      :ok
+    else
+      :ok
+    end
+  end
+
+  def ingest_remote_poll(_note_id, _), do: :ok
+
+  defp option_title(%{"name" => name}) when is_binary(name), do: name
+  defp option_title(%{"content" => content}) when is_binary(content), do: content
+  defp option_title(_), do: ""
+
+  defp option_count(%{"replies" => %{"totalItems" => n}}), do: parse_count(n) || 0
+  defp option_count(_), do: 0
+
+  defp parse_count(n) when is_integer(n) and n >= 0, do: n
+  defp parse_count(_), do: nil
+
+  defp parse_end_time(ts) when is_binary(ts) do
+    case DateTime.from_iso8601(ts) do
+      {:ok, dt, _} -> DateTime.truncate(dt, :second)
+      _ -> nil
+    end
+  end
+
+  defp parse_end_time(_), do: nil
 
   @spec vote(integer(), integer() | String.t(), [integer() | String.t()]) ::
           :ok | {:error, :not_found | :expired | :too_many_choices}
