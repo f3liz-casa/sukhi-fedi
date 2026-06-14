@@ -199,7 +199,7 @@ accessories:
         ENABLED_ADDONS: all
         DISABLE_ADDONS: nodeinfo_monitor
         ERL_FULLSWEEP_AFTER: "20"
-        ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 4 +MBas aobf +MHas aobf"
+        ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 2 +sbwt none +sbwtdcpu none +sbwtdio none +MBas aobf +MHas aobf"
         # Object storage (rustfs accessory below). media.ex writes
         # PutObject here; router serve_upload/2 proxies GetObject back
         # out at /uploads/<key>. URLs in the DB stay `/uploads/<key>`.
@@ -369,7 +369,7 @@ accessories:
         OBAN_FEDERATION_CONCURRENCY: "4"
         FINCH_POOL_SIZE: "50"
         FINCH_POOL_COUNT: "4"
-        ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 4 +MBas aobf +MHas aobf"
+        ERL_FLAGS: "+S 2:2 +SDcpu 2:2 +SDio 2 +sbwt none +sbwtdcpu none +sbwtdio none +MBas aobf +MHas aobf"
         ERL_FULLSWEEP_AFTER: "20"
       secret:
         - DB_PASS
