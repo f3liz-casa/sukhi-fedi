@@ -208,6 +208,49 @@ defmodule SukhiFedi.Integration.PollsTest do
     end
   end
 
+  describe "refresh_remote_poll_counts/2" do
+    test "updates option tallies and voters from a newer snapshot, by position" do
+      note = remote_note!("https://hackers.pub/notes/refresh")
+
+      # First seen at vote-zero, the way the oldest archived Question looks.
+      :ok =
+        Polls.ingest_remote_poll(note.id, %{
+          "oneOf" => [
+            %{"type" => "Note", "name" => "A", "replies" => %{"totalItems" => 0}},
+            %{"type" => "Note", "name" => "B", "replies" => %{"totalItems" => 0}}
+          ],
+          "votersCount" => 0
+        })
+
+      # The newest archived Update carries the real counts.
+      assert :ok =
+               Polls.refresh_remote_poll_counts(note.id, %{
+                 "oneOf" => [
+                   %{"type" => "Note", "name" => "A", "replies" => %{"totalItems" => 7}},
+                   %{"type" => "Note", "name" => "B", "replies" => %{"totalItems" => 2}}
+                 ],
+                 "votersCount" => 9
+               })
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+      {:ok, ctx} = Polls.get_with_results(pid, nil)
+      # Titles unchanged, identity preserved; only the counts moved.
+      assert Enum.map(ctx.options, & &1.title) == ["A", "B"]
+      assert ctx.tallies[Enum.at(ctx.options, 0).id] == 7
+      assert ctx.tallies[Enum.at(ctx.options, 1).id] == 2
+      assert ctx.voters_count == 9
+    end
+
+    test "no_poll when the note owns no poll yet" do
+      note = remote_note!("https://hackers.pub/notes/refresh-nopoll")
+
+      assert :no_poll =
+               Polls.refresh_remote_poll_counts(note.id, %{
+                 "oneOf" => [%{"name" => "A"}, %{"name" => "B"}]
+               })
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()

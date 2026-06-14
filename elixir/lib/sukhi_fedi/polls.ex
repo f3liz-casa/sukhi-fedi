@@ -106,12 +106,7 @@ defmodule SukhiFedi.Polls do
   """
   @spec ingest_remote_poll(integer(), map()) :: :ok
   def ingest_remote_poll(note_id, %{} = object) do
-    {choices, multiple?} =
-      case object do
-        %{"oneOf" => list} when is_list(list) -> {list, false}
-        %{"anyOf" => list} when is_list(list) -> {list, true}
-        _ -> {nil, false}
-      end
+    {choices, multiple?} = poll_choices(object)
 
     if is_list(choices) and choices != [] do
       rows =
@@ -141,6 +136,51 @@ defmodule SukhiFedi.Polls do
   end
 
   def ingest_remote_poll(_note_id, _), do: :ok
+
+  @doc """
+  Refresh an existing remote poll's cached tallies from a newer archived
+  `Question` snapshot — a poll gains an `Update` on every vote, so the
+  latest one carries the real counts. Updates each option's `votes_count`
+  (matched by position, the order both were ingested in) and the poll's
+  `voters_count`, without touching the rows' identity. No-op when the note
+  owns no poll or the object isn't a poll.
+  """
+  @spec refresh_remote_poll_counts(integer(), map()) :: :ok | :no_poll | :no_poll_object
+  def refresh_remote_poll_counts(note_id, %{} = object) do
+    {choices, _multiple?} = poll_choices(object)
+
+    case Repo.get_by(Poll, note_id: note_id) do
+      nil ->
+        :no_poll
+
+      %Poll{} = poll when is_list(choices) ->
+        total =
+          from(o in PollOption, where: o.poll_id == ^poll.id, order_by: [asc: o.position])
+          |> Repo.all()
+          |> Enum.zip(choices)
+          |> Enum.reduce(0, fn {opt, choice}, acc ->
+            count = option_count(choice)
+            opt |> Ecto.Changeset.change(votes_count: count) |> Repo.update!()
+            acc + count
+          end)
+
+        poll
+        |> Poll.changeset(%{voters_count: parse_count(object["votersCount"]) || total})
+        |> Repo.update!()
+
+        :ok
+
+      %Poll{} ->
+        :no_poll_object
+    end
+  end
+
+  def refresh_remote_poll_counts(_note_id, _), do: :no_poll_object
+
+  # A Question's options ride in `oneOf` (single choice) or `anyOf` (multiple).
+  defp poll_choices(%{"oneOf" => list}) when is_list(list), do: {list, false}
+  defp poll_choices(%{"anyOf" => list}) when is_list(list), do: {list, true}
+  defp poll_choices(_), do: {nil, false}
 
   defp option_title(%{"name" => name}) when is_binary(name), do: name
   defp option_title(%{"content" => content}) when is_binary(content), do: content

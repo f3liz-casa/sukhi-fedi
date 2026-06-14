@@ -71,39 +71,61 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
   end
 
   @doc """
-  Poll-only variant of `run/1`: walk the archived `Create`/`Update`
-  events and attach any poll that was dropped before v0.4.7, touching
-  nothing else (no note recreation, media or boost passes). Use this to
-  backfill remote polls in isolation after the ingest fix.
+  Poll-only variant of `run/1`: sync every remote poll to its newest
+  archived `Question`, touching nothing else (no note recreation, media or
+  boost passes). A poll gains an `Update` on every vote, so we take each
+  note's *latest* snapshot — create the poll if the note has none, refresh
+  its cached tallies if it already does. Only the newest event per note
+  acts (a `seen` set drops the older refreshes).
 
       bin/sukhi_fedi eval 'SukhiFedi.Maintenance.RebuildFromArchive.run_polls(:dry_run)'
       bin/sukhi_fedi eval 'SukhiFedi.Maintenance.RebuildFromArchive.run_polls(:execute)'
   """
   @spec run_polls(:dry_run | :execute) :: map()
   def run_polls(mode \\ :dry_run) do
-    # Newest archived Question per note wins: a poll accrues an `Update`
-    # on every vote, so the latest snapshot carries the real tallies.
-    # `backfill_poll` is create-only and skips a note that already has a
-    # poll, so processing newest-first means the freshest counts land and
-    # the older refreshes fall to `:already`.
     events = note_events() |> Enum.reverse()
     Logger.info("rebuild_from_archive run_polls: #{length(events)} event(s), mode=#{mode}")
 
-    results =
-      Enum.map(events, fn ev ->
-        case fetch_inner_note(ev) do
-          {:ok, note} ->
-            backfill_poll(note, mode)
-
-          {:error, reason} ->
-            Logger.warning("  skip #{ev.object_key}: #{inspect(reason)}")
-            :error
+    {_seen, results} =
+      Enum.reduce(events, {MapSet.new(), []}, fn ev, {seen, acc} ->
+        with {:ok, %{"id" => ap_id} = note} <- fetch_inner_note(ev),
+             true <- is_binary(ap_id),
+             true <- poll_object?(note),
+             false <- MapSet.member?(seen, ap_id) do
+          {MapSet.put(seen, ap_id), [sync_poll(note, mode) | acc]}
+        else
+          _ -> {seen, acc}
         end
       end)
 
     summary = %{polls: tally(results), mode: mode}
     Logger.info("rebuild_from_archive run_polls done: #{inspect(summary)}")
     summary
+  end
+
+  # Create-or-refresh the local note's poll from this (newest) archived
+  # Question. :dry_run reports which branch would run without writing.
+  defp sync_poll(%{"id" => ap_id} = note, mode) do
+    case Repo.get_by(Note, ap_id: ap_id) do
+      %Note{id: nid} ->
+        has_poll? = Polls.has_poll?(nid)
+
+        cond do
+          mode == :dry_run ->
+            if has_poll?, do: :would_refresh, else: :would_attach
+
+          has_poll? ->
+            Polls.refresh_remote_poll_counts(nid, note)
+            :refreshed
+
+          true ->
+            Polls.ingest_remote_poll(nid, note)
+            :attached
+        end
+
+      nil ->
+        :no_local_note
+    end
   end
 
   # Recreate remote notes that are gone from `notes` but still in the
