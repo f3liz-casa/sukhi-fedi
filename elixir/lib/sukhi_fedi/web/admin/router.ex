@@ -15,7 +15,7 @@ defmodule SukhiFedi.Web.Admin.Router do
 
   alias SukhiFedi.Web.Admin.{Auth, DashboardController, InstanceBlocksController,
                               InviteCodesController, LoginController,
-                              ReportsController, UsersController}
+                              ReportsController, SystemController, UsersController}
 
   plug :put_secret_key_base
 
@@ -88,6 +88,14 @@ defmodule SukhiFedi.Web.Admin.Router do
 
   post "/invite_codes" do
     Auth.with_admin(conn, &InviteCodesController.create/1)
+  end
+
+  get "/system" do
+    Auth.with_admin(conn, &SystemController.index/1)
+  end
+
+  get "/system/sample" do
+    Auth.with_admin(conn, &SystemController.sample/1)
   end
 
   get "/instance_blocks" do

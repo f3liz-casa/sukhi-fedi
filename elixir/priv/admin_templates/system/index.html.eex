@@ -1,0 +1,11 @@
+<h1>System</h1>
+<p class="muted">
+  Host resource usage from <code>:os_mon</code>
+  (<code>:cpu_sup</code> / <code>:memsup</code> / <code>:disksup</code>).
+  CPU and memory refresh every 2&thinsp;s; disk rescans on a slower timer.
+  These are host-OS figures — on a shared box they describe the whole machine.
+</p>
+
+<div hx-get="/admin/system/sample" hx-trigger="every 2s" hx-swap="innerHTML">
+<%= SukhiFedi.Web.Admin.Render.render_template("system/sample.html.eex", metrics: metrics) %>
+</div>

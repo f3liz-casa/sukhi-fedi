@@ -9,6 +9,11 @@ config :sukhi_fedi, SukhiFedi.Repo,
 
 config :sukhi_fedi, ecto_repos: [SukhiFedi.Repo]
 
+# os_mon's disksup rescans every 30 min by default, so /admin/system
+# would show no disk data for half an hour after each boot. A 1-minute
+# rescan is plenty fresh for an admin page and costs almost nothing.
+config :os_mon, disk_space_check_interval: 1
+
 config :sukhi_fedi, Oban,
   repo: SukhiFedi.Repo,
   queues: [monitor: 5, inbound_archive: 10, outbound_archive: 10],

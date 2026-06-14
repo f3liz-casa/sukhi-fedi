@@ -1,0 +1,64 @@
+<%
+  mib = fn bytes -> div(bytes, 1_048_576) end
+  gib = fn bytes -> :erlang.float_to_binary(bytes / 1_073_741_824, decimals: 1) end
+  mem = metrics.memory
+  mem_pct = if mem.total > 0, do: mem.used / mem.total * 100, else: 0.0
+  beam = metrics.beam
+  load1 = metrics.load["1m"]
+%>
+<div class="grid-cards">
+  <div class="card">
+    <div class="label">CPU</div>
+    <div class="n"><%= :erlang.float_to_binary(metrics.cpu, decimals: 1) %><span style="font-size: 14px;">%</span></div>
+    <div class="bar"><i class="<%= if metrics.cpu > 80, do: "hot" %>" style="width: <%= min(100.0, metrics.cpu) %>%;"></i></div>
+  </div>
+  <div class="card">
+    <div class="label">Memory</div>
+    <div class="n"><%= round(mem_pct) %><span style="font-size: 14px;">%</span></div>
+    <div class="muted"><%= mib.(mem.used) %> / <%= mib.(mem.total) %> MiB</div>
+    <div class="bar"><i class="<%= if mem_pct > 85, do: "hot" %>" style="width: <%= mem_pct %>%;"></i></div>
+  </div>
+  <div class="card">
+    <div class="label">Load average</div>
+    <div class="n"><%= if load1, do: :erlang.float_to_binary(load1, decimals: 2), else: "—" %></div>
+    <div class="muted">
+      1m <%= if load1, do: :erlang.float_to_binary(load1, decimals: 2), else: "—" %> ·
+      5m <%= if l = metrics.load["5m"], do: :erlang.float_to_binary(l, decimals: 2), else: "—" %> ·
+      15m <%= if l = metrics.load["15m"], do: :erlang.float_to_binary(l, decimals: 2), else: "—" %>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">App memory (BEAM)</div>
+    <div class="n"><%= mib.(beam.total) %><span style="font-size: 14px;"> MiB</span></div>
+    <div class="muted">procs <%= mib.(beam.processes) %> · binary <%= mib.(beam.binary) %> MiB</div>
+  </div>
+</div>
+
+<h2>Disk</h2>
+<div class="panel" style="padding: 0;">
+<table>
+  <thead>
+    <tr>
+      <th>Mount</th>
+      <th>Size</th>
+      <th style="width: 40%;">Used</th>
+    </tr>
+  </thead>
+  <tbody>
+<%= if metrics.disk == [] do %>
+    <tr><td colspan="3" class="muted" style="text-align: center; padding: 24px;">No disk data yet — disksup has not finished its first scan.</td></tr>
+<% else %>
+<%= for d <- metrics.disk do %>
+    <tr>
+      <td><code><%= h(d.mount) %></code></td>
+      <td><%= gib.(d.total) %> GiB</td>
+      <td>
+        <%= d.used_percent %>%
+        <div class="bar"><i class="<%= if d.used_percent > 85, do: "hot" %>" style="width: <%= d.used_percent %>%;"></i></div>
+      </td>
+    </tr>
+<% end %>
+<% end %>
+  </tbody>
+</table>
+</div>
