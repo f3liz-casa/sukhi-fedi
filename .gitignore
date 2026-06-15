@@ -25,3 +25,5 @@ infra/terraform-x64-freetier/.terraform.lock.hcl
 config/tls/
 
 .claude/
+# Julia analysis tooling — resolved on demand via Pkg.instantiate()
+analysis/Manifest.toml
