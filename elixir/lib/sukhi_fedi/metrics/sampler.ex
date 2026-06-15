@@ -51,7 +51,7 @@ defmodule SukhiFedi.Metrics.Sampler do
   @impl true
   def handle_info(:sample, state) do
     try do
-      Metrics.record()
+      Metrics.record() |> alert_on_dlq()
     rescue
       e -> Logger.warning("metrics sampler: record failed: #{Exception.message(e)}")
     end
@@ -72,6 +72,16 @@ defmodule SukhiFedi.Metrics.Sampler do
     schedule(:prune, @prune_interval_ms)
     {:noreply, state}
   end
+
+  # A non-empty dead-letter queue means outbound federation is failing for
+  # someone. Surface it on every tick it's non-zero — the log is the alert
+  # (the depth also lands in the metric_samples series for /admin/system
+  # and offline analysis).
+  defp alert_on_dlq(%{outbox_dlq_depth: n}) when is_integer(n) and n > 0 do
+    Logger.warning("metrics sampler: OUTBOX_DLQ depth=#{n} — outbound federation is failing")
+  end
+
+  defp alert_on_dlq(_), do: :ok
 
   defp retention_days(cfg) do
     case Keyword.get(cfg, :retention_days, @default_retention_days) do

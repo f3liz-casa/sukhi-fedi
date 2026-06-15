@@ -29,7 +29,15 @@ defmodule SukhiFedi.MetricsTest do
       assert %MetricSample{} = row
       assert row.cpu_percent >= 0.0
       assert %DateTime{} = row.sampled_at
+      # DLQ depth rides along: nil when the stream/NATS is absent (as in
+      # the test stack), a count otherwise.
+      assert is_nil(row.outbox_dlq_depth) or is_integer(row.outbox_dlq_depth)
       assert Repo.aggregate(MetricSample, :count, :id) == before + 1
+    end
+
+    test "dlq_depth/0 is nil or a non-negative integer, never raises" do
+      depth = Metrics.dlq_depth()
+      assert is_nil(depth) or (is_integer(depth) and depth >= 0)
     end
   end
 

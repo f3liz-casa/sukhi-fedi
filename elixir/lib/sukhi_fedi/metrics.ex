@@ -26,12 +26,34 @@ defmodule SukhiFedi.Metrics do
   Sample `SystemMetrics` once and persist it as a row. Returns the
   inserted `MetricSample`.
   """
+  @dlq_stream "OUTBOX_DLQ"
+
   @spec record() :: struct()
   def record do
     SystemMetrics.snapshot()
     |> to_row()
+    |> Map.put(:outbox_dlq_depth, dlq_depth())
     |> then(&struct(MetricSample, &1))
     |> Repo.insert!()
+  end
+
+  @doc """
+  Current OUTBOX_DLQ depth (undelivered, dead-lettered outbound
+  activities), or `nil` if the stream doesn't exist yet or NATS can't be
+  reached. A standing non-zero value means federation delivery is failing
+  for someone — the sampler logs a warning and it rides the history series.
+  """
+  @spec dlq_depth() :: non_neg_integer() | nil
+  def dlq_depth do
+    case Gnat.Jetstream.API.Stream.info(:gnat, @dlq_stream) do
+      {:ok, %{state: %{messages: n}}} when is_integer(n) -> n
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  catch
+    # :gnat not registered (e.g. NATS supervisor not up) raises an exit.
+    :exit, _ -> nil
   end
 
   @doc """
@@ -99,7 +121,7 @@ defmodule SukhiFedi.Metrics do
 
   @fields ~w(sampled_at cpu_percent load1 load5 load15 mem_total mem_used
              mem_available swap_total swap_free beam_total beam_processes
-             beam_binary disk_total disk_used_percent)a
+             beam_binary disk_total disk_used_percent outbox_dlq_depth)a
 
   defp to_map(%MetricSample{} = s), do: Map.take(s, @fields)
 end

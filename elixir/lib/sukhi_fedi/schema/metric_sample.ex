@@ -28,5 +28,9 @@ defmodule SukhiFedi.Schema.MetricSample do
 
     field :disk_total, :integer
     field :disk_used_percent, :float
+
+    # OUTBOX_DLQ depth — undelivered (dead-lettered) outbound activities.
+    # NULL when NATS/the stream couldn't be queried.
+    field :outbox_dlq_depth, :integer
   end
 end

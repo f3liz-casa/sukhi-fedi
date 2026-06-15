@@ -124,6 +124,7 @@ defmodule SukhiFedi.Web.MetricsController do
       load: snap.load,
       disk: snap.disk,
       beam: snap.beam,
+      outbox_dlq_depth: Metrics.dlq_depth(),
       ts: System.system_time(:second)
     }
   end
