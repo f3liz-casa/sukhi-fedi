@@ -4,87 +4,126 @@
 #
 # No network: builds a synthetic series in memory, round-trips it through
 # JSON (so the parse path is exercised too), and checks the report says
-# what the data means.
+# what the data means — including the live checks (harmonic prediction,
+# Mahalanobis) that stage ③ in Elixir will run.
 
-using Test, Dates, Random
+using Test, Dates, Random, Statistics
 import JSON3
 
 include(joinpath(@__DIR__, "..", "metrics_report.jl"))
 
-# Replicates the live anomaly check Elixir will do, so the test pins the
-# contract: predicted from the trend, residual, prefer the hour's bounds.
+# ── the live checks, mirrored so the test pins the contract ────────────────────
+
 function flagged(block, t::DateTime, v::Float64)
-    tr = block["trend"]
-    days = (datetime2unix(t) - tr["t0_unix"]) / 86_400
-    resid = v - (tr["intercept"] + tr["slope_per_day"] * days)
-
-    rb = get(block, "seasonal_hour", Dict())
-    h = string(hour(t))
-    b = haskey(rb, h) ? rb[h] : block["residual"]
-
+    resid = v - predict_at(block["model"], datetime2unix(t))
+    b = block["residual"]
     lo, hi = b["lower"], b["upper"]
     (lo === nothing || hi === nothing) ? false : (resid < lo || resid > hi)
 end
 
-# A month of 10-minute samples: daily cpu rhythm, steady memory growth.
-function synth(; seed = 1)
+# x is the raw residual vector (vⱼ − predictedⱼ) in metric units; standardise
+# by the stored scales, then the Mahalanobis quadratic — exactly stage ③.
+function maha_distance(mv, x::Vector{Float64})
+    s = collect(Float64, mv["scales"])
+    μ = collect(Float64, mv["mean"])
+    P = reduce(vcat, [reshape(collect(Float64, row), 1, :) for row in mv["precision"]])
+    d = (x ./ s) .- μ
+    sqrt((d' * P * d))
+end
+
+# ── synthetic: 40 days @ 10-min. cpu daily+weekly, memory leak midway,
+#    residuals share a "busyness" factor so the metrics co-vary. ─────────────────
+
+function synth(; seed = 7)
     rng = MersenneTwister(seed)
-    t0 = DateTime(2026, 5, 16, 0, 0, 0)
+    t0 = DateTime(2026, 5, 1, 0, 0, 0)
     rows = Dict{Symbol,Any}[]
     mem_total = 768 * 1024 * 1024
-    for i in 0:(30*144)
+    for i in 0:(40*144)
         t = t0 + Minute(10 * i)
-        hod = hour(t) + minute(t) / 60
-        cpu = max(0.0, 25 + 18 * cos((hod - 21) / 24 * 2pi) + 3 * randn(rng))
         days = i / 144
-        mem_used = round(Int, (180 + 9 * days) * 1024 * 1024 + 4 * 1024 * 1024 * randn(rng))
+        hod = hour(t) + minute(t) / 60
+        dow = dayofweek(t)
+        g = randn(rng)                                   # shared busyness factor
+
+        cpu = max(0.0, 25 + 18 * cos((hod - 21) / 24 * 2pi) +
+                       6 * cos((dow - 2) / 7 * 2pi) + 4g + randn(rng))
+        load5 = cpu / 30 + 0.05 * (4g + randn(rng))
+        # memory: 5 MiB/day until day 20, then a 20 MiB/day "leak"
+        growth = days < 20 ? 5 * days : 5 * 20 + 20 * (days - 20)
+        mem_used = round(Int, (180 + growth) * 1024 * 1024 + 5 * 1024 * 1024 * (4g + randn(rng)))
+        beam = round(Int, 120 * 1024 * 1024 + 1.0e6 * (4g + randn(rng)))
+        disk = 40 + 0.8 * days
+
         push!(rows, Dict{Symbol,Any}(
             :sampled_at => string(t) * "Z",
             :cpu_percent => cpu,
-            :load1 => cpu / 25,
+            :load5 => load5,
             :mem_used => mem_used,
             :mem_total => mem_total,
-            :disk_used_percent => 40 + 0.8 * days,
+            :beam_processes => beam,
+            :disk_used_percent => disk,
         ))
     end
     JSON3.read(JSON3.write(Dict(:samples => rows))) |> rows_of
 end
 
-@testset "build_report" begin
+@testset "build_report v2" begin
     rows = synth()
     rep = build_report(rows; k = 6.0)
 
     @test rep["schema"] == SCHEMA
-    @test rep["window"]["samples"] == 30 * 144 + 1
+    @test rep["window"]["samples"] == 40 * 144 + 1
 
-    @testset "cpu: trend ~flat, seasonal rhythm captured" begin
-        cpu = rep["metrics"]["cpu_percent"]
-        @test abs(cpu["trend"]["slope_per_day"]) < 1.0          # no real drift
-        @test haskey(cpu, "seasonal_hour")
-        # busy hour sits well above the quiet hour
-        @test cpu["seasonal_hour"]["21"]["median"] > cpu["seasonal_hour"]["4"]["median"] + 10
+    @testset "harmonic model finds daily + weekly" begin
+        ps = [h["period_h"] for h in rep["metrics"]["cpu_percent"]["model"]["harmonics"]]
+        @test any(p -> abs(p - 24) < 2, ps)             # daily
+        @test any(p -> abs(p - 168) < 12, ps)           # weekly
+        @test rep["metrics"]["cpu_percent"]["residual"]["madn"] < 6
     end
 
-    @testset "memory: growing trend, finite days-until-full" begin
+    @testset "flat metric: trend only, no harmonics" begin
+        @test isempty(rep["metrics"]["disk_used_percent"]["model"]["harmonics"])
+    end
+
+    @testset "capacity forecast is regime-aware" begin
         f = rep["forecast"]["mem_used"]
-        @test f["slope_per_day"] > 0
-        @test f["days_until_full"] !== nothing
-        @test f["days_until_full"] > 0
-    end
-
-    @testset "disk forecast toward 100%" begin
-        f = rep["forecast"]["disk_used_percent"]
-        @test f["ceiling"] == 100.0
-        @test f["days_until_full"] > 0
+        @test f["n_changepoints"] >= 1                  # the leak is found
+        @test f["regime_since_unix"] > datetime2unix(parse_ts(rows[1].sampled_at))
+        # forecast reflects the *latest* (steeper) slope, ~20 MiB/day
+        @test f["slope_per_day"] > 12 * 1024 * 1024
+        @test f["days_until_full"] !== nothing && f["days_until_full"] > 0
+        @test f["days_until_full_lo"] <= f["days_until_full"]
+        @test f["days_until_full_hi"] === nothing || f["days_until_full_hi"] >= f["days_until_full"]
     end
 
     @testset "live check: spike flagged, normal reading isn't" begin
         cpu = rep["metrics"]["cpu_percent"]
-        # 21:00 is busy (~42%); a normal busy reading must not flag, a
-        # 98% spike must.
-        t = DateTime(2026, 6, 16, 21, 0, 0)
-        @test flagged(cpu, t, 98.0)
-        @test !flagged(cpu, t, 42.0)
+        t = DateTime(2026, 5, 30, 21, 0, 0)             # a busy hour
+        pred = predict_at(cpu["model"], datetime2unix(t))
+        @test flagged(cpu, t, pred + 60.0)              # a spike well above
+        @test !flagged(cpu, t, pred + 2.0)              # ordinary jitter
+    end
+
+    @testset "multivariate catches a correlation-breaking point" begin
+        mv = rep["multivariate"]
+        cols = Symbol.(mv["columns"])
+        @test length(cols) >= 3
+
+        t = DateTime(2026, 5, 20, 12, 0, 0)
+        # residual vector: cpu up, mem down — each modest on its own, but
+        # the two normally rise together, so jointly it's strange.
+        offs = Dict(:cpu_percent => +2.0 * rep["metrics"]["cpu_percent"]["residual"]["madn"],
+                    :mem_used => -2.0 * rep["metrics"]["mem_used"]["residual"]["madn"])
+        x = [get(offs, c, 0.0) for c in cols]           # residual = offset (others 0)
+
+        # neither metric is flagged univariately …
+        @test !flagged(rep["metrics"]["cpu_percent"], t,
+                       predict_at(rep["metrics"]["cpu_percent"]["model"], datetime2unix(t)) + offs[:cpu_percent])
+        @test !flagged(rep["metrics"]["mem_used"], t,
+                       predict_at(rep["metrics"]["mem_used"]["model"], datetime2unix(t)) + offs[:mem_used])
+        # … but the joint Mahalanobis distance clears the threshold.
+        @test maha_distance(mv, x) > mv["threshold"]
     end
 end
 
@@ -99,6 +138,7 @@ end
     b = rep["metrics"]["cpu_percent"]["residual"]
     @test b["madn"] == 0
     @test b["lower"] === nothing
+    @test !haskey(rep, "multivariate")                  # too few columns/rows
 
     # Empty input → empty metrics, no crash.
     empty = build_report(rows_of(JSON3.read("{\"samples\": []}")))

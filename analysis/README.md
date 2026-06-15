@@ -40,11 +40,15 @@ days-until-full, a spike flagged by the same check stage ③ will run).
 
 ## What it computes
 
-Per numeric metric: a linear **trend** (its slope drives the capacity
-forecast), the robust **residual** spread around it (median + MADN →
-bounds), and that spread sliced by **UTC hour** when there's enough data.
-Plus a capacity **forecast** for memory (toward `mem_total`) and disk
-(toward 100%): days until full. The *why* is in the contract doc.
+Per numeric metric: a **trend + harmonic** model — a line for drift plus a
+few sin/cos terms at periods an FFT-style periodogram finds (daily, weekly,
+…) — and the robust **residual** spread around it (median + MADN → bounds).
+Across metrics: a **multivariate** block (mean + precision matrix over the
+standardised residuals) that catches correlation-breaking combinations.
+Plus regime-aware capacity **forecasts** for memory (toward `mem_total`)
+and disk (toward 100%): days-until-full with a band, fit on the latest
+regime after any CUSUM change point. The *why* and the exact live-check
+formulas are in the contract doc.
 
 > Note: until enough history accrues on the box, forecasts and seasonal
 > slices will be thin or absent — that's expected. Let it run a couple of
