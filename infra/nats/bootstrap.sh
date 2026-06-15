@@ -66,8 +66,19 @@ ensure_consumer() {
 
 # Durable pull consumer for SukhiDelivery.Outbox.PullConsumer.
 # WorkQueue stream + explicit ACK = each event handled exactly once,
-# then removed from OUTBOX. Redelivery on NACK / ack timeout, capped
-# at --max-deliver so a poison message can't loop forever.
+# then removed from OUTBOX. Redelivery on NACK / ack timeout.
+#
+# --max-deliver is the *backstop*. The consumer itself governs retries
+# (PullConsumer @max_attempts = 12, exponential backoff) and dead-letters
+# to OUTBOX_DLQ before this cap is hit. Keep it strictly greater than
+# @max_attempts, or JetStream stops redelivering before the app can
+# capture the message. (Was 5 — too low: with Bun gone the gateway is the
+# only translator, and its restart could burn the budget in under a
+# second and silently drop the activity.)
+#
+# Existing deploys: ensure_consumer is a no-op once the consumer exists,
+# so bump a live one in place:
+#   nats consumer edit OUTBOX delivery-outbox --max-deliver=16
 ensure_consumer OUTBOX delivery-outbox \
   --defaults \
   --pull \
@@ -75,8 +86,28 @@ ensure_consumer OUTBOX delivery-outbox \
   --filter="sns.outbox.>" \
   --ack=explicit \
   --wait=30s \
-  --max-deliver=5 \
+  --max-deliver=16 \
   --replay=instant
+
+# OUTBOX_DLQ: dead-letter for outbound activities that exhausted the
+# delivery consumer's retry budget (translator down too long). Limits
+# retention with a 30-day TTL so a failed activity can be inspected and
+# replayed (republish sns.outbox_dlq.X → sns.outbox.X) rather than lost.
+ensure_stream OUTBOX_DLQ \
+  --subjects="sns.outbox_dlq.>" \
+  --storage=file \
+  --retention=limits \
+  --replicas=1 \
+  --discard=old \
+  --dupe-window=2m \
+  --max-msgs=-1 \
+  --max-bytes=-1 \
+  --max-age=720h \
+  --max-msgs-per-subject=-1 \
+  --max-msg-size=-1 \
+  --no-allow-rollup \
+  --no-deny-delete \
+  --no-deny-purge
 
 # DOMAIN_EVENTS: broadcast events (WebSocket streaming, notifications).
 # Limits retention with 7-day TTL so consumers can replay after reconnect.
