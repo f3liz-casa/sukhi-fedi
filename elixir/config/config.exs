@@ -35,6 +35,14 @@ config :sukhi_fedi, SukhiFedi.PromEx,
   grafana: :disabled,
   metrics_server: :disabled
 
+# Host-resource history sampler (SukhiFedi.Metrics.Sampler → metric_samples).
+# One row per interval; rows older than retention_days are pruned daily.
+# The read endpoint (/api/metrics) is gated by :metrics_token, set from
+# METRICS_TOKEN in runtime.exs.
+config :sukhi_fedi, :metrics,
+  sample_interval_ms: 60_000,
+  retention_days: 90
+
 # Rate limiter (per-peer ETS buckets).
 config :hammer,
   backend:

@@ -27,6 +27,11 @@ config :sukhi_fedi, SukhiFedi.Repo,
 
 config :sukhi_fedi, Oban, testing: :inline
 
+# Don't auto-sample host metrics in tests — the Sampler would write to the
+# Repo outside any test's sandbox checkout. `nil` makes it start as :ignore;
+# `SukhiFedi.Metrics.record/0` is still exercised directly in metrics_test.
+config :sukhi_fedi, :metrics, sample_interval_ms: nil
+
 config :sukhi_fedi, :nats,
   host: System.get_env("NATS_HOST", "127.0.0.1"),
   port: String.to_integer(System.get_env("NATS_PORT", "14222"))

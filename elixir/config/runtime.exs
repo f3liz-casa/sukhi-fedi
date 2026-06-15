@@ -10,6 +10,11 @@ else
   config :sukhi_fedi, :domain, System.get_env("DOMAIN", "localhost:4000")
 end
 
+# Bearer for the JSON metrics endpoint (/api/metrics). Unset → the route
+# 404s (feature off); set it to expose the host-resource history/snapshot
+# to offline analysis. Generate with `openssl rand -hex 32`.
+config :sukhi_fedi, :metrics_token, System.get_env("METRICS_TOKEN")
+
 # Addon selection.
 #   ENABLED_ADDONS: comma list of ids, or "all" (default).
 #   ADDON_PRESETS:  comma list of preset ids (see SukhiFedi.Addon.Presets).

@@ -27,7 +27,11 @@ defmodule SukhiFedi.Application do
       # Bun replica still running, so cutover is "stop the bun container".
       # After Cache.Ets (key cache) and Finch (remote fetch).
       {Gnat.ConsumerSupervisor, fedi_consumer_settings()},
-      {Oban, [name: SukhiFedi.Oban] ++ Application.fetch_env!(:sukhi_fedi, Oban)}
+      {Oban, [name: SukhiFedi.Oban] ++ Application.fetch_env!(:sukhi_fedi, Oban)},
+      # Records one host-resource row per interval into metric_samples so
+      # the series accrues for offline analysis. :ignore (no-op) unless
+      # :metrics sample_interval_ms is set — the test env leaves it off.
+      SukhiFedi.Metrics.Sampler
     ]
 
     children = core_children ++ SukhiFedi.Addon.Registry.children()

@@ -11,6 +11,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.NoteController
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
+  alias SukhiFedi.Web.MetricsController
   alias SukhiFedi.Web.StreamingController
   alias SukhiFedi.Web.StreamingSseController
   alias SukhiFedi.Web.Auth.EmailLoginController
@@ -403,6 +404,13 @@ defmodule SukhiFedi.Web.Router do
 
   get "/metrics" do
     PromEx.Plug.call(conn, PromEx.Plug.init(prom_ex_module: SukhiFedi.PromEx))
+  end
+
+  # Token-guarded JSON metrics for offline analysis (history time series
+  # + live snapshot). Separate from the open Prometheus `/metrics` above:
+  # bearer auth via `:metrics_token`, 404 when unconfigured.
+  get "/api/metrics" do
+    MetricsController.show(conn, [])
   end
 
   # ── Mastodon/Misskey REST API — dispatched to plugin nodes ───────────────
