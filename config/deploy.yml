@@ -222,6 +222,10 @@ accessories:
         - S3_SECRET_ACCESS_KEY
         - SMTP_USERNAME
         - SMTP_PASSWORD
+        # Bearer for GET /api/metrics (host-resource history for offline
+        # analysis). Unset → the route 404s. The Metrics.Sampler accrues
+        # rows regardless; this only gates the read side.
+        - METRICS_TOKEN
     options:
       # `elixir` hostname is still required: gateway's BEAM is
       # `gateway@elixir`. Other containers reach it via the
