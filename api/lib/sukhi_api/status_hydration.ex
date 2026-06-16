@@ -2,17 +2,20 @@
 defmodule SukhiApi.StatusHydration do
   @moduledoc """
   Render notes into Mastodon Status JSON with the per-note context that
-  has to be batch-fetched from the gateway — chiefly the Sukhi reaction
-  chips (`reactions_for_notes`).
+  has to be batch-fetched from the gateway: the Sukhi reaction chips
+  (`reactions_for_notes`), the interaction counts (`counts_for_notes`)
+  and the viewer's own favourite / boost / bookmark flags
+  (`viewer_flags_many`).
 
   Every status-returning endpoint should render through here. The view
-  itself only shows reactions when they're handed in via the render
+  itself only shows this context when it's handed in via the render
   context, so any path that calls `MastodonStatus.render/1` bare drops
-  them silently — which is how the note page and profile lost their
-  reaction chips while the timeline kept them. Funnelling the hydration
-  here keeps the timeline, the profile, the note page and its thread in
-  step instead of each capability re-deriving (and drifting on) the
-  context.
+  it silently — which is how the note page and profile once lost their
+  reaction chips, and how the timeline showed every post as
+  un-favourited and un-bookmarked even right after you'd favourited it.
+  Funnelling the hydration here keeps the timeline, the profile, the
+  note page and its thread in step instead of each capability
+  re-deriving (and drifting on) the context.
   """
 
   alias SukhiApi.GatewayRpc
@@ -28,10 +31,23 @@ defmodule SukhiApi.StatusHydration do
   def many([], _viewer), do: []
 
   def many(notes, viewer) when is_list(notes) do
-    # Key off `context_key` so a boost wrapper's reactions are fetched for the
-    # boosted note (its real id), not the synthesized wrapper id.
+    # Key off `context_key` so a boost wrapper's context (counts, the viewer's
+    # flags, reactions) is fetched for the boosted note (its real id), not the
+    # synthesized wrapper id.
     note_ids = Enum.map(notes, &MastodonStatus.context_key/1)
     viewer_id = viewer && viewer.id
+
+    counts =
+      case GatewayRpc.call(SukhiFedi.Notes, :counts_for_notes, [note_ids]) do
+        {:ok, m} when is_map(m) -> m
+        _ -> %{}
+      end
+
+    viewer_flags =
+      case GatewayRpc.call(SukhiFedi.Notes, :viewer_flags_many, [viewer_id, note_ids]) do
+        {:ok, m} when is_map(m) -> m
+        _ -> %{}
+      end
 
     reactions =
       case GatewayRpc.call(SukhiFedi.Notes, :reactions_for_notes, [note_ids, viewer_id]) do
@@ -39,6 +55,6 @@ defmodule SukhiApi.StatusHydration do
         _ -> %{}
       end
 
-    MastodonStatus.render_list(notes, %{}, %{}, reactions)
+    MastodonStatus.render_list(notes, counts, viewer_flags, reactions)
   end
 end

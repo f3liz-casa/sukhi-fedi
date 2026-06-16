@@ -4,13 +4,26 @@ defmodule SukhiApi.StatusHydrationTest do
 
   alias SukhiApi.StatusHydration
 
-  # Returns reaction chips for any note, so we can assert they land in the
+  # A stand-in gateway: returns reaction chips, interaction counts and the
+  # viewer's own flags for any note, so we can assert they all land in the
   # rendered status. Anything else is "no gateway".
   defmodule FakeRpc do
     def call(mod, fun, args), do: call(mod, fun, args, 5_000)
 
     def call(SukhiFedi.Notes, :reactions_for_notes, [note_ids, _viewer_id], _t) do
       {:ok, Map.new(note_ids, fn id -> {id, [%{name: "🦊", count: 2, me: false}]} end)}
+    end
+
+    def call(SukhiFedi.Notes, :counts_for_notes, [note_ids], _t) do
+      {:ok, Map.new(note_ids, fn id -> {id, %{replies: 0, reblogs: 0, favourites: 3}} end)}
+    end
+
+    def call(SukhiFedi.Notes, :viewer_flags_many, [viewer_id, note_ids], _t)
+        when is_integer(viewer_id) do
+      {:ok,
+       Map.new(note_ids, fn id ->
+         {id, %{favourited: true, reblogged: false, bookmarked: true, pinned: false}}
+       end)}
     end
 
     def call(_, _, _, _), do: {:error, :not_connected}
@@ -50,6 +63,18 @@ defmodule SukhiApi.StatusHydrationTest do
   test "many/2 attaches reaction chips from the gateway" do
     assert [rendered] = StatusHydration.many([note(7)], %{id: 1})
     assert [%{name: "🦊", count: 2}] = rendered.reactions
+  end
+
+  test "many/2 carries the viewer's favourite and bookmark flags onto each status" do
+    # Regression: the timeline (and profile, lists, note page) used to render
+    # every post as un-favourited and un-bookmarked because hydration dropped
+    # the viewer flags — you could only tell a post was favourited from the
+    # dedicated favourites/bookmarks page.
+    assert [rendered] = StatusHydration.many([note(7)], %{id: 1})
+    assert rendered.favourited
+    assert rendered.bookmarked
+    refute rendered.reblogged
+    assert rendered.favourites_count == 3
   end
 
   test "one/2 attaches reactions to a single note" do
