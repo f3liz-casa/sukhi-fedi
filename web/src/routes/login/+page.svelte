@@ -163,10 +163,10 @@
         required
       />
     </label>
-    <button type="submit" disabled={submitting}>{$t('login.submit')}</button>
+    <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.submit')}</button>
   </form>
 {:else}
-  <div class="method-switch" role="tablist" aria-label={$t('login.methodLabel')}>
+  <div class="method-switch measure" role="tablist" aria-label={$t('login.methodLabel')}>
     <button
       type="button"
       class="chip"
@@ -215,7 +215,7 @@
         <input type="password" bind:value={password} autocomplete="current-password" required />
       </label>
 
-      <button type="submit" disabled={submitting}>{$t('login.submit')}</button>
+      <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.submit')}</button>
     </form>
   {:else}
     <form
@@ -238,7 +238,7 @@
         <span class="help">{$t('login.emailHelp')}</span>
       </label>
 
-      <button type="submit" disabled={submitting}>{$t('login.sendCode')}</button>
+      <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.sendCode')}</button>
     </form>
   {/if}
 

@@ -340,12 +340,12 @@
               required
             />
           </label>
-          <button type="submit" disabled={emailBusy}>{$t('security.confirm')}</button>
+          <button type="submit" class="btn px-6 py-2" disabled={emailBusy}>{$t('security.confirm')}</button>
           <button type="button" class="chip" disabled={emailBusy} onclick={() => void sendEmail()}
             >{$t('login.sendAgain')}</button
           >
         {:else}
-          <button type="submit" disabled={emailBusy}>{$t('login.sendCode')}</button>
+          <button type="submit" class="btn px-6 py-2" disabled={emailBusy}>{$t('login.sendCode')}</button>
         {/if}
 
         {#if emailError}
@@ -373,7 +373,7 @@
           bind:password={totpPassword}
           bind:reauthCode={totpReauthCode}
         />
-        <button type="submit" disabled={totpBusy}>{$t('security.totpDisable')}</button>
+        <button type="submit" class="btn px-6 py-2" disabled={totpBusy}>{$t('security.totpDisable')}</button>
       </form>
     {:else if totp}
       <p class="prose-small">{$t('security.totpScan')}</p>
@@ -401,7 +401,7 @@
             required
           />
         </label>
-        <button type="submit" disabled={totpBusy}>{$t('security.totpEnable')}</button>
+        <button type="submit" class="btn px-6 py-2" disabled={totpBusy}>{$t('security.totpEnable')}</button>
       </form>
     {:else}
       <p class="muted">{$t('security.totpOff')}</p>
@@ -444,7 +444,7 @@
                   bind:password={deletePassword}
                   bind:reauthCode={deleteReauthCode}
                 />
-                <button type="submit" disabled={passkeyBusy}>{$t('security.passkeyDelete')}</button>
+                <button type="submit" class="btn px-6 py-2" disabled={passkeyBusy}>{$t('security.passkeyDelete')}</button>
                 <button
                   type="button"
                   class="chip"
@@ -482,7 +482,7 @@
           <span>{$t('security.passkeyNickname')}</span>
           <input type="text" bind:value={passkeyNickname} maxlength="50" />
         </label>
-        <button type="submit" disabled={passkeyBusy}>{$t('security.passkeyAdd')}</button>
+        <button type="submit" class="btn px-6 py-2" disabled={passkeyBusy}>{$t('security.passkeyAdd')}</button>
       </form>
     {:else}
       <p class="prose-small">{$t('security.passkeyUnsupported')}</p>
@@ -526,7 +526,7 @@
             />
           </label>
           <div style="display: flex; gap: var(--space-2);">
-            <button type="submit" disabled={pwBusy}>{$t('security.passwordRemove')}</button>
+            <button type="submit" class="btn px-6 py-2" disabled={pwBusy}>{$t('security.passwordRemove')}</button>
             <button
               type="button"
               class="chip"

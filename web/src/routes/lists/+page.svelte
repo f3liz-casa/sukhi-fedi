@@ -101,7 +101,7 @@
         maxlength="60"
         style="flex: 1;"
       />
-      <button type="submit" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
+      <button type="submit" class="btn px-6 py-2" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
     </div>
     <label style="display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2);">
       <input type="checkbox" bind:checked={exclusive} />

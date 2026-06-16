@@ -264,7 +264,7 @@
 
   {#if hasArticles}
     <!-- 記事を持つ人だけ、投稿と記事を分けて見られるように。 -->
-    <nav class="profile-tabs" aria-label={$t('profile.tabsLabel')}>
+    <nav class="profile-tabs measure" aria-label={$t('profile.tabsLabel')}>
       <button class="tab" class:active={tab === 'posts'} onclick={() => (tab = 'posts')}>
         {$t('profile.tabPosts')}
       </button>
@@ -370,7 +370,7 @@
     background: var(--fill-hover);
   }
   .mod-menu-pop button.danger {
-    color: #dc2626;
+    color: var(--color-danger);
   }
   .pinned-label {
     font-size: var(--text-sm);

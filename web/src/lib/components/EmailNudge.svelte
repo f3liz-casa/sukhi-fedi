@@ -137,7 +137,7 @@
     {#if done}
       <p>{$t('nudge.thanks')}</p>
       <div class="actions">
-        <button type="button" onclick={() => (show = false)}>{$t('nudge.close')}</button>
+        <button type="button" class="btn px-3 py-1" onclick={() => (show = false)}>{$t('nudge.close')}</button>
       </div>
     {:else}
       <p class="lead">
@@ -147,8 +147,8 @@
       {#if auth && !auth.manageable}
         <p class="small">{$t('security.needRelogin')}</p>
         <div class="actions">
-          <a class="go" href="/login">{$t('security.reloginLink')}</a>
-          <button type="button" class="secondary" onclick={later}>{$t('nudge.later')}</button>
+          <a class="btn px-3 py-1" href="/login">{$t('security.reloginLink')}</a>
+          <button type="button" class="btn secondary px-3 py-1" onclick={later}>{$t('nudge.later')}</button>
         </div>
       {:else}
         <form
@@ -170,8 +170,8 @@
               required
             />
             <div class="actions">
-              <button type="submit" disabled={busy}>{$t('security.confirm')}</button>
-              <button type="button" class="secondary" disabled={busy} onclick={() => void send()}
+              <button type="submit" class="btn px-3 py-1" disabled={busy}>{$t('security.confirm')}</button>
+              <button type="button" class="btn secondary px-3 py-1" disabled={busy} onclick={() => void send()}
                 >{$t('login.sendAgain')}</button
               >
             </div>
@@ -184,8 +184,8 @@
               required
             />
             <div class="actions">
-              <button type="submit" disabled={busy}>{$t('login.sendCode')}</button>
-              <button type="button" class="secondary" onclick={later}>{$t('nudge.later')}</button>
+              <button type="submit" class="btn px-3 py-1" disabled={busy}>{$t('login.sendCode')}</button>
+              <button type="button" class="btn secondary px-3 py-1" onclick={later}>{$t('nudge.later')}</button>
             </div>
           {/if}
         </form>
@@ -229,7 +229,7 @@
   }
 
   .error-line {
-    color: var(--color-danger, #b3261e);
+    color: var(--color-danger);
   }
 
   .nudge-form {
@@ -250,28 +250,5 @@
     display: flex;
     gap: var(--space-2);
     flex-wrap: wrap;
-  }
-
-  button,
-  .go {
-    font: inherit;
-    padding: var(--space-1) var(--space-3);
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-  }
-
-  button:hover,
-  .go:hover {
-    border-color: var(--color-text);
-  }
-
-  button.secondary {
-    color: var(--color-text-muted);
-    border-color: var(--color-border);
   }
 </style>

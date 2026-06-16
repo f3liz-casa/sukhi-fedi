@@ -234,7 +234,7 @@
         placeholder={$t('listDetail.addPlaceholder')}
         style="flex: 1;"
       />
-      <button type="submit" disabled={addPending || !addAcct.trim()}>{$t('listDetail.add')}</button>
+      <button type="submit" class="btn px-6 py-2" disabled={addPending || !addAcct.trim()}>{$t('listDetail.add')}</button>
     </form>
 
     {#if addError}

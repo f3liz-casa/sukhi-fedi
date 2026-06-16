@@ -209,3 +209,37 @@ and don't copy their shape:
 - `inbox_controller.ex` intake mixes URL reconstruction, verify,
   archive and dispatch — acceptable for an intake handler because
   each step is a guarded, ordered gate, but it should not grow.
+
+## 10. Web client: the same rule, in CSS
+
+The SPA (`web/`) obeys §0 in its own medium — every visual property in
+one place, structure routing all elements through it. The analogue of a
+copied predicate (§3) is a literal hex/px/rem in a component: it drifts,
+and the drift is invisible until two screens disagree.
+
+- **Tokens are the one place for value.** Colour, space, type and shape
+  live in `web/src/styles/tokens.css` and nowhere else. Functional
+  colour included: the single danger red is `--color-danger`
+  (`tokens.css`), defined once — destructive actions and the `.error`
+  box both derive from it, none re-type `#dc2626`.
+- **A component class carries identity, not spacing.** `.btn`
+  (`app.css`) is shape only — surface, border, radius, hover; padding is
+  composed in the markup from spacing utilities (`.px-6 .py-2`,
+  `base.css`), never baked in. Spacing spelled out in the markup makes
+  "is this the same as that?" a glance instead of an audit, and the
+  number is the token: `.px-3` is `var(--space-3)`. (`button` is styled
+  by the `.btn` *class*, not a bare element rule, so `.tabs`/`.nav`
+  buttons keep their own treatment — same reason predicates are named.)
+- **Shared layout in one class, composed.** A centred reading-width
+  column is `.measure` (`base.css`); a top-level element reaches for it
+  rather than re-deriving `max-width + margin-inline: auto`. The copy
+  that drifts is exactly how the login method-switch ended up left of
+  its form on wide screens (fixed 2026-06-16, the CSS sibling of the
+  2026-06-09 visibility leak).
+- **Debt:** `.form` / `.timeline` / `.composer` / `.profile-head` /
+  `.settings-form` / `.error` still inline the `max-width +
+  margin-inline: auto` pair instead of composing `.measure`; migrate
+  them when touched, don't add a sixth copy. Margin utilities
+  (`.mt-N` …) aren't created yet — add to `base.css` in the same shape
+  the first time one is needed, rather than reaching for an inline
+  `margin`.

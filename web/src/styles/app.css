@@ -109,6 +109,14 @@ main.wrap {
    では「流れ」を下の帯(.nav-bottom)に移し、ここには「棚」だけが
    アイコンで残る。 */
 .app-nav {
+  /* 屋根を画面上端に貼り付ける。スクロールしても流れの行き先が消えない
+     ので、デスクトップで「上まで戻らないと移動できない」がなくなる。
+     本文がこの下を流れるので不透明な地色を敷き、境界の罫線で「貼り付い
+     ている」ことが分かるようにする。 */
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -149,7 +157,7 @@ main.wrap {
   color: var(--color-text-muted);
   background: none;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 999px;
   font: inherit;
   font-size: var(--text-sm);
   text-decoration: none;
@@ -166,11 +174,12 @@ main.wrap {
 .nav-link[aria-current='page'] {
   color: var(--color-text);
   font-weight: 600;
+  background: var(--fill-active);
 }
 
 .nav-ico {
-  width: 1.3em;
-  height: 1.3em;
+  width: 1.6em;
+  height: 1.6em;
   flex: none;
   display: block;
 }
@@ -187,16 +196,10 @@ main.wrap {
   white-space: nowrap;
 }
 
-/* 「書く」だけは行為なので、そっと面を持たせて他と見分ける ──
-   大きな彩りではなく、薄い塗りで「押せる一点」だと分かる程度に。 */
+/* 「書く」は行為だけれど、面は持たせない ── ことばの濃さ(muted で
+   なく地の色)だけで「押せる一点」だと分かる程度に、そっと。 */
 .nav-compose {
   color: var(--color-text);
-  background: var(--fill-soft);
-  border-radius: 999px;
-  padding-inline: var(--space-3);
-}
-.nav-compose:hover {
-  background: var(--fill-hover);
 }
 
 /* direct の未見数。バッジにしない ── 赤も丸もなく、ただの数字。 */
@@ -239,6 +242,11 @@ main.wrap {
     background: var(--color-surface);
     border-top: 1px solid var(--color-border);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* 遷移のたびにページ高さや URL バーが動くと、fixed のこの帯は
+       再ラスタライズされて中の線画 SVG が一瞬飛ぶことがある。独立した
+       合成レイヤーに固定して、描き直しの巻き添えにしない。 */
+    transform: translateZ(0);
+    backface-visibility: hidden;
   }
   .nav-bottom .nav-link {
     flex: 1;
@@ -248,10 +256,14 @@ main.wrap {
     border-radius: 0;
     font-size: 0.7rem;
     text-align: center;
+    /* flex:1 でも、ラベルが nowrap だと中身の最小幅が効いて 5 つ並びが
+       画面を超えることがある。0 まで縮めて宛がうことを許して、横の
+       はみ出しを止める。 */
+    min-width: 0;
   }
   .nav-bottom .nav-ico {
-    width: 1.55rem;
-    height: 1.55rem;
+    width: 1.5rem;
+    height: 1.5rem;
   }
   /* 下の帯では「書く」も他と同じ佇まいで、列を乱さない。 */
   .nav-bottom .nav-compose {
@@ -365,6 +377,34 @@ main.wrap {
   color: var(--color-surface);
   background: var(--color-lane);
   border-color: var(--color-lane);
+}
+
+/* button — どの画面でも「押せる一点」はこの素を着る。面・罫線・角丸・
+   hover の佇まいだけを持ち、余白は焼き込まない ── .px-6 .py-2 のような
+   spacing utility を組み合わせて与える(送信ボタンは大きめ、バナーの
+   ボタンは小さめ、と余白だけがマークアップで見える)。
+   bare な `button` 規則にしないのは、.tabs button や .nav-link を巻き
+   込まないため。クラスで opt-in する ── .chip と同じ作法。
+   <a class="btn"> も同じ佇まいになるよう、下線を消して inline-block に。 */
+.btn {
+  font: inherit;
+  display: inline-block;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+/* 副ボタン ── muted な字と淡い罫線で、「控えめな方」だとそっと分かる。 */
+.btn.secondary {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
 }
 
 /* 本文・名前に差し込む絵文字。サーバの emojis[] 由来のカスタム絵文字
@@ -495,6 +535,7 @@ img.twemoji {
 .status .display-name {
   color: var(--color-text);
   font-weight: 700;
+  font-size: var(--text-base);
 }
 
 .status .body {
@@ -546,21 +587,13 @@ img.twemoji {
   color: var(--color-text-muted);
 }
 
+/* form 内の入力欄は横いっぱいに。見た目(地・罫線・余白・focus)は
+   下のグローバルな input / :focus 規則が一手に持つので、ここは form
+   ならではの幅だけを足す。 */
 .form input[type='text'],
 .form input[type='password'],
 .form input[type='email'] {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
-  font: inherit;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-}
-
-.form input:focus {
-  outline: none;
-  border-color: var(--color-text);
 }
 
 /* signup のハンドル欄。@ を前に置いて、これは公開の宛先(@名前)だと
@@ -591,20 +624,6 @@ img.twemoji {
   padding: var(--space-2) var(--space-3) var(--space-2) var(--space-1);
 }
 
-.form button[type='submit'] {
-  font: inherit;
-  padding: var(--space-2) var(--space-6);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.form button[type='submit']:hover {
-  border-color: var(--color-text);
-}
-
 .stack-tight > * + * {
   margin-top: var(--space-1);
 }
@@ -630,12 +649,19 @@ img.twemoji {
   color: var(--color-text-muted);
 }
 
+/* エラーの一文。地は danger をうんと薄めた暖かい面、罫線は少し濃く。
+   どちらも --color-danger から色を引くので、危険の赤は一箇所で決まる。
+   幅は本文と同じ measure・中央寄せ ── フォームの上に単独で出たとき、箱が
+   フォームより外にはみ出して左へずれないように(.form 等と同じ扱い)。
+   コンテナの中(.form / .composer 内)では measure 以下なので無影響。 */
 .error {
+  max-width: var(--measure);
+  margin-inline: auto;
   color: var(--color-text);
-  background: #f6e7df;
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid #d8b9a8;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, var(--color-surface));
   font-size: var(--text-sm);
 }
 
@@ -725,29 +751,6 @@ textarea:focus,
 select:focus,
 input:focus {
   outline: none;
-  border-color: var(--color-text);
-}
-
-/* Composer / settings-form / timeline 内 form の送信ボタンは、
-   既存の `.form button[type='submit']` をそのまま使いたいので、
-   個別に同じ見た目を当てる。global `button` 規則は .tabs button
-   などを巻き込むので避ける。 */
-.composer button[type='submit'],
-.settings-form button[type='submit'],
-.timeline.form button[type='submit'] {
-  font: inherit;
-  padding: var(--space-2) var(--space-6);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.composer button[type='submit']:hover:not(:disabled),
-.settings-form button[type='submit']:hover:not(:disabled),
-.timeline.form button[type='submit']:hover:not(:disabled),
-.form button[type='submit']:hover:not(:disabled) {
   border-color: var(--color-text);
 }
 

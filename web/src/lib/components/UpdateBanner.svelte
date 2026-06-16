@@ -41,8 +41,8 @@
   <aside class="update-banner" role="status" aria-live="polite">
     <p>{$t('update.available')}</p>
     <div class="actions">
-      <button type="button" onclick={reload}>{$t('update.reload')}</button>
-      <button type="button" class="secondary" onclick={dismiss}>{$t('update.later')}</button>
+      <button type="button" class="btn px-3 py-1" onclick={reload}>{$t('update.reload')}</button>
+      <button type="button" class="btn secondary px-3 py-1" onclick={dismiss}>{$t('update.later')}</button>
     </div>
   </aside>
 {/if}
@@ -75,24 +75,5 @@
     display: flex;
     gap: var(--space-2);
     flex-shrink: 0;
-  }
-
-  button {
-    font: inherit;
-    padding: var(--space-1) var(--space-3);
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-
-  button:hover {
-    border-color: var(--color-text);
-  }
-
-  button.secondary {
-    color: var(--color-text-muted);
-    border-color: var(--color-border);
   }
 </style>

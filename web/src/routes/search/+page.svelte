@@ -117,7 +117,7 @@
       spellcheck="false"
     />
   </label>
-  <button type="submit" disabled={loading || !pending.trim()}>
+  <button type="submit" class="btn px-6 py-2" disabled={loading || !pending.trim()}>
     {loading ? (resolving ? $t('search.searchingRemote') : $t('search.searching')) : $t('search.submit')}
   </button>
 </form>

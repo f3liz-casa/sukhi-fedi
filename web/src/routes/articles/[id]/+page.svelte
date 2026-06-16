@@ -83,14 +83,16 @@
 {:else if loading}
   <p class="loading">{$t('common.loading')}</p>
 {:else if status}
-  <article class="reader-page">
+  <article class="reader-page measure">
     <StatusCard status={status} full canReply onreply={onReply} ondelete={onDelete} />
   </article>
 
   {#if composerOpen}
     <Composer {replyTo} prefillMention onposted={onPosted} oncancel={onCancel} />
   {:else}
-    <button class="chip reply-open" onclick={openReply}>{$t('thread.reply')}</button>
+    <div class="measure">
+      <button class="chip reply-open" onclick={openReply}>{$t('thread.reply')}</button>
+    </div>
   {/if}
 
   {#if descendants.length > 0}

@@ -127,7 +127,7 @@
         required
       />
     </label>
-    <button type="submit" disabled={submitting}>
+    <button type="submit" class="btn px-6 py-2" disabled={submitting}>
       {hasPassword ? $t('password.submit') : $t('password.setSubmit')}
     </button>
   </form>

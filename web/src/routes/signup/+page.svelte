@@ -125,7 +125,7 @@
     >
   </label>
 
-  <button type="submit" disabled={!agreed}>{$t('signup.create')}</button>
+  <button type="submit" class="btn px-6 py-2" disabled={!agreed}>{$t('signup.create')}</button>
 </form>
 
 <p class="prose-small">

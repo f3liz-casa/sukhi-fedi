@@ -251,7 +251,7 @@
     </label>
 
     <div style="display: flex; gap: var(--space-3); align-items: center;">
-      <button type="submit" disabled={saving}>
+      <button type="submit" class="btn px-6 py-2" disabled={saving}>
         {saving ? $t('settings.saving') : $t('settings.save')}
       </button>
       {#if saved}

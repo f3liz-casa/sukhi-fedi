@@ -100,8 +100,42 @@ h3 {
   margin-top: var(--space-4);
 }
 
+/* Spacing utilities.
+ * Padding lives in its own class, composed onto an element, rather than baked
+ * into a component class. So a button is two visible choices — its shape
+ * (.btn) and its padding (.px-6 .py-2) — and the same step reads the same
+ * wherever it appears, which is easy to keep consistent and easy to read off
+ * the markup. The number maps straight to the space token: .px-3 is
+ * var(--space-3). Inline = left/right, block = top/bottom (logical, so the
+ * page mirrors cleanly in RTL). Add steps here as they are first needed —
+ * margin utilities (.mt-N …) would follow the same shape. */
+.px-3 {
+  padding-inline: var(--space-3);
+}
+.px-6 {
+  padding-inline: var(--space-6);
+}
+.py-1 {
+  padding-block: var(--space-1);
+}
+.py-2 {
+  padding-block: var(--space-2);
+}
+
 .prose {
   max-width: var(--measure);
+}
+
+/* A single reading-width column, centred in the page. Top-level blocks that
+ * should line up with the forms and timelines — a tab row, a method switch,
+ * a stray note — compose this instead of each re-deriving the same pair.
+ * (The form, composer, timeline and profile head still inline
+ * max-width + margin-inline: auto themselves; this is the shared home they
+ * can move to, and the one a new top-level element should reach for so it
+ * doesn't drift to the page edge.) */
+.measure {
+  max-width: var(--measure);
+  margin-inline: auto;
 }
 
 .visually-hidden {

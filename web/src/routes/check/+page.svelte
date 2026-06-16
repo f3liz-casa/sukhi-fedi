@@ -419,7 +419,7 @@
         required
       />
     </label>
-    <button type="submit" disabled={busy}>{$t('security.confirm')}</button>
+    <button type="submit" class="btn px-6 py-2" disabled={busy}>{$t('security.confirm')}</button>
     <button type="button" class="chip" disabled={busy} onclick={() => void resend()}
       >{$t('login.sendAgain')}</button
     >
@@ -460,7 +460,7 @@
         required
       />
     </label>
-    <button type="submit" disabled={busy}>{$t('login.submit')}</button>
+    <button type="submit" class="btn px-6 py-2" disabled={busy}>{$t('login.submit')}</button>
   </form>
 {:else if phase === 'error'}
   <section class="hero">

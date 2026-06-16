@@ -366,7 +366,7 @@
     background: var(--fill-hover);
   }
   .menu-item.danger:hover:not(:disabled) {
-    background: rgba(220, 38, 38, 0.14);
+    background: var(--fill-danger);
   }
   .menu-item:disabled {
     opacity: 0.6;

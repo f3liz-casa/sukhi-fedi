@@ -198,7 +198,7 @@
       </select>
     </label>
 
-    <button type="submit" disabled={!canPost}>
+    <button type="submit" class="btn px-6 py-2" disabled={!canPost}>
       {posting ? $t('common.sending') : uploading ? $t('compose.uploading') : $t('compose.submit')}
     </button>
   </div>
