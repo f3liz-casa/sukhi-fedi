@@ -74,7 +74,7 @@ defmodule SukhiFedi.Web.NodeinfoController do
           activeMonth: 0,
           activeHalfyear: 0
         },
-        localPosts: count_safe(from n in Note, where: is_nil(n.ap_id))
+        localPosts: count_safe(from n in Note, where: is_nil(n.domain))
       },
       # 招待制サーバ。完全 open になる日が来たら
       # `SukhiFedi.Config` か runtime env でひっくり返せるようにする。

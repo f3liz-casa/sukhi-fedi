@@ -261,7 +261,15 @@ defmodule SukhiFedi.Integration.PollsTest do
   defp remote_note!(ap_id) do
     author = create_account!("remote_q_#{System.unique_integer([:positive])}")
 
-    %Note{account_id: author.id, content: "q", visibility: "public", ap_id: ap_id}
+    # domain is what marks a note remote now (raw struct skips the
+    # changeset's ap_id-host derivation, so set it).
+    %Note{
+      account_id: author.id,
+      content: "q",
+      visibility: "public",
+      ap_id: ap_id,
+      domain: URI.parse(ap_id).host
+    }
     |> Repo.insert!()
   end
 end

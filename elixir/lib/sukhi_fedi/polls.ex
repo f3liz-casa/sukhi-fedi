@@ -80,8 +80,8 @@ defmodule SukhiFedi.Polls do
     }
   end
 
-  # The owning note carries an `ap_id` only when it came from another server.
-  defp remote_poll?(%Poll{note: %{ap_id: ap_id}}), do: not is_nil(ap_id)
+  # The owning note carries a `domain` only when it came from another server.
+  defp remote_poll?(%Poll{note: %{domain: domain}}), do: not is_nil(domain)
   defp remote_poll?(_), do: false
 
   defp local_voters_count(pid) do

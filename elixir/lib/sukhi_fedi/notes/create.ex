@@ -25,6 +25,7 @@ defmodule SukhiFedi.Notes.Create do
   def create_note(attrs) do
     Multi.new()
     |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
+    |> stamp_local_ap_id()
     |> Outbox.enqueue_multi(
       :outbox_event,
       "sns.outbox.note.created",
@@ -95,6 +96,7 @@ defmodule SukhiFedi.Notes.Create do
 
       Multi.new()
       |> Multi.insert(:note, Note.changeset(%Note{}, attrs))
+      |> stamp_local_ap_id()
       |> attach_media(media_ids, account_id)
       |> Multi.run(:tags, fn _repo, %{note: n} ->
         {:ok, SukhiFedi.Tags.upsert_for_note(n.id, n.content)}
@@ -171,7 +173,7 @@ defmodule SukhiFedi.Notes.Create do
 
         {:ok, note} =
           note
-          |> Ecto.Changeset.change(conversation_ap_id: cid)
+          |> Ecto.Changeset.change(conversation_ap_id: cid, ap_id: Ids.note_ap_id(note.id))
           |> repo.update()
 
         # Record every participant so the conversation's `accounts` is
@@ -593,7 +595,23 @@ defmodule SukhiFedi.Notes.Create do
     end
   end
 
+  # Stamp a freshly-inserted local note with its canonical ap_id. A local
+  # note is created without one (the id isn't known until insert), so we
+  # derive and persist it right after — every later reader (delete, refs,
+  # the boomerang guard) then just reads the column. change/3, not
+  # changeset/2, so domain derivation isn't re-run (the note stays local).
+  defp stamp_local_ap_id(multi) do
+    Multi.update(multi, :stamp_ap_id, fn %{note: note} ->
+      Ecto.Changeset.change(note, ap_id: Ids.note_ap_id(note.id))
+    end)
+  end
+
   defp do_delete(%Note{} = note) do
+    # ap_id is persisted now, but fall back to deriving it so a row created
+    # before the backfill still federates its Delete (nil here is exactly
+    # the bug that left deletes stuck — see Ids.note_ap_id).
+    ap_id = note.ap_id || Ids.note_ap_id(note.id)
+
     Multi.new()
     |> Multi.delete(:note, note)
     |> Outbox.enqueue_multi(
@@ -602,7 +620,7 @@ defmodule SukhiFedi.Notes.Create do
       "note",
       fn _ -> note.id end,
       fn _ ->
-        %{note_id: note.id, ap_id: note.ap_id, account_id: note.account_id}
+        %{note_id: note.id, ap_id: ap_id, account_id: note.account_id}
       end
     )
     |> Repo.transaction()

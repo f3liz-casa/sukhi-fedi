@@ -339,7 +339,7 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert reply.id in Enum.map(descendants, & &1.id)
     end
 
-    test "threads through a purely local chain (every note ap_id NULL)" do
+    test "threads through a purely local chain (every note local: domain NULL)" do
       alice = create_account!("alice_all_local")
 
       {:ok, root} = Notes.create_status(alice, %{"status" => "root"})
@@ -350,9 +350,9 @@ defmodule SukhiFedi.Integration.NotesTest do
       {:ok, leaf} =
         Notes.create_status(alice, %{"status" => "leaf", "in_reply_to_id" => to_string(mid.id)})
 
-      # No `update_ap_id` anywhere: all three keep a NULL ap_id, the real
-      # local shape. Threading must work off the synthesized URLs alone.
-      assert is_nil(Repo.get(Note, root.id).ap_id)
+      # No remote ap_id anywhere: all three are local (domain NULL), even
+      # though each now carries its own canonical ap_id.
+      assert is_nil(Repo.get(Note, root.id).domain)
 
       assert {:ok, %{ancestors: ancestors, descendants: descendants}} = Notes.context(mid.id)
       assert Enum.map(ancestors, & &1.id) == [root.id]
@@ -694,6 +694,75 @@ defmodule SukhiFedi.Integration.NotesTest do
       account_id: account.id
     }
     |> Repo.insert!()
+  end
+
+  describe "locality: notes.domain + persisted local ap_id" do
+    test "changeset derives domain from the ap_id host" do
+      import Ecto.Changeset
+      ours = SukhiFedi.Config.domain!()
+
+      remote = Note.changeset(%Note{}, %{content: "x", account_id: 1, ap_id: "https://other.example/notes/9"})
+      assert get_field(remote, :domain) == "other.example"
+
+      local = Note.changeset(%Note{}, %{content: "x", account_id: 1})
+      assert get_field(local, :domain) == nil
+
+      own = Note.changeset(%Note{}, %{content: "x", account_id: 1, ap_id: "https://#{ours}/users/u/notes/1"})
+      assert get_field(own, :domain) == nil
+    end
+
+    test "create_status persists the canonical ap_id and stays local (domain nil)" do
+      a = create_account!("alice_apid")
+      {:ok, note} = Notes.create_status(a, %{"status" => "hi", "visibility" => "public"})
+
+      reloaded = Repo.get!(Note, note.id)
+      assert reloaded.domain == nil
+      assert reloaded.ap_id == "https://#{SukhiFedi.Config.domain!()}/users/#{a.username}/notes/#{note.id}"
+    end
+
+    test "delete_note carries the ap_id (not nil) — the federation-of-deletes fix" do
+      a = create_account!("alice_del")
+      {:ok, note} = Notes.create_status(a, %{"status" => "bye", "visibility" => "public"})
+
+      assert {:ok, _} = Notes.delete_note(a, note.id)
+
+      ev =
+        Repo.one!(
+          from(e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.note.deleted" and e.aggregate_id == ^to_string(note.id)
+          )
+        )
+
+      assert ev.payload["ap_id"] ==
+               "https://#{SukhiFedi.Config.domain!()}/users/#{a.username}/notes/#{note.id}"
+    end
+
+    test "local_notes / remote_notes filter on domain, not ap_id" do
+      a = create_account!("alice_loc")
+      {:ok, created} = Notes.create_status(a, %{"status" => "local", "visibility" => "public"})
+      local = Repo.get!(Note, created.id)
+
+      {:ok, remote} =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: a.id,
+          content: "remote",
+          ap_id: "https://other.example/notes/7",
+          visibility: "public"
+        })
+        |> Repo.insert()
+
+      local_ids = Notes.local_notes() |> Repo.all() |> Enum.map(& &1.id)
+      remote_ids = Notes.remote_notes() |> Repo.all() |> Enum.map(& &1.id)
+
+      # the local note has an ap_id now, yet is still classified local
+      assert local.ap_id != nil
+      assert local.id in local_ids
+      refute local.id in remote_ids
+      assert remote.id in remote_ids
+      refute remote.id in local_ids
+    end
   end
 
   defp update_ap_id(%Note{id: id}, ap_id) do

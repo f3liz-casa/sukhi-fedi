@@ -29,18 +29,18 @@ defmodule SukhiFedi.Notes do
   # ── origin ───────────────────────────────────────────────────────────────
 
   @doc """
-  Compose an origin filter onto a `Note` query. A local note carries no
-  `ap_id` (it's derived on demand — see `SukhiFedi.Notes.Ids`); a note
-  mirrored from a remote server always has one. So `ap_id IS NULL` ⇔ local,
-  the corroborating signal to the author's `accounts.domain`. Shared by the
-  public/tag timeline's local filter and the remote wipe/rebuild tooling so
-  there's a single definition of origin.
+  Compose an origin filter onto a `Note` query. Locality lives in
+  `notes.domain` (NULL = local, a host = remote), mirroring the author's
+  `accounts.domain` — set at write time from the ap_id host. (It used to be
+  read off `ap_id IS NULL`, but local notes now carry an ap_id too.) Shared
+  by the public/tag timeline's local filter and the remote wipe/rebuild
+  tooling so there's a single definition of origin.
   """
   @spec local_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
-  def local_notes(query \\ Note), do: from(n in query, where: is_nil(n.ap_id))
+  def local_notes(query \\ Note), do: from(n in query, where: is_nil(n.domain))
 
   @spec remote_notes(Ecto.Queryable.t()) :: Ecto.Query.t()
-  def remote_notes(query \\ Note), do: from(n in query, where: not is_nil(n.ap_id))
+  def remote_notes(query \\ Note), do: from(n in query, where: not is_nil(n.domain))
 
   # ── create / delete ──────────────────────────────────────────────────────
 

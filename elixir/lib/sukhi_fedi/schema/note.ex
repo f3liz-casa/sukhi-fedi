@@ -11,6 +11,10 @@ defmodule SukhiFedi.Schema.Note do
     field(:title, :string)
     field(:visibility, :string, default: "public")
     field(:ap_id, :string)
+    # Locality: NULL = local (authored here), a host = remote. Derived from
+    # `ap_id` at write time (see changeset/2); reads use this instead of
+    # `is_nil(ap_id)`, which used to double as the local flag.
+    field(:domain, :string)
     field(:cw, :string)
     field(:sensitive, :boolean, default: false)
     field(:in_reply_to_ap_id, :string)
@@ -55,6 +59,7 @@ defmodule SukhiFedi.Schema.Note do
       :emojis
     ])
     |> update_change(:content, &SukhiFedi.HTML.sanitize/1)
+    |> put_domain()
     |> validate_required([:content, :account_id])
     # Cap content length (the only schema field that lacked one): bounds
     # unbounded storage + tag-row amplification from a multi-MB local post
@@ -64,5 +69,24 @@ defmodule SukhiFedi.Schema.Note do
     # cap silently dropped those — while still bounding multi-MB abuse.
     |> validate_length(:content, max: 100_000)
     |> validate_inclusion(:visibility, ["public", "followers", "direct"])
+  end
+
+  # Locality follows the ap_id host. A note created here inserts with no
+  # ap_id (it's stamped just after, by id), so domain is NULL = local; a
+  # mirrored note carries a remote ap_id, so domain is its host. An ap_id
+  # on our own domain (a local note's stamped URL) is local too → NULL.
+  defp put_domain(changeset) do
+    case get_change(changeset, :ap_id) do
+      nil ->
+        changeset
+
+      ap_id ->
+        host = ap_id |> URI.parse() |> Map.get(:host)
+        # Config domain may carry a port (localhost:4000); URI host never
+        # does — compare host-to-host.
+        our_host = SukhiFedi.Config.domain!() |> String.split(":") |> hd()
+        local? = is_nil(host) or host == our_host
+        put_change(changeset, :domain, if(local?, do: nil, else: host))
+    end
   end
 end

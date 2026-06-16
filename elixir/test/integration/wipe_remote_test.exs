@@ -82,7 +82,8 @@ defmodule SukhiFedi.Integration.WipeRemoteTest do
       account_id: account_id,
       content: "remote body",
       visibility: "public",
-      ap_id: ap_id
+      ap_id: ap_id,
+      domain: URI.parse(ap_id).host
     })
   end
 

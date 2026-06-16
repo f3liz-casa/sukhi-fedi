@@ -174,10 +174,11 @@ defmodule SukhiFedi.Maintenance.RebuildFromArchive do
     |> Repo.all()
   end
 
-  # ap_ids of notes we still have. Local notes carry no ap_id (NULL), so
-  # they never collide with a remote archive id.
+  # ap_ids of remote notes we still have, to compare against the archive's
+  # (remote) delete ids. Scoped by `domain` so local notes' own ap_ids
+  # don't enter the set.
   defp present_ap_ids do
-    from(n in Note, where: not is_nil(n.ap_id), select: n.ap_id)
+    from(n in Note, where: not is_nil(n.domain), select: n.ap_id)
     |> Repo.all()
     |> MapSet.new()
   end

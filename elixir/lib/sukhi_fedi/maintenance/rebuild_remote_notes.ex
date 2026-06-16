@@ -72,10 +72,12 @@ defmodule SukhiFedi.Maintenance.RebuildRemoteNotes do
     end
   end
 
-  @doc "Remote (ap_id-bearing) notes whose id is still a pre-snowflake serial."
+  @doc "Remote notes whose id is still a pre-snowflake serial."
   def target_notes do
     from(n in Note,
-      where: not is_nil(n.ap_id) and n.id < ^@seq_threshold,
+      # `domain`, not `ap_id`: local notes now carry an ap_id too, and the
+      # old local ones have small serial ids that would wrongly match here.
+      where: not is_nil(n.domain) and n.id < ^@seq_threshold,
       order_by: n.id
     )
     |> Repo.all()
@@ -148,6 +150,9 @@ defmodule SukhiFedi.Maintenance.RebuildRemoteNotes do
           conversation_ap_id: old.conversation_ap_id,
           mfm: old.mfm,
           created_at: created_at,
+          # carry locality over (this is a remote note); change/2 skips the
+          # changeset's domain-from-ap_id derivation, so set it explicitly.
+          domain: old.domain,
           # NULL for now: the real ap_id still lives on `old` and the
           # column is uniquely indexed. We move it over after the delete.
           ap_id: nil

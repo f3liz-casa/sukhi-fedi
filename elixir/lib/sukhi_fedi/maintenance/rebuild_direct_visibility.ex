@@ -56,9 +56,9 @@ defmodule SukhiFedi.Maintenance.RebuildDirectVisibility do
     }
   end
 
-  @doc "Remote (ap_id-bearing) notes currently stored as `direct`."
+  @doc "Remote notes currently stored as `direct`."
   def target_notes do
-    from(n in Note, where: not is_nil(n.ap_id) and n.visibility == "direct", order_by: n.id)
+    from(n in Note, where: not is_nil(n.domain) and n.visibility == "direct", order_by: n.id)
     |> Repo.all()
   end
 

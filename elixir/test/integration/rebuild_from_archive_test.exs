@@ -168,6 +168,7 @@ defmodule SukhiFedi.Integration.RebuildFromArchiveTest do
       content: "body",
       visibility: "public",
       ap_id: ap_id,
+      domain: URI.parse(ap_id).host,
       cw: opts[:cw],
       emojis: opts[:emojis] || [],
       created_at: opts[:created_at]

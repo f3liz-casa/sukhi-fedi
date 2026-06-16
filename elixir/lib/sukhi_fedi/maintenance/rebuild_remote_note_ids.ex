@@ -86,12 +86,12 @@ defmodule SukhiFedi.Maintenance.RebuildRemoteNoteIds do
   end
 
   @doc """
-  Remote (ap_id-bearing) snowflake-range notes whose id-encoded time
-  drifts from `created_at` by more than `skew_s` seconds.
+  Remote snowflake-range notes whose id-encoded time drifts from
+  `created_at` by more than `skew_s` seconds.
   """
   def target_notes(skew_s \\ @default_skew_s) do
     from(n in Note,
-      where: not is_nil(n.ap_id) and n.id > ^@seq_threshold,
+      where: not is_nil(n.domain) and n.id > ^@seq_threshold,
       where:
         fragment(
           "abs(extract(epoch from (to_timestamp(((? >> 16) + ?) / 1000.0) - (? at time zone 'UTC')))) > ?",

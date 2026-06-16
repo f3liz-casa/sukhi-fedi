@@ -46,7 +46,10 @@ defmodule SukhiFedi.Integration.MirrorBoomerangTest do
     assert :ok = Mirror.maybe_mirror_create_note(activity)
 
     assert Repo.aggregate(Note, :count, :id) == count_before
-    assert [] = Repo.all(from(n in Note, where: n.ap_id == ^canonical))
+    # The local note now carries the canonical ap_id itself, so exactly one
+    # row holds it — the original. The boomerang must not mint a second.
+    assert [%Note{id: id}] = Repo.all(from(n in Note, where: n.ap_id == ^canonical))
+    assert id == note.id
   end
 
   describe "maybe_handle_update/1 — Update(Question)" do
@@ -160,7 +163,8 @@ defmodule SukhiFedi.Integration.MirrorBoomerangTest do
         account_id: author.id,
         content: "q",
         visibility: "public",
-        ap_id: ap_id
+        ap_id: ap_id,
+        domain: URI.parse(ap_id).host
       })
 
     {note, author}

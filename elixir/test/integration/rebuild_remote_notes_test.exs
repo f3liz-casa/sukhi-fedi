@@ -21,6 +21,7 @@ defmodule SukhiFedi.Integration.RebuildRemoteNotesTest do
           content: "the original body",
           visibility: "public",
           ap_id: ap_id,
+          domain: URI.parse(ap_id).host,
           created_at: ~U[2026-05-30 06:00:00Z]
         })
 
@@ -62,6 +63,7 @@ defmodule SukhiFedi.Integration.RebuildRemoteNotesTest do
           content: "no date",
           visibility: "public",
           ap_id: ap_id,
+          domain: URI.parse(ap_id).host,
           created_at: ~U[2026-05-30 06:00:00Z]
         })
 
@@ -82,7 +84,8 @@ defmodule SukhiFedi.Integration.RebuildRemoteNotesTest do
           account_id: author.id,
           content: "remote serial",
           visibility: "public",
-          ap_id: "https://remote.example/notes/serial"
+          ap_id: "https://remote.example/notes/serial",
+          domain: "remote.example"
         })
 
       # Local note (no ap_id) — even with a serial id, not a target.
@@ -100,7 +103,8 @@ defmodule SukhiFedi.Integration.RebuildRemoteNotesTest do
           account_id: author.id,
           content: "remote snowflake",
           visibility: "public",
-          ap_id: "https://remote.example/notes/snow"
+          ap_id: "https://remote.example/notes/snow",
+          domain: "remote.example"
         })
 
       ids = RebuildRemoteNotes.target_notes() |> Enum.map(& &1.id)
