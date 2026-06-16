@@ -61,6 +61,12 @@
   let error = $state<string | null>(null);
   let initial = $state(true);
 
+  // 次のページを裏で先に取っておく置き場。クリックを待たずに用意して
+  // おくので「もっと読む」が一瞬で返る。先読みが空なら本当に終わりと
+  // 分かるので nextMaxId を畳んでボタンごと消す(Mastodon 系は最後の
+  // ページでも max_id を返すため、これが無いと空のボタンが残る)。
+  let prefetched = $state<{ items: Status[]; nextMaxId: string | null } | null>(null);
+
   // 表示フィルター（home/public/tag タブとは別軸）。変えたら頭から読み直す。
   // RT を隠すのは home だけ実効（public/tag はブーストを混ぜない）。
   let onlyMedia = $state(false);
@@ -75,6 +81,17 @@
     void load(true);
   });
 
+  // いまのタブ・フィルターでの 1 ページ取得。load と先読みで共有する。
+  function fetchPage(maxId: string | null) {
+    return fetchTimeline(kind, {
+      tag: kind === 'tag' ? tag : undefined,
+      maxId,
+      onlyMedia,
+      hideBoosts,
+      hideSensitive
+    });
+  }
+
   async function load(reset: boolean) {
     if (loading) return;
     loading = true;
@@ -83,18 +100,15 @@
     if (reset) {
       items = [];
       nextMaxId = null;
+      prefetched = null;
     }
 
     try {
-      const page = await fetchTimeline(kind, {
-        tag: kind === 'tag' ? tag : undefined,
-        maxId: reset ? null : nextMaxId,
-        onlyMedia,
-        hideBoosts,
-        hideSensitive
-      });
+      const page = await fetchPage(reset ? null : nextMaxId);
       items = reset ? page.items : [...items, ...page.items];
-      nextMaxId = page.nextMaxId;
+      // 0 件が返ったら、Link が次を匂わせていても終わり扱いにする。
+      nextMaxId = page.items.length === 0 ? null : page.nextMaxId;
+      if (nextMaxId) void prefetchNext(nextMaxId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -109,6 +123,50 @@
     }
   }
 
+  // 次のページを裏で取って prefetched に置く。空なら終わりと分かるので
+  // nextMaxId を畳む(= ボタンが消える)。cursor が古くなっていたら
+  // (リセットや別タブで先へ進んだ)結果は捨てる。
+  async function prefetchNext(cursor: string) {
+    try {
+      const page = await fetchPage(cursor);
+      if (cursor !== nextMaxId) return;
+      if (page.items.length === 0) {
+        nextMaxId = null;
+        prefetched = null;
+      } else {
+        prefetched = { items: page.items, nextMaxId: page.nextMaxId };
+      }
+    } catch {
+      if (cursor === nextMaxId) prefetched = null;
+    }
+  }
+
+  // 一瞬で湧くと目が追えず落ち着かないので、短い静かな「間」を置いてから
+  // 差し込む ── 認知負荷を上げない程度のディレイ。
+  const REVEAL_DELAY_MS = 280;
+  let revealing = $state(false);
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  // 「もっと読む」。先読みが手元にあれば、行き先を先へ進めて、その次の
+  // ページの取得を押した瞬間に非同期で走らせる(reveal は待たせない)。
+  // そのうえで静かな間を置いてから手元のぶんを差す。先読みが間に合って
+  // いなければ(押すのが早すぎた等)その場で取りに行く従来どおりの保険。
+  async function showMore() {
+    if (loading || revealing) return;
+    if (!prefetched) {
+      void load(false);
+      return;
+    }
+    const batch = prefetched;
+    prefetched = null;
+    nextMaxId = batch.nextMaxId;
+    if (nextMaxId) void prefetchNext(nextMaxId);
+    revealing = true;
+    await sleep(REVEAL_DELAY_MS);
+    items = [...items, ...batch.items];
+    revealing = false;
+  }
+
   function selectKind(next: TimelineKind) {
     if (next === kind) return;
     kind = next;
@@ -117,6 +175,7 @@
     if (next === 'tag' && !tag) {
       items = [];
       nextMaxId = null;
+      prefetched = null;
       error = null;
       initial = false;
       return;
@@ -211,11 +270,11 @@
     <StatusCard status={s} canReply onreply={onReply} ondelete={onDelete} />
   {/each}
 
-  {#if !initial && loading}
+  {#if !initial && (loading || revealing)}
     <p class="loading">{$t('common.loading')}</p>
   {/if}
 
-  {#if nextMaxId && !loading}
-    <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
+  {#if nextMaxId && !loading && !revealing}
+    <button class="load-more" onclick={showMore}>{$t('common.loadMore')}</button>
   {/if}
 </section>
