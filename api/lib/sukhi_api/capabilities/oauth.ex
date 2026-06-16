@@ -408,7 +408,23 @@ defmodule SukhiApi.Capabilities.OAuth do
     </html>
     """
 
-    {:ok, %{status: 200, body: body, headers: [{"content-type", "text/html; charset=utf-8"}]}}
+    {:ok,
+     %{
+       status: 200,
+       body: body,
+       headers: [
+         {"content-type", "text/html; charset=utf-8"},
+         # この同意フォームは、わざと外部アプリの custom scheme
+         # (例 `cx-c3-toot://…`) へ 302 で戻すのが仕事。グローバルCSP
+         # の `form-action 'self'`(CorsPlug) は、WebKit(Safari/iOS)だと
+         # フォーム送信のリダイレクト先まで照合するので、そのままだと
+         # Toot! 等の webview が戻りを掴めず「いいよ」で先に進めない
+         # (Chrome系は CSP3 でリダイレクト先チェックを外したので通る)。
+         # ここだけ form-action を落とす — 他の hardening は残す。
+         # CorsPlug は handler が CSP を立てたら上書きしない。
+         {"content-security-policy", "object-src 'none'; base-uri 'none'; frame-ancestors 'self'"}
+       ]
+     }}
   end
 
   # scope は空白区切り (Mastodon 互換)。"read write follow" や

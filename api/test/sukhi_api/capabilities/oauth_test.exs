@@ -257,6 +257,19 @@ defmodule SukhiApi.Capabilities.OAuthTest do
       assert resp.body =~ "ConsentApp"
       assert resp.body =~ "cid_in_form"
       assert resp.body =~ "/oauth/authorize"
+
+      # 同意フォームは外部アプリの custom scheme へ 302 で戻すので、
+      # WebKit(Safari/iOS)が消してしまう `form-action 'self'` を
+      # この応答だけ自前 CSP で外しておく(他の hardening は残す)。
+      csp =
+        Enum.find_value(resp.headers, fn
+          {"content-security-policy", v} -> v
+          _ -> nil
+        end)
+
+      assert csp, "consent form must set its own CSP so CorsPlug's form-action 'self' is not applied"
+      refute csp =~ "form-action"
+      assert csp =~ "frame-ancestors 'self'"
     end
   end
 
