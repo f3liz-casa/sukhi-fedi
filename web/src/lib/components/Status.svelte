@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Status } from '$lib/api';
+  import { getAccountCached, type Status } from '$lib/api';
   import Self from './Status.svelte';
   import Avatar from './Avatar.svelte';
   import CircleBadge from './CircleBadge.svelte';
@@ -39,6 +39,25 @@
 
   // CW（spoiler）を開いているか。閉じている間は本文だけでなく添付も隠す。
   let cwOpen = $state(false);
+
+  // 返信のとき、返信先の人を上に小さく示す。payload には相手の handle が
+  // 無いので、in_reply_to_account_id からアカウントだけ遅延 fetch(共有
+  // キャッシュ)で引く。取れるまでは名前なしの「返信」だけ静かに出す。
+  let replyToAcct = $state<string | null>(null);
+  $effect(() => {
+    const aid = status.in_reply_to_account_id;
+    replyToAcct = null;
+    if (!status.in_reply_to_id || !aid) return;
+    let alive = true;
+    getAccountCached(aid)
+      .then((a) => {
+        if (alive) replyToAcct = a.acct;
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  });
 
   // 長い本文（主に hackers.pub の Article）はタイムラインを埋めないよう
   // 数行で畳み、「続きを読む」で全文を出す。記事だと知らせるフラグは無い
@@ -89,6 +108,16 @@
   <Avatar class="avatar" src={avatar} {name} />
 
   <div class="body">
+    {#if status.in_reply_to_id}
+      {#if replyToAcct}
+        <a class="reply-to" href={`/@${replyToAcct}/${status.in_reply_to_id}`}>
+          <Twemoji emoji="↩️" /> {$t('status.replyTo', { acct: replyToAcct })}
+        </a>
+      {:else}
+        <span class="reply-to"><Twemoji emoji="↩️" /> {$t('status.replyToUnknown')}</span>
+      {/if}
+    {/if}
+
     <header class="meta">
       <a class="display-name" href={`/@${status.account.acct}`}
         >{@html renderEmojis(phrase(name), status.account.emojis)}</a
@@ -228,6 +257,21 @@
     text-decoration: underline;
   }
 
+  /* 「@x への返信」。本文の上に、名前より小さく薄く。主張しすぎず、でも
+     これが返信だと分かる程度に。リンクのときだけ hover で下線。 */
+  .reply-to {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.15rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+  a.reply-to:hover {
+    text-decoration: underline;
+  }
+
   .quote-card {
     display: block;
     margin-top: 0.5rem;
@@ -246,12 +290,23 @@
     gap: 0.375rem;
     margin-bottom: 0.25rem;
     font-size: var(--text-sm);
+    /* 子(名前・ハンドル)が中身の幅で踏ん張らず、行に収まるよう縮める
+       のを許す。長い連合ハンドルがカードを突き破るのを止める。 */
+    min-width: 0;
   }
   .quote-name {
     font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .quote-acct {
     color: var(--color-text-muted);
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .quote-content {
     font-size: var(--text-sm);

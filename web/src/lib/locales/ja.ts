@@ -91,6 +91,8 @@ export const ja = {
   'status.bookmarkAdd': 'ブックマーク',
   'status.bookmarkRemove': 'ブックマークを外す',
   'status.reply': '返信',
+  'status.replyTo': '@{acct} への返信',
+  'status.replyToUnknown': '返信',
   'status.more': 'その他の操作',
   'status.unpin': 'ピン留めを外す',
   'status.pin': 'ピン留め',

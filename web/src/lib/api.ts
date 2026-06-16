@@ -450,6 +450,23 @@ export async function getAccount(id: string): Promise<Account> {
   );
 }
 
+// 返信の「返信先」表示など、同じアカウントを何度も引く場面用に Promise を
+// 覚えておく ── 同時に複数のカードが同じ相手を引いても 1 リクエストに束ね、
+// 再描画でも引き直さない。失敗したら忘れて次回また取りに行けるようにする。
+const accountByIdCache = new Map<string, Promise<Account>>();
+
+export function getAccountCached(id: string): Promise<Account> {
+  let p = accountByIdCache.get(id);
+  if (!p) {
+    p = getAccount(id).catch((e) => {
+      accountByIdCache.delete(id);
+      throw e;
+    });
+    accountByIdCache.set(id, p);
+  }
+  return p;
+}
+
 export async function getAccountStatuses(
   id: string,
   opts: { maxId?: string | null; limit?: number; pinned?: boolean; articles?: boolean } = {}

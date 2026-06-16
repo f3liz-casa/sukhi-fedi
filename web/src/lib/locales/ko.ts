@@ -94,6 +94,8 @@ export const ko: Dict = {
   'status.bookmarkAdd': '북마크',
   'status.bookmarkRemove': '북마크 빼기',
   'status.reply': '답장',
+  'status.replyTo': '@{acct} 님에게 답장',
+  'status.replyToUnknown': '답장',
   'status.more': '다른 작업',
   'status.unpin': '고정 풀기',
   'status.pin': '고정하기',
