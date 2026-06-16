@@ -3,7 +3,12 @@
   import AppNav from '$lib/components/AppNav.svelte';
   import EmailNudge from '$lib/components/EmailNudge.svelte';
   import UpdateBanner from '$lib/components/UpdateBanner.svelte';
+  import { devAutoLogin } from '$lib/auth';
   import type { Snippet } from 'svelte';
+
+  // dev で VITE_DEV_TOKEN があれば、AppNav が mount する前にテストユーザー
+  // の token を置いておく。本番では何もしない。
+  devAutoLogin();
 
   let { children }: { children?: Snippet } = $props();
 </script>

@@ -113,6 +113,31 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// dev で「ログイン後の見た目」を覗くための近道。web/.env.local に
+// VITE_DEV_TOKEN を一行置いておくと(中身は何でもいい。本物のトークンが
+// あればデータも出るし、`dev` みたいな偽物でも UI の骨格は見られる)、
+// token を sf.token に置いて isLoggedIn() を true にする。本番ビルドでは
+// import.meta.env.DEV が false なので丸ごと素通り ─ 漏れない。
+//
+// 偽トークンだと API は 401 を返すけれど、その下の redirectToLogin() は
+// この devSession の間だけ黙る(下を参照)ので、ログイン画面に弾かれず
+// navbar などログイン後の chrome をそのまま眺められる。
+let devSession = false;
+
+export function devAutoLogin(): void {
+  if (!browser || !import.meta.env.DEV) return;
+  const tok = (import.meta.env as Record<string, string | undefined>).VITE_DEV_TOKEN;
+  if (!tok) return;
+  devSession = true;
+  if (!loadToken()) {
+    saveToken({
+      access_token: tok,
+      scope: SCOPES,
+      created_at: Math.floor(Date.now() / 1000)
+    });
+  }
+}
+
 // 同時に飛んだ複数の 401 が、それぞれ refresh を叩かないように
 // 1 本の grant に束ねる。refresh token はサーバ側で rotate する
 // (使うと revoke され新しいのが出る) ので、同じ古い token で並行に
@@ -170,6 +195,9 @@ async function doRefresh(): Promise<TokenSet | null> {
 // 戸口へ送る。同期のハードナビゲーションなので、呼び元が保険で
 // 走らせる client 側遷移 (goto('/')) より先に確定する。
 export function redirectToLogin(): void {
+  // dev の覗き見セッション中は弾かない。偽トークンの 401 でログイン画面へ
+  // 飛ぶと、ログイン後の UI を見たいのに見られなくなるため ─ ここだけ黙る。
+  if (devSession) return;
   clearToken();
   if (browser) window.location.assign('/login');
 }
