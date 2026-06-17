@@ -523,6 +523,17 @@ img.twemoji {
   border-bottom: 0;
 }
 
+/* ブーストは .boost 枠が top-level の項目。中の .status は枠の唯一の子＝
+   :last-child なので、上の border 除去が誤爆して線が消える。だから分離線は
+   枠側に持たせる（中の status の線は消えたままでいい＝二重線にならない）。 */
+.boost {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.boost:last-child {
+  border-bottom: 0;
+}
+
 .status .meta {
   display: flex;
   flex-wrap: wrap;
