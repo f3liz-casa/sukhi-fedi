@@ -70,15 +70,21 @@ defmodule SukhiDelivery.Outbox.Relay do
         )
         |> Repo.all()
 
-      {published_ids, failures} =
-        Enum.reduce(events, {[], []}, fn event, {ok_ids, fail_acc} ->
-          case do_publish(event) do
-            :ok -> {[event.id | ok_ids], fail_acc}
-            {:error, reason} -> {ok_ids, [{event, reason} | fail_acc]}
-          end
-        end)
+      {published_ids, poison} =
+        events
+        |> Stream.map(&{&1, do_publish(&1)})
+        |> tally()
 
-      apply_results(published_ids, failures)
+      deferred = length(events) - length(published_ids) - length(poison)
+
+      if deferred > 0 do
+        Logger.warning(
+          "Outbox.Relay: NATS unreachable, deferred #{deferred} pending event(s) " <>
+            "— attempts untouched, will retry on reconnect"
+        )
+      end
+
+      apply_results(published_ids, poison)
     end)
   rescue
     e ->
@@ -86,9 +92,32 @@ defmodule SukhiDelivery.Outbox.Relay do
       :error
   end
 
+  @doc """
+  Fold per-event publish outcomes into `{published_ids, poison}`.
+
+  Stops at the first `:disconnected` outcome — NATS being unreachable is the
+  connection's fault, not the event's, so that row and every one after it
+  stay `pending` with `attempts` untouched. Only `:poison` (a row we can
+  never encode) is collected to count against `attempts`. Driven over a
+  `Stream`, the `:halt` also stops further publish attempts mid-batch.
+  """
+  @spec tally(Enumerable.t()) :: {list(), list()}
+  def tally(outcomes) do
+    Enum.reduce_while(outcomes, {[], []}, fn
+      {event, :ok}, {ok_ids, poison} ->
+        {:cont, {[event.id | ok_ids], poison}}
+
+      {event, {:poison, reason}}, {ok_ids, poison} ->
+        {:cont, {ok_ids, [{event, reason} | poison]}}
+
+      {_event, {:disconnected, _reason}}, acc ->
+        {:halt, acc}
+    end)
+  end
+
   defp apply_results([], []), do: :ok
 
-  defp apply_results(published_ids, failures) do
+  defp apply_results(published_ids, poison) do
     now = DateTime.utc_now()
 
     unless published_ids == [] do
@@ -96,7 +125,7 @@ defmodule SukhiDelivery.Outbox.Relay do
       |> Repo.update_all(set: [status: "published", published_at: now])
     end
 
-    Enum.each(failures, fn {event, reason} ->
+    Enum.each(poison, fn {event, reason} ->
       new_attempts = event.attempts + 1
       new_status = if new_attempts >= @max_attempts, do: "failed", else: "pending"
 
@@ -109,7 +138,7 @@ defmodule SukhiDelivery.Outbox.Relay do
       |> Repo.update!()
 
       Logger.warning(
-        "Outbox.Relay publish failed (attempt #{new_attempts}) " <>
+        "Outbox.Relay could not encode event (attempt #{new_attempts}) " <>
           "id=#{event.id} subject=#{event.subject}: #{inspect(reason)}"
       )
     end)
@@ -117,17 +146,35 @@ defmodule SukhiDelivery.Outbox.Relay do
     :ok
   end
 
+  # Classify one event's publish attempt:
+  #   :ok                 — handed to NATS.
+  #   {:poison, reason}   — payload can't be encoded; this row will never
+  #                         succeed, so it counts against `attempts`.
+  #   {:disconnected, _}  — NATS unreachable; the event is fine. The caller
+  #                         defers it without touching `attempts`, so an
+  #                         outage can't burn the poison-retry budget.
   defp do_publish(event) do
-    body = JSON.encode!(event.payload)
-    headers = [{"Nats-Msg-Id", "outbox-#{event.id}"}]
+    case encode_body(event.payload) do
+      {:ok, body} -> publish(event.id, event.subject, body)
+      {:error, reason} -> {:poison, reason}
+    end
+  end
 
-    case Gnat.pub(:gnat_delivery, event.subject, body, headers: headers) do
+  defp encode_body(payload) do
+    {:ok, JSON.encode!(payload)}
+  rescue
+    e -> {:error, {:encode, Exception.message(e)}}
+  end
+
+  defp publish(id, subject, body) do
+    headers = [{"Nats-Msg-Id", "outbox-#{id}"}]
+
+    case Gnat.pub(:gnat_delivery, subject, body, headers: headers) do
       :ok -> :ok
-      {:error, _} = err -> err
-      other -> {:error, {:unexpected, other}}
+      other -> {:disconnected, other}
     end
   rescue
-    e -> {:error, {:exception, Exception.message(e)}}
+    e -> {:disconnected, Exception.message(e)}
   end
 
   defp postgrex_config do
