@@ -55,10 +55,14 @@ defmodule SukhiFedi.Timelines do
     excluded = Lists.excluded_account_ids(id)
     reply_here = "https://#{SukhiFedi.Config.domain!()}/%"
 
-    # Per-list home filters: members of a (non-exclusive) *filtered* list have
-    # their posts narrowed in home — only_media members must carry media,
+    # Per-list home gate: members of a (non-exclusive) *gated* list have their
+    # posts narrowed in home — a post must pass every condition of every list
+    # that holds the author. only_media members must carry media,
     # hide_sensitive members must be non-sensitive, hide_boosts members' boosts
-    # are dropped. Everyone else is untouched. (Global opts[:*] filters from the
+    # are dropped, hide_replies members' replies are dropped, replies_to_me
+    # members' replies must answer a post here, and a keyword member's post
+    # must match (applied as the NOT EXISTS gate below, since it varies per
+    # list). Everyone else is untouched. (Global opts[:*] filters from the
     # timeline dropdown still apply on top.)
     pl = Lists.home_filter_members(id)
 
@@ -82,6 +86,27 @@ defmodule SukhiFedi.Timelines do
       |> where(
         [n],
         n.account_id not in ^pl.hide_sensitive or (n.sensitive == false and is_nil(n.cw))
+      )
+      |> where([n], n.account_id not in ^pl.hide_replies or is_nil(n.in_reply_to_ap_id))
+      |> where(
+        [n],
+        n.account_id not in ^pl.replies_to_me or is_nil(n.in_reply_to_ap_id) or
+          like(n.in_reply_to_ap_id, ^reply_here)
+      )
+      # Keyword gate: a post from an author who sits in a keyword-carrying
+      # (non-exclusive) list of the viewer's must match that keyword — in its
+      # content, or as a hashtag when the keyword leads with `#`. Each such
+      # list is its own constraint (a violation is a missed keyword), so a post
+      # is dropped if *any* containing keyword list goes unmatched.
+      |> where(
+        [n],
+        fragment(
+          "NOT EXISTS (SELECT 1 FROM list_accounts la JOIN lists l ON l.id = la.list_id WHERE l.account_id = ? AND l.exclusive = false AND la.account_id = ? AND COALESCE(l.filter_keyword, '') <> '' AND NOT (? ILIKE '%' || l.filter_keyword || '%' OR EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = ? AND t.name = lower(ltrim(l.filter_keyword, '#')))))",
+          ^id,
+          n.account_id,
+          n.content,
+          n.id
+        )
       )
       |> maybe_only_media(opts[:only_media])
       |> maybe_hide_sensitive(opts[:hide_sensitive])

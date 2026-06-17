@@ -420,9 +420,17 @@ export const ja = {
   'listDetail.noMembers': 'まだ、だれも入っていません。',
   'listDetail.removeMember': '外す',
   'listDetail.followHint': 'フォローすると、この人の投稿がここに流れます。',
-  'listDetail.homeFilterTitle': 'ホームでの見せ方',
-  'listDetail.homeFilterHint':
-    'このリストの人の投稿を、ホームではこう絞ります（リストのタイムラインには影響しません）。',
+  'listDetail.homeGateTitle': 'ホームに出す条件',
+  'listDetail.homeGateHint':
+    'このリストの人を、ホームにどう出すか。いちばん端は「出さない」、ゆるめると条件で絞ります（リストのタイムラインには影響しません）。',
+  'listDetail.gateNever': 'ホームに出さない（このリストでだけ読む）',
+  'listDetail.gateConditionsHint': '次の条件を満たす投稿だけ、ホームに出します。',
+  'listDetail.gateKeyword': 'この言葉を含むときだけ',
+  'listDetail.gateKeywordPlaceholder': '例: にゃー / #おしらせ',
+  'listDetail.gateReplies': '返信は',
+  'listDetail.gateRepliesAll': 'そのまま出す',
+  'listDetail.gateRepliesHide': '出さない',
+  'listDetail.gateRepliesToMe': '自分宛だけ出す',
   'listDetail.empty':
     'このリストには、まだ何も流れていません。メンバーを加えると、ここに集まります。',
 

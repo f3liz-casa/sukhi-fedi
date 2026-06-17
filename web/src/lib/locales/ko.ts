@@ -425,9 +425,17 @@ export const ko: Dict = {
     '이 리스트에는 아직 아무것도 흐르지 않았어요. 멤버를 더하면 여기에 모여요.',
   'listDetail.removeMember': '빼기',
   'listDetail.followHint': '팔로우하면 이 사람의 글이 여기에 흘러요.',
-  'listDetail.homeFilterTitle': '홈에서 보이는 방식',
-  'listDetail.homeFilterHint':
-    '이 리스트의 사람들 글을 홈에서 이렇게 좁혀요 (리스트 타임라인에는 영향 없어요).',
+  'listDetail.homeGateTitle': '홈에 띄우는 조건',
+  'listDetail.homeGateHint':
+    '이 리스트의 사람들을 홈에 어떻게 띄울지. 가장 끝은 "띄우지 않기", 풀면 조건으로 좁혀요 (리스트 타임라인에는 영향 없어요).',
+  'listDetail.gateNever': '홈에 띄우지 않기 (이 리스트에서만 읽기)',
+  'listDetail.gateConditionsHint': '다음 조건을 만족하는 글만 홈에 띄워요.',
+  'listDetail.gateKeyword': '이 말이 들어갈 때만',
+  'listDetail.gateKeywordPlaceholder': '예: 야옹 / #공지',
+  'listDetail.gateReplies': '답글은',
+  'listDetail.gateRepliesAll': '그대로 띄우기',
+  'listDetail.gateRepliesHide': '띄우지 않기',
+  'listDetail.gateRepliesToMe': '나에게 온 것만',
 
   // ── 즐겨찾기 ─────────────────────────────────────────
   'favourites.title': '즐겨찾기',

@@ -23,7 +23,9 @@ defmodule SukhiApi.Views.MastodonList do
       exclusive: !!list.exclusive,
       filter_only_media: !!list.filter_only_media,
       filter_hide_boosts: !!list.filter_hide_boosts,
-      filter_hide_sensitive: !!list.filter_hide_sensitive
+      filter_hide_sensitive: !!list.filter_hide_sensitive,
+      filter_keyword: list.filter_keyword || "",
+      filter_replies: list.filter_replies || "all"
     }
   end
 

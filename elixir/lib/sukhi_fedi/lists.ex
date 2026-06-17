@@ -200,14 +200,17 @@ defmodule SukhiFedi.Lists do
 
   @doc """
   Members whose home-timeline posts should be *filtered*, grouped by the
-  filter their list carries. Only *non-exclusive* lists contribute
-  (exclusive ones drop members from home outright). Used by
-  `Timelines.home/2`.
+  gate condition their list carries. Only *non-exclusive* lists contribute
+  (exclusive ones drop members from home outright). The keyword gate is
+  applied directly in SQL by `Timelines.home/2` (it varies per list), so it
+  isn't returned here. Used by `Timelines.home/2`.
   """
   @spec home_filter_members(integer()) :: %{
           only_media: [integer()],
           hide_boosts: [integer()],
-          hide_sensitive: [integer()]
+          hide_sensitive: [integer()],
+          hide_replies: [integer()],
+          replies_to_me: [integer()]
         }
   def home_filter_members(viewer_id) when is_integer(viewer_id) do
     rows =
@@ -217,15 +220,19 @@ defmodule SukhiFedi.Lists do
           on: l.id == la.list_id,
           where:
             l.account_id == ^viewer_id and l.exclusive == false and
-              (l.filter_only_media or l.filter_hide_boosts or l.filter_hide_sensitive),
+              (l.filter_only_media or l.filter_hide_boosts or l.filter_hide_sensitive or
+                 l.filter_replies != "all"),
           select:
-            {la.account_id, l.filter_only_media, l.filter_hide_boosts, l.filter_hide_sensitive}
+            {la.account_id, l.filter_only_media, l.filter_hide_boosts, l.filter_hide_sensitive,
+             l.filter_replies}
       )
 
     %{
-      only_media: for({id, true, _, _} <- rows, do: id) |> Enum.uniq(),
-      hide_boosts: for({id, _, true, _} <- rows, do: id) |> Enum.uniq(),
-      hide_sensitive: for({id, _, _, true} <- rows, do: id) |> Enum.uniq()
+      only_media: for({id, true, _, _, _} <- rows, do: id) |> Enum.uniq(),
+      hide_boosts: for({id, _, true, _, _} <- rows, do: id) |> Enum.uniq(),
+      hide_sensitive: for({id, _, _, true, _} <- rows, do: id) |> Enum.uniq(),
+      hide_replies: for({id, _, _, _, "hide"} <- rows, do: id) |> Enum.uniq(),
+      replies_to_me: for({id, _, _, _, "to_me"} <- rows, do: id) |> Enum.uniq()
     }
   end
 

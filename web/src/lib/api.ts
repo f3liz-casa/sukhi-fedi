@@ -633,6 +633,9 @@ export async function reportAccount(accountId: string, input: ReportInput = {}):
 
 export type RepliesPolicy = 'list' | 'followed' | 'none';
 
+// ホームの返信の扱い: all=制限なし / hide=返信を出さない / to_me=自分宛の返信だけ。
+export type HomeReplies = 'all' | 'hide' | 'to_me';
+
 export type List = {
   id: string;
   title: string;
@@ -641,6 +644,8 @@ export type List = {
   filter_only_media: boolean;
   filter_hide_boosts: boolean;
   filter_hide_sensitive: boolean;
+  filter_keyword: string;
+  filter_replies: HomeReplies;
 };
 
 export type ListAttrs = {
@@ -650,6 +655,8 @@ export type ListAttrs = {
   filterOnlyMedia?: boolean;
   filterHideBoosts?: boolean;
   filterHideSensitive?: boolean;
+  filterKeyword?: string;
+  filterReplies?: HomeReplies;
 };
 
 // title 以外は省略可（サーバ既定に委ねる）。camelCase → snake_case はここで。
@@ -661,6 +668,8 @@ function listBody(attrs: ListAttrs): Record<string, unknown> {
   if (attrs.filterOnlyMedia !== undefined) body.filter_only_media = attrs.filterOnlyMedia;
   if (attrs.filterHideBoosts !== undefined) body.filter_hide_boosts = attrs.filterHideBoosts;
   if (attrs.filterHideSensitive !== undefined) body.filter_hide_sensitive = attrs.filterHideSensitive;
+  if (attrs.filterKeyword !== undefined) body.filter_keyword = attrs.filterKeyword;
+  if (attrs.filterReplies !== undefined) body.filter_replies = attrs.filterReplies;
   return body;
 }
 

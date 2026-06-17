@@ -12,6 +12,8 @@
     removeFromList,
     lookupAccount,
     type List,
+    type ListAttrs,
+    type HomeReplies,
     type Status,
     type Account,
     type Relationship
@@ -35,6 +37,9 @@
   // 表示フィルター（タイムラインと同じ。リストはブーストを混ぜないので RT 隠しは無し）。
   let onlyMedia = $state(false);
   let hideSensitive = $state(false);
+
+  // ホームに出す条件のうち、キーワード欄だけテキスト。list が読めたら同期する。
+  let keyword = $state('');
 
   // メンバー（<details> を開いたとき一度だけ読む）。
   let members = $state<Account[]>([]);
@@ -66,6 +71,7 @@
     error = null;
     try {
       list = await getList(id);
+      keyword = list.filter_keyword;
       const p = await fetchListTimeline(id, { onlyMedia, hideSensitive });
       items = p.items;
       nextMaxId = p.nextMaxId;
@@ -165,15 +171,14 @@
     void load();
   }
 
-  // このリストの「ホームでの絞り方」を更新する(リストの永続設定)。
-  async function setHomeFilter(
-    key: 'filterOnlyMedia' | 'filterHideBoosts' | 'filterHideSensitive',
-    value: boolean
-  ) {
+  // このリストの「ホームに出す条件」を更新する(リストの永続設定)。exclusive を
+  // 変えるとバッジ対象も変わるので circles を読み直す。
+  async function patchGate(attrs: ListAttrs) {
     try {
-      list = await updateList(id, { [key]: value });
+      list = await updateList(id, attrs);
+      void refreshCircles();
     } catch {
-      // 失敗時はそのまま(checkbox は list の値に描き戻る)。
+      // 失敗時はそのまま(UI は list の値に描き戻る)。
     }
   }
 </script>
@@ -187,34 +192,71 @@
   <p class="error timeline">{error}</p>
   <p class="timeline"><a class="chip" href="/lists">{$t('listDetail.toListIndex')}</a></p>
 {:else}
-  {#if list && !list.exclusive}
+  {#if list}
     <details class="timeline" style="margin-bottom: var(--space-4);">
-      <summary style="cursor: pointer;">{$t('listDetail.homeFilterTitle')}</summary>
-      <p class="prose-small">{$t('listDetail.homeFilterHint')}</p>
+      <summary style="cursor: pointer;">{$t('listDetail.homeGateTitle')}</summary>
+      <p class="prose-small">{$t('listDetail.homeGateHint')}</p>
+
+      <!-- 出さない(never): ゲートのいちばん端。選ぶと他の条件は効かない。 -->
       <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
         <input
           type="checkbox"
-          checked={list.filter_only_media}
-          onchange={(e) => setHomeFilter('filterOnlyMedia', e.currentTarget.checked)}
+          checked={list.exclusive}
+          onchange={(e) => patchGate({ exclusive: e.currentTarget.checked })}
         />
-        <span>{$t('timeline.onlyMedia')}</span>
+        <span>{$t('listDetail.gateNever')}</span>
       </label>
-      <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
-        <input
-          type="checkbox"
-          checked={list.filter_hide_boosts}
-          onchange={(e) => setHomeFilter('filterHideBoosts', e.currentTarget.checked)}
-        />
-        <span>{$t('timeline.hideBoosts')}</span>
-      </label>
-      <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
-        <input
-          type="checkbox"
-          checked={list.filter_hide_sensitive}
-          onchange={(e) => setHomeFilter('filterHideSensitive', e.currentTarget.checked)}
-        />
-        <span>{$t('timeline.hideSensitive')}</span>
-      </label>
+
+      {#if !list.exclusive}
+        <p class="prose-small" style="margin-top: var(--space-2);">{$t('listDetail.gateConditionsHint')}</p>
+        <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+          <input
+            type="checkbox"
+            checked={list.filter_only_media}
+            onchange={(e) => patchGate({ filterOnlyMedia: e.currentTarget.checked })}
+          />
+          <span>{$t('timeline.onlyMedia')}</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+          <input
+            type="checkbox"
+            checked={list.filter_hide_boosts}
+            onchange={(e) => patchGate({ filterHideBoosts: e.currentTarget.checked })}
+          />
+          <span>{$t('timeline.hideBoosts')}</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+          <input
+            type="checkbox"
+            checked={list.filter_hide_sensitive}
+            onchange={(e) => patchGate({ filterHideSensitive: e.currentTarget.checked })}
+          />
+          <span>{$t('timeline.hideSensitive')}</span>
+        </label>
+
+        <label style="display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+          <span>{$t('listDetail.gateKeyword')}</span>
+          <input
+            type="text"
+            bind:value={keyword}
+            placeholder={$t('listDetail.gateKeywordPlaceholder')}
+            onchange={() => patchGate({ filterKeyword: keyword.trim() })}
+            style="flex: 1; min-width: 8rem;"
+          />
+        </label>
+
+        <label style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0;">
+          <span>{$t('listDetail.gateReplies')}</span>
+          <select
+            value={list.filter_replies}
+            onchange={(e) => patchGate({ filterReplies: e.currentTarget.value as HomeReplies })}
+          >
+            <option value="all">{$t('listDetail.gateRepliesAll')}</option>
+            <option value="hide">{$t('listDetail.gateRepliesHide')}</option>
+            <option value="to_me">{$t('listDetail.gateRepliesToMe')}</option>
+          </select>
+        </label>
+      {/if}
     </details>
   {/if}
 
