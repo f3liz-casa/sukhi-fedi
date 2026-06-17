@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getLists, createList, updateList, deleteList, type List } from '$lib/api';
+  import { getLists, createList, deleteList, type List } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import { t } from '$lib/i18n';
   import { refreshCircles } from '$lib/circles';
@@ -10,8 +10,6 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let newTitle = $state('');
-  // 既定 ON: ここで作るのは主に「ホームに出さない」サークル用途だから。
-  let exclusive = $state(true);
   let creating = $state(false);
 
   onMount(() => {
@@ -45,7 +43,7 @@
     if (!title || creating) return;
     creating = true;
     try {
-      const l = await createList(title, { exclusive });
+      const l = await createList(title);
       lists = [...lists, l];
       newTitle = '';
     } catch {
@@ -66,18 +64,6 @@
     }
   }
 
-  // 既存リストの「ホームに出さない」を切替。成功で state を差し替え、失敗時は
-  // 何もしない（checkbox は l.exclusive に描き戻る）。バッジ対象も変わるので
-  // refreshCircles する。
-  async function toggleExclusive(l: List, value: boolean) {
-    try {
-      const updated = await updateList(l.id, { exclusive: value });
-      lists = lists.map((x) => (x.id === l.id ? updated : x));
-      void refreshCircles();
-    } catch {
-      // 失敗時はそのまま。
-    }
-  }
 </script>
 
 <header class="timeline page-head">
@@ -103,10 +89,6 @@
       />
       <button type="submit" class="btn px-6 py-2" disabled={creating || !newTitle.trim()}>{$t('lists.create')}</button>
     </div>
-    <label style="display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2);">
-      <input type="checkbox" bind:checked={exclusive} />
-      <span class="prose-small">{$t('lists.exclusiveLabel')}</span>
-    </label>
   </form>
 
   {#if error}
@@ -119,14 +101,6 @@
     {#each lists as l (l.id)}
       <article class="list-row">
         <a class="list-link" href={`/lists/${l.id}`}>{l.title}</a>
-        <label class="excl" title={$t('lists.exclusiveLabel')}>
-          <input
-            type="checkbox"
-            checked={l.exclusive}
-            onchange={(e) => toggleExclusive(l, e.currentTarget.checked)}
-          />
-          <span class="prose-small">{$t('lists.exclusiveShort')}</span>
-        </label>
         <button type="button" class="chip" onclick={() => remove(l)}>{$t('lists.delete')}</button>
       </article>
     {/each}
@@ -150,11 +124,5 @@
   }
   .list-link:hover {
     text-decoration: underline;
-  }
-  .excl {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    white-space: nowrap;
   }
 </style>

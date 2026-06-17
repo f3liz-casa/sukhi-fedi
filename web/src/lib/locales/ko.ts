@@ -406,8 +406,6 @@ export const ko: Dict = {
   'lists.empty': '아직 리스트가 없어요. 위에서 만들 수 있어요.',
   'lists.delete': '삭제',
   'lists.confirmDelete': '「{title}」를 삭제할까요?',
-  'lists.exclusiveLabel': '홈에 표시하지 않기 (서클로 사용)',
-  'lists.exclusiveShort': '홈에 표시 안 함',
   'lists.addTo': '리스트에 추가',
 
   // ── 리스트 안 ────────────────────────────────────────
