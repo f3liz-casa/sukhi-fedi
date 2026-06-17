@@ -80,6 +80,7 @@ export const ja = {
   'status.readArticle': '記事を読む',
   'status.imageZoom': '画像を拡大',
   'status.openAttachment': '添付ファイルを開く',
+  'status.viewOriginal': '元の投稿を開く',
   'status.close': '閉じる',
   'status.poll': '投票',
   'status.vote': '投票する',

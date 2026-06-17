@@ -83,6 +83,7 @@ export const ko: Dict = {
   'status.readArticle': '글 읽기',
   'status.imageZoom': '이미지 확대',
   'status.openAttachment': '첨부 파일 열기',
+  'status.viewOriginal': '원본 글 열기',
   'status.close': '닫기',
   'status.poll': '투표',
   'status.vote': '투표하기',

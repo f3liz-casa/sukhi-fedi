@@ -36,6 +36,9 @@
   let name = $derived(status.account.display_name || status.account.username);
   let avatar = $derived(status.account.avatar || null);
   let ts = $derived(formatTime(status.created_at, $t, $locale));
+  // リモートのアカウントは acct に「@ドメイン」が付く。そのときだけ
+  // 元の投稿（status.url）への入口を出す。ローカルは詳細ページが本物。
+  let isRemote = $derived(status.account.acct.includes('@'));
 
   // CW（spoiler）を開いているか。閉じている間は本文だけでなく添付も隠す。
   let cwOpen = $state(false);
@@ -126,6 +129,18 @@
       <a href={`/@${status.account.acct}`}>@{status.account.acct}</a>
       <span>·</span>
       <a class="timestamp" href={`/@${status.account.acct}/${status.id}`} title={status.created_at}>{ts}</a>
+      {#if isRemote && status.url}
+        <!-- リモートの投稿。元のサーバの本物へ、別タブでそっと開く入口。 -->
+        <a
+          class="orig"
+          href={status.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={$t('status.viewOriginal')}
+        >
+          <Twemoji emoji="↗️" />
+        </a>
+      {/if}
     </header>
 
     {#if status.spoiler_text}
@@ -243,6 +258,17 @@
   }
   .content :global(pre) {
     overflow-x: auto;
+  }
+
+  /* 元の投稿への入口。タイムスタンプの隣に、小さく薄く。主張しない。 */
+  .orig {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.55;
+    text-decoration: none;
+  }
+  .orig:hover {
+    opacity: 1;
   }
 
   .boost-by {

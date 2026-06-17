@@ -215,7 +215,31 @@ defmodule SukhiApi.Views.MastodonStatus do
     # keeps it — it never strips the body); since we render the card, we
     # drop the redundant tail. We only strip when the card is actually
     # there, so a quote we couldn't fetch keeps its one link.
-    if has_quote_card?(note), do: strip_quote_reference(html), else: html
+    html = if has_quote_card?(note), do: strip_quote_reference(html), else: html
+
+    localize_hashtags(html)
+  end
+
+  # Remote posts carry hashtag links that point back at the origin server
+  # (e.g. https://misskey.io/tags/foo). Repoint them at our own tag
+  # timeline so a tag stays inside this instance — the same thing Mastodon
+  # does on the way in. We key off rel="tag" (the hashtag marker) and reuse
+  # the existing /tags/<name> URL scheme our `tags` array already serves.
+  @anchor ~r{<a\b[^>]*>}i
+  @rel_tag ~r/rel="[^"]*\btag\b[^"]*"/i
+  @href ~r/href="([^"]*)"/i
+
+  defp localize_hashtags(html) do
+    Regex.replace(@anchor, html, fn open ->
+      with true <- Regex.match?(@rel_tag, open),
+           [href] <- Regex.run(@href, open, capture: :all_but_first) do
+        name = href |> String.split("/") |> List.last() |> URI.decode()
+        local = "https://#{SukhiApi.Config.domain!()}/tags/#{name}"
+        String.replace(open, ~s(href="#{href}"), ~s(href="#{local}"))
+      else
+        _ -> open
+      end
+    end)
   end
 
   defp has_quote_card?(note) do

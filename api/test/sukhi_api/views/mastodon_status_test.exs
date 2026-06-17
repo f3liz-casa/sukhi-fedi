@@ -99,6 +99,30 @@ defmodule SukhiApi.Views.MastodonStatusTest do
     end
   end
 
+  describe "remote hashtag links are repointed at our own tag timeline" do
+    test "a misskey.io tag link becomes a local /tags/ link, name and order kept" do
+      html =
+        ~s(<p>hi <a href="https://misskey.io/tags/抹茶にあーと" rel="tag">#抹茶にあーと</a></p>)
+
+      out = MastodonStatus.render(Map.put(note("public"), :content, html)).content
+      assert out =~ ~s(href="https://localhost:4000/tags/抹茶にあーと")
+      refute out =~ "misskey.io"
+      assert out =~ ">#抹茶にあーと</a>"
+    end
+
+    test "href before or after rel=\"tag\" both get rewritten" do
+      html = ~s(<p><a rel="tag" href="https://x.test/tags/foo">#foo</a></p>)
+      out = MastodonStatus.render(Map.put(note("public"), :content, html)).content
+      assert out =~ ~s(href="https://localhost:4000/tags/foo")
+    end
+
+    test "a plain (non-tag) link is left pointing where it was" do
+      html = ~s(<p>see <a href="https://example.test/doc">doc</a></p>)
+      out = MastodonStatus.render(Map.put(note("public"), :content, html)).content
+      assert out == html
+    end
+  end
+
   describe "boost wrapper renders as a reblog Status" do
     defp boost do
       %{
