@@ -349,6 +349,13 @@ defmodule SukhiFedi.Web.Router do
     serve_spa(conn)
   end
 
+  # ハッシュタグのタイムライン。本文中の #tag リンクと `tags` 配列の URL が
+  # ここを指す。`:tag` は SPA 側が URL から読む。直リンク / リロードでも
+  # shell を返せるよう、lists と同じく明示で足しておく。
+  get "/tags/:tag" do
+    serve_spa(conn)
+  end
+
   # PoW で守られる「通り道」。Anubis がこの path だけを challenge する。
   # 中身は SPA shell ─ JS で intent / next を読んで分岐する。
   get "/check" do
