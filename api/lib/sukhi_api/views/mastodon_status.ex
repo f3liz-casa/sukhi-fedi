@@ -207,7 +207,45 @@ defmodule SukhiApi.Views.MastodonStatus do
 
   defp render_content(note) do
     raw = Map.get(note, :content) || ""
-    if String.starts_with?(raw, "<"), do: raw, else: "<p>#{raw}</p>"
+    html = if String.starts_with?(raw, "<"), do: raw, else: "<p>#{raw}</p>"
+
+    # When we're showing the quoted post as a card (render_quote/1), a
+    # trailing "RE: <link>" in the body is the same reference twice over.
+    # Sharkey/Firefish/Fedibird append it for Mastodon's sake (Mastodon
+    # keeps it — it never strips the body); since we render the card, we
+    # drop the redundant tail. We only strip when the card is actually
+    # there, so a quote we couldn't fetch keeps its one link.
+    if has_quote_card?(note), do: strip_quote_reference(html), else: html
+  end
+
+  defp has_quote_card?(note) do
+    case Map.get(note, :quoted_note) do
+      %{} = quoted -> !!Map.get(quoted, :id)
+      _ -> false
+    end
+  end
+
+  # hackers.pub (Fedify) wraps the reference in <span class="quote-inline">,
+  # an explicit marker we can lift out whole. Sharkey/Firefish/Fedibird
+  # instead give a bare "RE:"/"QT:" label + link — the label is the strong
+  # signal it's a quote reference rather than a link the author meant to
+  # keep. Either way we only ever touch the very end of the body, in two
+  # shapes: the reference on its own paragraph, or tacked onto the last one.
+  @quote_patterns [
+    # hackers.pub span, on its own paragraph → drop the paragraph
+    {~r{\s*<p>\s*<span\b[^>]*\bquote-inline\b[^>]*>.*?</span>\s*</p>\s*\z}is, ""},
+    # hackers.pub span, tail of the last paragraph → keep the </p>
+    {~r{(?:<br\s*/?>\s*)*<span\b[^>]*\bquote-inline\b[^>]*>.*?</span>\s*</p>\s*\z}is, "</p>"},
+    # bare RE:/QT: label on its own paragraph
+    {~r{\s*<p>\s*(?:RE|QT):\s*<a\b[^>]*>.*?</a>\s*</p>\s*\z}is, ""},
+    # bare RE:/QT: label tacked onto the last paragraph after a <br>
+    {~r{(?:<br\s*/?>\s*)+(?:RE|QT):\s*<a\b[^>]*>.*?</a>\s*</p>\s*\z}is, "</p>"}
+  ]
+
+  defp strip_quote_reference(html) do
+    Enum.find_value(@quote_patterns, html, fn {re, replacement} ->
+      Regex.match?(re, html) && Regex.replace(re, html, replacement)
+    end)
   end
 
   defp render_account(note) do

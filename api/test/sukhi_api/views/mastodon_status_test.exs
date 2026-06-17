@@ -39,6 +39,66 @@ defmodule SukhiApi.Views.MastodonStatusTest do
     end
   end
 
+  describe "a redundant trailing \"RE:\" link is dropped once we show the quote card" do
+    defp quoted do
+      %{
+        id: 42,
+        content: "the original",
+        visibility: "public",
+        created_at: ~U[2021-01-01 00:00:00Z],
+        account: %{id: 9, username: "carol", display_name: "carol"}
+      }
+    end
+
+    defp with_quote(content) do
+      note("public")
+      |> Map.put(:content, content)
+      |> Map.put(:quote_of_ap_id, "https://remote.test/notes/42")
+      |> Map.put(:quoted_note, quoted())
+    end
+
+    test "hackers.pub's <span class=\"quote-inline\"> reference is lifted out whole" do
+      html =
+        ~s(<p>NLNet funding news</p>\n<p><span class="quote-inline"><br /><br />RE: <a href="https://hackers.pub/@drfed/019ed3c9">https://hackers.pub/@drfed/019ed3c9</a></span></p>)
+
+      assert MastodonStatus.render(with_quote(html)).content == "<p>NLNet funding news</p>"
+    end
+
+    test "the reference on its own paragraph goes away" do
+      html =
+        ~s(<p>look at this</p><p>RE: <a href="https://remote.test/notes/42">https://remote.test/notes/42</a></p>)
+
+      rendered = MastodonStatus.render(with_quote(html))
+      assert rendered.content == "<p>look at this</p>"
+      assert rendered.quote != nil
+    end
+
+    test "the reference tacked onto the last paragraph after a <br> goes away, keeping the text" do
+      html =
+        ~s(<p>look at this<br><br>RE: <a href="https://remote.test/notes/42">https://remote.test/notes/42</a></p>)
+
+      assert MastodonStatus.render(with_quote(html)).content == "<p>look at this</p>"
+    end
+
+    test "QT: is treated the same as RE:" do
+      html = ~s(<p>hi</p><p>QT: <a href="https://x.test/9">x</a></p>)
+      assert MastodonStatus.render(with_quote(html)).content == "<p>hi</p>"
+    end
+
+    test "a plain trailing link the author meant to keep is left alone" do
+      html = ~s(<p>see <a href="https://example.test/doc">the doc</a></p>)
+      assert MastodonStatus.render(with_quote(html)).content == html
+    end
+
+    test "without a resolved quote card, the RE: link is kept (it's the only reference)" do
+      html =
+        ~s(<p>hi</p><p>RE: <a href="https://remote.test/notes/42">https://remote.test/notes/42</a></p>)
+
+      note = Map.put(note("public"), :content, html)
+      assert MastodonStatus.render(note).content == html
+    end
+  end
+
   describe "boost wrapper renders as a reblog Status" do
     defp boost do
       %{
