@@ -532,19 +532,37 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   # ── DB helpers ───────────────────────────────────────────────────────────
 
+  # A genuinely-missing account (Repo.get → nil) or an unparseable id is
+  # structural → nil → :no_actor → ACK. But a transient DB error (Repo.get
+  # raising on a dropped connection) must NOT be swallowed to nil: that maps a
+  # retryable failure onto the permanent :no_actor path and silently drops the
+  # outbound activity for an account that really exists. So we no longer
+  # blanket-rescue — a DB exception bubbles to handle_event/2's try, which
+  # returns :crashed (transient → backoff + retry, never an instant ACK).
   defp actor_for(account_id) when is_integer(account_id) or is_binary(account_id) do
-    id = if is_binary(account_id), do: String.to_integer(account_id), else: account_id
-
-    case Repo.get(Account, id) do
+    case safe_account_id(account_id) do
       nil ->
         nil
 
-      %Account{username: u} ->
-        domain = SukhiDelivery.Config.domain!()
-        %{actor_uri: "https://#{domain}/users/#{u}", username: u}
+      id ->
+        case Repo.get(Account, id) do
+          nil ->
+            nil
+
+          %Account{username: u} ->
+            domain = SukhiDelivery.Config.domain!()
+            %{actor_uri: "https://#{domain}/users/#{u}", username: u}
+        end
     end
-  rescue
-    _ -> nil
+  end
+
+  defp safe_account_id(id) when is_integer(id), do: id
+
+  defp safe_account_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} -> n
+      _ -> nil
+    end
   end
 
   # Add the RSA private JWK + keyId every translator needs so the bun

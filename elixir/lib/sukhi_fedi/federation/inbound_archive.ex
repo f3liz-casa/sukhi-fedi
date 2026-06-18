@@ -40,21 +40,28 @@ defmodule SukhiFedi.Federation.InboundArchive do
   `inbox_kind` is `"shared"` or `"user"`.
   """
   @spec enqueue(binary(), map(), map(), String.t()) ::
-          {:ok, Oban.Job.t()} | {:error, term()}
+          {:ok, Oban.Job.t() | :archive_disabled} | {:error, term()}
   def enqueue(raw_body, raw_json, headers, inbox_kind)
       when is_binary(raw_body) and is_map(raw_json) do
-    %{
-      "raw_body" => raw_body,
-      "actor_uri" => extract_actor(raw_json),
-      "activity_type" => string_or_nil(raw_json["type"]),
-      "activity_id" => string_or_nil(raw_json["id"]),
-      "inbox" => inbox_kind,
-      "received_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "http_date" => headers["date"],
-      "digest" => headers["digest"]
-    }
-    |> __MODULE__.new()
-    |> then(&Oban.insert(SukhiFedi.Oban, &1))
+    if s3_enabled?() do
+      %{
+        "raw_body" => raw_body,
+        "actor_uri" => extract_actor(raw_json),
+        "activity_type" => string_or_nil(raw_json["type"]),
+        "activity_id" => string_or_nil(raw_json["id"]),
+        "inbox" => inbox_kind,
+        "received_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "http_date" => headers["date"],
+        "digest" => headers["digest"]
+      }
+      |> __MODULE__.new()
+      |> then(&Oban.insert(SukhiFedi.Oban, &1))
+    else
+      # No object store configured → archiving is a deliberate no-op. Don't
+      # enqueue a job that would only no-op; tell the caller it was skipped (an
+      # expected outcome, not a failure to warn about).
+      {:ok, :archive_disabled}
+    end
   end
 
   @impl Oban.Worker
