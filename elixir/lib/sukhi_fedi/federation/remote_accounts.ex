@@ -35,25 +35,41 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
          :ok <- check_expected_host(actor_uri, expected_uri),
          {:ok, username} <- fetch_username(actor_json),
          {:ok, domain} <- fetch_domain(actor_uri) do
-      attrs = %{
+      # Identity + freshness are always written; everything else is "mergeable"
+      # so a degraded or partial refetch (a remote mid-migration, a leaner Person
+      # from a different software version) can't null a good avatar, bio, inbox
+      # or signing key. A legitimate change still applies — we only *skip* a
+      # field when the fetched value is blank.
+      identity = %{
         actor_uri: actor_uri,
         username: username,
         domain: domain,
-        display_name: actor_json["name"] || username,
-        summary: actor_json["summary"] || "",
+        last_fetched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      }
+
+      mergeable = %{
+        display_name: actor_json["name"],
+        summary: actor_json["summary"],
         emojis: Emojis.from_tag(actor_json["tag"]),
         inbox_url: actor_json["inbox"],
         shared_inbox_url: shared_inbox(actor_json),
         public_key_id: get_in(actor_json, ["publicKey", "id"]),
         public_key_pem: get_in(actor_json, ["publicKey", "publicKeyPem"]),
         avatar_url: image_url(actor_json["icon"]),
-        banner_url: image_url(actor_json["image"]),
-        last_fetched_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        banner_url: image_url(actor_json["image"])
       }
 
       case Repo.get_by(Account, actor_uri: actor_uri) do
-        nil -> %Account{} |> Account.changeset_remote(attrs) |> Repo.insert()
-        %Account{} = existing -> existing |> Account.changeset_remote(attrs) |> Repo.update()
+        nil ->
+          # New row: blanks are fine; restore the historical defaults so a
+          # nameless actor still shows its handle and summary is "" not nil.
+          attrs = Map.merge(identity, insert_defaults(mergeable, username))
+          %Account{} |> Account.changeset_remote(attrs) |> Repo.insert()
+
+        %Account{} = existing ->
+          # Merge only the fields the fetched doc actually carries.
+          attrs = Map.merge(identity, present_only(mergeable))
+          existing |> Account.changeset_remote(attrs) |> Repo.update()
       end
     end
   end
@@ -120,4 +136,23 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
   defp image_url(%{"url" => url}) when is_binary(url), do: url
   defp image_url(url) when is_binary(url), do: url
   defp image_url(_), do: nil
+
+  # Keep only fields with a present value, so an update never clobbers a stored
+  # value with a blank one from a partial refetch.
+  defp present_only(map) do
+    map |> Enum.reject(fn {_k, v} -> blank?(v) end) |> Map.new()
+  end
+
+  defp blank?(nil), do: true
+  defp blank?(""), do: true
+  defp blank?([]), do: true
+  defp blank?(_), do: false
+
+  # On a brand-new shadow row there's nothing to preserve, so restore the
+  # original fallbacks: display_name → the handle, summary → "".
+  defp insert_defaults(mergeable, username) do
+    mergeable
+    |> Map.update!(:display_name, fn name -> name || username end)
+    |> Map.update!(:summary, fn summary -> summary || "" end)
+  end
 end

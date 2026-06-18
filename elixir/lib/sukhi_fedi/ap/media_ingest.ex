@@ -90,5 +90,9 @@ defmodule SukhiFedi.AP.MediaIngest do
   defp media_type("image/" <> _), do: "image"
   defp media_type("video/" <> _), do: "video"
   defp media_type("audio/" <> _), do: "audio"
-  defp media_type(_), do: nil
+  # A missing or non-AV mediaType (PDF, application/*, a bare attachment) used to
+  # return nil, which dropped the whole Media row (URL, alt text, dimensions) at
+  # materialisation. The schema accepts "unknown", so keep the attachment with a
+  # generic type rather than losing it.
+  defp media_type(_), do: "unknown"
 end

@@ -82,6 +82,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   @doc false
   def dispatch("sns.outbox.note.created", p), do: handle_note_created(p)
   def dispatch("sns.outbox.note.deleted", p), do: handle_note_deleted(p)
+  def dispatch("sns.outbox.vote.created", p), do: handle_vote(p)
   def dispatch("sns.outbox.dm.created", p), do: handle_dm(p)
   def dispatch("sns.outbox.follow.requested", p), do: handle_follow(p, :create)
   def dispatch("sns.outbox.follow.undone", p), do: handle_follow(p, :undo)
@@ -131,6 +132,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
           |> maybe_put_attachments(p["media"])
+          |> maybe_put_cw(p["cw"])
+          |> maybe_put_sensitive(p["sensitive"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -163,6 +166,40 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp handle_note_deleted(_), do: :missing_fields
+
+  # A local user voted on a remote poll. Send one Create(Note) ballot to the
+  # Question's author: a Note whose `name` is the chosen option and `inReplyTo`
+  # the Question, addressed to the author. The activity id is deterministic per
+  # (voter, poll, option) so re-sending the same choice is idempotent on the
+  # receiver.
+  defp handle_vote(
+         %{"account_id" => account_id, "question_ap_id" => question_ap_id, "name" => name} = p
+       )
+       when is_binary(question_ap_id) and is_binary(name) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipients = note_author_inbox(question_ap_id)
+        ballot_id = "#{actor_uri}/poll-votes/#{p["poll_id"]}-#{p["option_id"]}"
+        activity_id = "#{ballot_id}/activity"
+
+        payload = %{
+          actor: actor_uri,
+          noteId: ballot_id,
+          name: name,
+          inReplyTo: question_ap_id,
+          to: note_author_uri(question_ap_id),
+          activityId: activity_id,
+          recipientInboxes: recipients
+        }
+
+        translate_and_fanout("vote", payload, actor_uri, activity_id, recipients)
+    end
+  end
+
+  defp handle_vote(_), do: :missing_fields
 
   defp handle_dm(%{"account_id" => account_id, "note_id" => note_id} = p) do
     case actor_for(account_id) do
@@ -444,6 +481,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
           |> maybe_put_attachments(p["media"])
+          |> maybe_put_cw(p["cw"])
+          |> maybe_put_sensitive(p["sensitive"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -501,6 +540,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   # Bun translator results carry the payload under different keys per
   # type. Pick the right one — fall back to the whole result.
   defp extract_body(result, "note", _opts), do: Map.get(result, "note", result)
+  defp extract_body(result, "vote", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "dm", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "delete", _opts), do: Map.get(result, "delete", result)
   defp extract_body(result, "follow", _opts), do: Map.get(result, "follow", result)
@@ -532,19 +572,37 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   # ── DB helpers ───────────────────────────────────────────────────────────
 
+  # A genuinely-missing account (Repo.get → nil) or an unparseable id is
+  # structural → nil → :no_actor → ACK. But a transient DB error (Repo.get
+  # raising on a dropped connection) must NOT be swallowed to nil: that maps a
+  # retryable failure onto the permanent :no_actor path and silently drops the
+  # outbound activity for an account that really exists. So we no longer
+  # blanket-rescue — a DB exception bubbles to handle_event/2's try, which
+  # returns :crashed (transient → backoff + retry, never an instant ACK).
   defp actor_for(account_id) when is_integer(account_id) or is_binary(account_id) do
-    id = if is_binary(account_id), do: String.to_integer(account_id), else: account_id
-
-    case Repo.get(Account, id) do
+    case safe_account_id(account_id) do
       nil ->
         nil
 
-      %Account{username: u} ->
-        domain = SukhiDelivery.Config.domain!()
-        %{actor_uri: "https://#{domain}/users/#{u}", username: u}
+      id ->
+        case Repo.get(Account, id) do
+          nil ->
+            nil
+
+          %Account{username: u} ->
+            domain = SukhiDelivery.Config.domain!()
+            %{actor_uri: "https://#{domain}/users/#{u}", username: u}
+        end
     end
-  rescue
-    _ -> nil
+  end
+
+  defp safe_account_id(id) when is_integer(id), do: id
+
+  defp safe_account_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} -> n
+      _ -> nil
+    end
   end
 
   # Add the RSA private JWK + keyId every translator needs so the bun
@@ -660,6 +718,29 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   defp note_author_inbox(_), do: []
 
+  # The author's actor URI for a note URI (`<actor_uri>/notes/<id>`), used to
+  # address a poll-vote ballot `to` the Question's author. Same convention as
+  # note_author_inbox/1, minus the `/inbox` suffix. Returns [] when unparseable
+  # so the ballot is still built (best-effort addressing).
+  defp note_author_uri(note_ap_id) when is_binary(note_ap_id) do
+    case URI.parse(note_ap_id) do
+      %URI{scheme: scheme, host: host, path: path}
+      when is_binary(scheme) and is_binary(host) and is_binary(path) ->
+        actor_path =
+          path
+          |> String.split("/")
+          |> Enum.reverse()
+          |> Enum.drop(2)
+          |> Enum.reverse()
+          |> Enum.join("/")
+
+        if actor_path == "", do: [], else: ["#{scheme}://#{host}#{actor_path}"]
+
+      _ ->
+        []
+    end
+  end
+
   defp inbox_for_actor_uri(actor_uri) when is_binary(actor_uri) do
     if local_actor?(actor_uri) do
       # Local actor: skip the network hop, use convention.
@@ -713,6 +794,18 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp maybe_put_quote(payload, _), do: payload
+
+  # The content warning rides as AP `summary`; only send it when present.
+  defp maybe_put_cw(payload, cw) when is_binary(cw) and cw != "" do
+    Map.put(payload, :summary, cw)
+  end
+
+  defp maybe_put_cw(payload, _), do: payload
+
+  # `sensitive` defaults to absent (= not sensitive) on the wire, so only send
+  # the flag when it's actually set.
+  defp maybe_put_sensitive(payload, true), do: Map.put(payload, :sensitive, true)
+  defp maybe_put_sensitive(payload, _), do: payload
 
   # Media descriptors built gateway-side by `SukhiFedi.AP.MediaSerialize`
   # ride through the outbox event under `media`. The bun `note` / `dm`

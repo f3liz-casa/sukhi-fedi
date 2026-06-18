@@ -7,7 +7,7 @@ defmodule SukhiFedi.Integration.PollsTest do
   import Ecto.Query
 
   alias SukhiFedi.{Notes, Polls}
-  alias SukhiFedi.Schema.{Account, Note, Poll, PollOption}
+  alias SukhiFedi.Schema.{Account, Note, OutboxEvent, Poll, PollOption}
 
   describe "create_status with poll[…]" do
     test "JSON shape: poll: %{options, expires_in, multiple}" do
@@ -248,6 +248,74 @@ defmodule SukhiFedi.Integration.PollsTest do
                Polls.refresh_remote_poll_counts(note.id, %{
                  "oneOf" => [%{"name" => "A"}, %{"name" => "B"}]
                })
+    end
+  end
+
+  describe "vote/3 federates a remote-poll ballot and surfaces local votes" do
+    test "voting on a remote poll enqueues a Create(Note) ballot at the Question" do
+      voter = create_account!("voter_rp")
+      note = remote_note!("https://remote.example/users/pollster/notes/poll1")
+
+      :ok =
+        Polls.ingest_remote_poll(note.id, %{
+          "oneOf" => [
+            %{"name" => "Elixir", "replies" => %{"totalItems" => 2}},
+            %{"name" => "Rust", "replies" => %{"totalItems" => 5}}
+          ],
+          "votersCount" => 7
+        })
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+
+      assert :ok = Polls.vote(voter.id, pid, [0])
+
+      assert [%OutboxEvent{payload: payload}] =
+               Repo.all(from e in OutboxEvent, where: e.subject == "sns.outbox.vote.created")
+
+      assert payload["question_ap_id"] == note.ap_id
+      assert payload["name"] == "Elixir"
+      assert payload["account_id"] == voter.id
+    end
+
+    test "voting on a LOCAL poll enqueues no ballot (the author is us)" do
+      a = create_account!("author_lp")
+      voter = create_account!("voter_lp")
+
+      {:ok, note} =
+        Notes.create_status(a, %{"status" => "?", "poll" => %{"options" => ["x", "y"]}})
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+      assert :ok = Polls.vote(voter.id, pid, [0])
+
+      assert [] = Repo.all(from e in OutboxEvent, where: e.subject == "sns.outbox.vote.created")
+    end
+
+    test "stopgap: a remote poll's tally surfaces local votes the origin hasn't counted" do
+      v1 = create_account!("rp_v1")
+      v2 = create_account!("rp_v2")
+      note = remote_note!("https://remote.example/users/pollster/notes/poll2")
+
+      # Option "A" shows 0 at the origin; two local users vote it here.
+      :ok =
+        Polls.ingest_remote_poll(note.id, %{
+          "oneOf" => [
+            %{"name" => "A", "replies" => %{"totalItems" => 0}},
+            %{"name" => "B", "replies" => %{"totalItems" => 9}}
+          ],
+          "votersCount" => 9
+        })
+
+      [%Poll{id: pid}] = Repo.all(from p in Poll, where: p.note_id == ^note.id)
+      assert :ok = Polls.vote(v1.id, pid, [0])
+      assert :ok = Polls.vote(v2.id, pid, [0])
+
+      {:ok, ctx} = Polls.get_with_results(pid, v1.id)
+      opt_a = Enum.at(ctx.options, 0).id
+      opt_b = Enum.at(ctx.options, 1).id
+
+      # max(remote 0, local 2) = 2 for A; B keeps the origin's 9 (no local).
+      assert ctx.tallies[opt_a] == 2
+      assert ctx.tallies[opt_b] == 9
     end
   end
 

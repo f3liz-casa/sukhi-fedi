@@ -99,9 +99,14 @@ defmodule SukhiDelivery.Outbox.PullConsumer do
         {:ack, state}
 
       other ->
-        # Couldn't capture it — keep it in the workqueue rather than lose it.
-        Logger.warning("outbox DLQ publish failed (#{inspect(other)}); retrying: #{subject}")
-        {:nack, state}
+        # Couldn't capture it (rustfs/NATS wobble). A plain {:nack} redelivers
+        # instantly and would burn the remaining max_deliver budget in a blink,
+        # dropping the message un-dead-lettered. Back off with the same delayed
+        # NAK as the transient path so it survives in the workqueue until the DLQ
+        # is reachable again.
+        Logger.warning("outbox DLQ publish failed (#{inspect(other)}); backing off: #{subject}")
+        nack_after(message, backoff_ms(delivered_count(message.reply_to)))
+        {:noreply, state}
     end
   end
 

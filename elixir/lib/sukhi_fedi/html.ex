@@ -22,6 +22,20 @@ defmodule SukhiFedi.HTML do
   end
 
   def sanitize(other), do: other
+
+  @doc """
+  Escape plaintext for safe embedding in HTML. Local note content arrives as
+  plaintext (Mastodon's `status`), not markup — so escaping is the right move:
+  it keeps literal `<`/`&` intact (`x<y`, `List<String>`, `<iframe>`-as-words
+  all survive) while still neutralising any tag for the SPA's `{@html}` sink.
+  `sanitize/1`, by contrast, *drops* tag-shaped tokens, which silently deletes
+  that text — and there is no `source` column to recover it from. Use `escape/1`
+  for local input, `sanitize/1` for remote HTML. Non-binary values pass through
+  unchanged so this is safe in a changeset `update_change/3`.
+  """
+  @spec escape(term()) :: term()
+  def escape(text) when is_binary(text), do: Plug.HTML.html_escape(text)
+  def escape(other), do: other
 end
 
 defmodule SukhiFedi.HTML.Scrubber do

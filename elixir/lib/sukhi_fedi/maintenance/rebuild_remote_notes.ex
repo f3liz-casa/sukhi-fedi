@@ -149,6 +149,12 @@ defmodule SukhiFedi.Maintenance.RebuildRemoteNotes do
           quote_of_ap_id: old.quote_of_ap_id,
           conversation_ap_id: old.conversation_ap_id,
           mfm: old.mfm,
+          # Carry the Article title, NSFW flag and custom emoji across too —
+          # they're real, user-visible columns and dropping them on a re-mint
+          # loses them (the title in particular for hackers.pub long-form posts).
+          title: old.title,
+          sensitive: old.sensitive,
+          emojis: old.emojis,
           created_at: created_at,
           # carry locality over (this is a remote note); change/2 skips the
           # changeset's domain-from-ap_id derivation, so set it explicitly.

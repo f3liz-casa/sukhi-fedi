@@ -54,4 +54,22 @@ defmodule SukhiFedi.HTMLTest do
       assert HTML.sanitize(nil) == nil
     end
   end
+
+  describe "escape/1 keeps tag-shaped plaintext that sanitize would delete" do
+    test "math/inequalities and generics survive as literal text" do
+      # sanitize/1 drops `<y` / `<String>` as unknown tags; escape/1 keeps them.
+      assert HTML.escape("I love x<y in math") == "I love x&lt;y in math"
+      assert HTML.escape("generic List<String> in Java") == "generic List&lt;String&gt; in Java"
+    end
+
+    test "literal tag names written as words survive" do
+      assert HTML.escape("see <svg> and <iframe> demos") ==
+               "see &lt;svg&gt; and &lt;iframe&gt; demos"
+    end
+
+    test "ampersands are escaped; non-binaries pass through" do
+      assert HTML.escape("a & b") == "a &amp; b"
+      assert HTML.escape(nil) == nil
+    end
+  end
 end

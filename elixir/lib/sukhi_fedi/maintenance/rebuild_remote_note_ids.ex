@@ -150,9 +150,11 @@ defmodule SukhiFedi.Maintenance.RebuildRemoteNoteIds do
         """
         INSERT INTO notes
           (id, account_id, content, visibility, ap_id, created_at, cw,
-           in_reply_to_ap_id, conversation_ap_id, quote_of_ap_id, mfm, emojis)
+           in_reply_to_ap_id, conversation_ap_id, quote_of_ap_id, mfm, emojis,
+           domain, title, sensitive)
         SELECT $1, account_id, content, visibility, NULL, created_at, cw,
-           in_reply_to_ap_id, conversation_ap_id, quote_of_ap_id, mfm, emojis
+           in_reply_to_ap_id, conversation_ap_id, quote_of_ap_id, mfm, emojis,
+           domain, title, sensitive
         FROM notes WHERE id = $2
         """,
         [new_id, old.id]

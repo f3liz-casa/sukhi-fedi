@@ -157,14 +157,16 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
     with ap_id when is_binary(ap_id) <- Extract.extract_object_id(object),
          true <- Extract.same_host?(ap_id, actor_uri),
          %Note{} = note <- Repo.get_by(Note, ap_id: ap_id) do
-      attrs = %{
-        "content" => Extract.content_with_title(object),
-        "title" => Extract.article_title(object),
-        "cw" => Extract.content_warning(object),
-        "sensitive" => object["sensitive"] == true,
-        "emojis" => Emojis.from_tag(object["tag"]),
-        "mfm" => Extract.extract_mfm(object)
-      }
+      attrs =
+        %{
+          "content" => Extract.content_with_title(object),
+          "title" => Extract.article_title(object),
+          "cw" => Extract.content_warning(object),
+          "sensitive" => object["sensitive"] == true,
+          "emojis" => Emojis.from_tag(object["tag"]),
+          "mfm" => Extract.extract_mfm(object)
+        }
+        |> keep_existing_when_blank_body()
 
       case note |> Note.changeset(attrs) |> Repo.update() do
         {:ok, %Note{id: nid}} -> SukhiFedi.Tags.upsert_for_note(nid, object["content"])
@@ -176,6 +178,20 @@ defmodule SukhiFedi.AP.Instructions.Mirror do
   end
 
   def maybe_handle_update(_), do: :ok
+
+  # A remote Update with an empty/missing body must not wipe the stored post.
+  # content_with_title/1 returns "" when the object carries neither a body nor
+  # an Article name; in that case keep the previous content (and its folded
+  # title) rather than overwriting with blank. cw/sensitive/emojis/mfm are still
+  # rebuilt — clearing those is a legitimate edit; emptying the whole body is
+  # not, and the prior version lives only in this row + the archive.
+  defp keep_existing_when_blank_body(%{"content" => content} = attrs) do
+    if is_binary(content) and String.trim(content) != "" do
+      attrs
+    else
+      attrs |> Map.delete("content") |> Map.delete("title")
+    end
+  end
 
   # Best-effort: pull the reply parent and the quoted note so threading
   # (`in_reply_to_id`) and quote rendering resolve to local rows.

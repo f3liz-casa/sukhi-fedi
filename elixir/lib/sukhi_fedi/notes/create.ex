@@ -113,6 +113,11 @@ defmodule SukhiFedi.Notes.Create do
             account_id: n.account_id,
             visibility: n.visibility,
             content: n.content,
+            # The content warning and sensitive flag are set by the author but
+            # were never federated — remotes showed our CW'd / NSFW posts
+            # unwarned. Carry them through to the outbound builder.
+            cw: n.cw,
+            sensitive: n.sensitive,
             media: media,
             quote_of_ap_id: n.quote_of_ap_id,
             in_reply_to_ap_id: n.in_reply_to_ap_id

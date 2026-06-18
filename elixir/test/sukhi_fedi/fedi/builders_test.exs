@@ -62,6 +62,61 @@ defmodule SukhiFedi.Fedi.BuildersTest do
     refute Map.has_key?(doc, "name")
   end
 
+  test "note: carries the author's content warning and sensitive flag" do
+    object =
+      build!("note", %{
+        "actor" => FediGolden.actor(),
+        "content" => "<p>spoiler body</p>",
+        "summary" => "cw: spoilers",
+        "sensitive" => true,
+        "recipientInboxes" => [],
+        "noteId" => "https://sukhi.test/notes/2",
+        "activityId" => "https://sukhi.test/notes/2/activity"
+      })["note"]["object"]
+
+    assert object["summary"] == "cw: spoilers"
+    assert object["sensitive"] == true
+  end
+
+  test "note: omits summary/sensitive when the author set neither" do
+    object =
+      build!("note", %{
+        "actor" => FediGolden.actor(),
+        "content" => "<p>plain</p>",
+        "recipientInboxes" => [],
+        "noteId" => "https://sukhi.test/notes/3",
+        "activityId" => "https://sukhi.test/notes/3/activity"
+      })["note"]["object"]
+
+    refute Map.has_key?(object, "summary")
+    refute Map.has_key?(object, "sensitive")
+  end
+
+  test "vote: a Create(Note) ballot — name = option, inReplyTo = Question, to = author" do
+    result =
+      build!("vote", %{
+        "actor" => FediGolden.actor(),
+        "name" => "Option A",
+        "inReplyTo" => "https://remote.test/notes/poll1",
+        "to" => ["https://remote.test/users/pollster"],
+        "noteId" => "#{FediGolden.actor()}/poll-votes/5-7",
+        "activityId" => "#{FediGolden.actor()}/poll-votes/5-7/activity",
+        "recipientInboxes" => ["https://remote.test/users/pollster/inbox"]
+      })
+
+    assert result["recipientInboxes"] == ["https://remote.test/users/pollster/inbox"]
+    activity = result["note"]
+    assert activity["type"] == "Create"
+    assert activity["to"] == ["https://remote.test/users/pollster"]
+
+    object = activity["object"]
+    assert object["type"] == "Note"
+    assert object["name"] == "Option A"
+    assert object["inReplyTo"] == "https://remote.test/notes/poll1"
+    # A ballot carries no body.
+    refute Map.has_key?(object, "content")
+  end
+
   test "follow: LD signature round-trips through our verifier" do
     result =
       build!("follow", %{

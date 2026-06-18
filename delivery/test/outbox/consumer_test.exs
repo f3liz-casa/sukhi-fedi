@@ -59,6 +59,20 @@ defmodule SukhiDelivery.Outbox.ConsumerTest do
       assert :missing_account = Consumer.dispatch("sns.outbox.note.created", %{})
     end
 
+    test "note.created with a malformed account_id is structural (:no_actor), never a crash" do
+      # Old code ran String.to_integer/1 in actor_for/1, which raised on a
+      # non-numeric id → :crashed → an endless transient retry. A bad id is
+      # permanent, so it routes to the structural :no_actor path now (and never
+      # reaches the DB). The real win is the inverse: a transient DB error is no
+      # longer swallowed to :no_actor — it bubbles to :crashed and is retried.
+      assert :no_actor =
+               Consumer.dispatch("sns.outbox.note.created", %{"account_id" => "not-an-int"})
+    end
+
+    test "vote.created missing fields → :missing_fields (no crash, no DB)" do
+      assert :missing_fields = Consumer.dispatch("sns.outbox.vote.created", %{})
+    end
+
     test "note.deleted missing fields → :missing_fields" do
       assert :missing_fields = Consumer.dispatch("sns.outbox.note.deleted", %{})
     end

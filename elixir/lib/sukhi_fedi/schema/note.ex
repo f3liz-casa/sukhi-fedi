@@ -58,7 +58,7 @@ defmodule SukhiFedi.Schema.Note do
       :mfm,
       :emojis
     ])
-    |> update_change(:content, &SukhiFedi.HTML.sanitize/1)
+    |> sanitize_or_escape_content()
     |> put_domain()
     |> validate_required([:content, :account_id])
     # Cap content length (the only schema field that lacked one): bounds
@@ -69,6 +69,22 @@ defmodule SukhiFedi.Schema.Note do
     # cap silently dropped those — while still bounding multi-MB abuse.
     |> validate_length(:content, max: 100_000)
     |> validate_inclusion(:visibility, ["public", "followers", "direct"])
+  end
+
+  # Local notes arrive as plaintext (Mastodon's `status`); remote notes arrive
+  # as HTML (AP `content`). Escaping plaintext keeps `x<y` / `List<String>`
+  # intact, while the tag-dropping sanitizer would silently delete them — and
+  # there is no `source` column to recover from. Remote HTML still gets the
+  # allow-list sanitiser. We key off the *effective* ap_id host (via
+  # `local_ap_id?/1`) so this is correct on both insert and a remote Update
+  # (where ap_id is unchanged and `get_change/2` would read nil).
+  defp sanitize_or_escape_content(changeset) do
+    transform =
+      if local_ap_id?(changeset),
+        do: &SukhiFedi.HTML.escape/1,
+        else: &SukhiFedi.HTML.sanitize/1
+
+    update_change(changeset, :content, transform)
   end
 
   # Locality follows the ap_id host. A note created here inserts with no
@@ -82,11 +98,23 @@ defmodule SukhiFedi.Schema.Note do
 
       ap_id ->
         host = ap_id |> URI.parse() |> Map.get(:host)
-        # Config domain may carry a port (localhost:4000); URI host never
-        # does — compare host-to-host.
-        our_host = SukhiFedi.Config.domain!() |> String.split(":") |> hd()
-        local? = is_nil(host) or host == our_host
-        put_change(changeset, :domain, if(local?, do: nil, else: host))
+        put_change(changeset, :domain, if(our_host?(host), do: nil, else: host))
     end
+  end
+
+  # True when the note is locally authored: no ap_id yet (fresh local insert,
+  # stamped post-insert) or an ap_id under our own domain.
+  defp local_ap_id?(changeset) do
+    case get_field(changeset, :ap_id) do
+      nil -> true
+      ap_id -> ap_id |> URI.parse() |> Map.get(:host) |> our_host?()
+    end
+  end
+
+  # Config domain may carry a port (localhost:4000); a URI host never does —
+  # compare host-to-host. A nil host (relative/blank ap_id) counts as ours.
+  defp our_host?(host) do
+    our = SukhiFedi.Config.domain!() |> String.split(":") |> hd()
+    is_nil(host) or host == our
   end
 end

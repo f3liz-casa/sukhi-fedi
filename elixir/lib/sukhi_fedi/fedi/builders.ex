@@ -54,6 +54,7 @@ defmodule SukhiFedi.Fedi.Builders do
   """
   @spec build(String.t(), map()) :: {:ok, map()} | {:error, String.t()}
   def build("note", p), do: note(p)
+  def build("vote", p), do: vote(p)
   def build("dm", p), do: dm(p)
   def build("follow", p), do: follow(p)
   def build("announce", p), do: announce(p)
@@ -81,6 +82,10 @@ defmodule SukhiFedi.Fedi.Builders do
         "cc" => audience.cc
       }
       |> put_if("inReplyTo", p["inReplyToId"])
+      # The author's content warning (AP `summary`) and sensitive flag were
+      # never carried before, so remotes rendered CW'd / NSFW posts unwarned.
+      |> put_if("summary", p["summary"])
+      |> put_if("sensitive", p["sensitive"])
 
     activity = wrap_create(p, object, audience)
 
@@ -92,6 +97,34 @@ defmodule SukhiFedi.Fedi.Builders do
            |> inject_attachments(p["attachments"]),
          {:ok, proved} <- attach_proof(injected, p) do
       {:ok, %{"note" => proved, "recipientInboxes" => p["recipientInboxes"]}}
+    end
+  end
+
+  # A poll vote rides as a Create(Note) ballot: a tiny Note whose `name` is the
+  # chosen option and whose `inReplyTo` is the remote Question, addressed `to`
+  # the poll's author. No content, no cc — this is the Mastodon vote shape.
+  defp vote(p) do
+    object = %{
+      "id" => p["noteId"],
+      "type" => "Note",
+      "attributedTo" => p["actor"],
+      "name" => p["name"],
+      "inReplyTo" => p["inReplyTo"],
+      "to" => p["to"],
+      "published" => now()
+    }
+
+    activity = %{
+      "@context" => @context,
+      "id" => p["activityId"],
+      "type" => "Create",
+      "actor" => p["actor"],
+      "to" => p["to"],
+      "object" => object
+    }
+
+    with {:ok, signed} <- sign_and_prove(p, activity) do
+      {:ok, %{"note" => signed, "recipientInboxes" => p["recipientInboxes"]}}
     end
   end
 

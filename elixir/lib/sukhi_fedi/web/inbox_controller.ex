@@ -152,8 +152,24 @@ defmodule SukhiFedi.Web.InboxController do
 
   defp maybe_archive_inbound(raw_body, raw_json, headers, conn) when is_map(raw_json) do
     inbox_kind = if conn.path_params["name"], do: "user", else: "shared"
-    SukhiFedi.Federation.InboundArchive.enqueue(raw_body, raw_json, headers, inbox_kind)
-    :ok
+
+    case SukhiFedi.Federation.InboundArchive.enqueue(raw_body, raw_json, headers, inbox_kind) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} ->
+        # The archive is the system of record for replay/rebuild. If we can't
+        # even enqueue the job, this activity is about to be materialised and
+        # answered 202 with no durable raw copy — make that loud rather than
+        # swallowing it (the comment "archive before parse" only guards a parse
+        # failure, not an enqueue failure).
+        Logger.warning(
+          "inbound archive enqueue failed (#{inspect(reason)}); activity processed " <>
+            "but NOT archived: #{inspect(raw_json["id"])}"
+        )
+
+        :ok
+    end
   end
 
   defp maybe_archive_inbound(_raw_body, _raw_json, _headers, _conn), do: :ok

@@ -27,8 +27,11 @@ defmodule SukhiDelivery.Delivery.FollowerSyncWorker do
            receive_timeout: 10_000
          ) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
-        items = Map.get(body, "items") || Map.get(body, "orderedItems") || []
-        {:ok, items}
+        # Only an inline item list is authoritative. A paginated collection
+        # (items under `first`/`next`) inlines nothing; coercing that to [] would
+        # make reconcile wipe every local follow edge to this remote. So a
+        # non-inline body becomes a transient error → Oban retries, no reconcile.
+        FollowersSync.items_from_body(body)
 
       {:ok, %{status: status}} ->
         {:error, "unexpected status #{status}"}

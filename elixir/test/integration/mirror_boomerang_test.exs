@@ -143,6 +143,43 @@ defmodule SukhiFedi.Integration.MirrorBoomerangTest do
     end
   end
 
+  describe "maybe_handle_update/1 — Update(Note/Article) edit" do
+    test "an empty body does not wipe the stored post" do
+      {note, _author} = remote_poll_note!("https://remote.example/notes/edit1")
+
+      update = %{
+        "type" => "Update",
+        "actor" => "https://remote.example/users/rq",
+        "object" => %{
+          "type" => "Note",
+          "id" => "https://remote.example/notes/edit1",
+          "content" => ""
+        }
+      }
+
+      assert :ok = Mirror.maybe_handle_update(update)
+      assert %Note{content: "q"} = Repo.get(Note, note.id)
+    end
+
+    test "a non-empty edit still replaces the body" do
+      {note, _author} = remote_poll_note!("https://remote.example/notes/edit2")
+
+      update = %{
+        "type" => "Update",
+        "actor" => "https://remote.example/users/rq",
+        "object" => %{
+          "type" => "Note",
+          "id" => "https://remote.example/notes/edit2",
+          "content" => "<p>edited</p>"
+        }
+      }
+
+      assert :ok = Mirror.maybe_handle_update(update)
+      assert %Note{content: content} = Repo.get(Note, note.id)
+      assert content =~ "edited"
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()

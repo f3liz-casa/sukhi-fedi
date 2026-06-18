@@ -157,7 +157,12 @@ defmodule SukhiFedi.AP.Instructions.DMs do
       "sensitive" => object["sensitive"] == true,
       "emojis" => Emojis.from_tag(object["tag"]),
       "conversation_ap_id" => conversation_ap_id,
-      "in_reply_to_ap_id" => Extract.extract_uri(object["inReplyTo"])
+      "in_reply_to_ap_id" => Extract.extract_uri(object["inReplyTo"]),
+      # A DM can carry Misskey MFM source and a quote target just like a public
+      # note; the columns exist, so keep them rather than collapsing the DM to
+      # rendered HTML only (mirror.ex does the same for public notes).
+      "quote_of_ap_id" => Extract.extract_quote_uri(object),
+      "mfm" => Extract.extract_mfm(object)
     }
 
     %Note{}
