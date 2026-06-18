@@ -23,7 +23,11 @@ defmodule SukhiFedi.Auth.Passkeys do
   alias SukhiFedi.Schema.{Account, WebauthnChallenge, WebauthnCredential}
 
   @challenge_ttl_seconds 300
-  @nickname_max 50
+  # Bound storage/abuse, but generously: a real device label ("Bob's iPhone 15
+  # Pro") is far shorter, and there's no rename endpoint, so a tight 50-char cap
+  # silently ate the tail of a longer label with no way to fix it. Stay under the
+  # varchar(255) column.
+  @nickname_max 200
 
   # ── registration (signed-in) ─────────────────────────────────────────────
 
