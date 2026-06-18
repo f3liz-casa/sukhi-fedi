@@ -68,7 +68,7 @@ defmodule SukhiFedi.Timelines do
 
     # Accounts the viewer has blocked or muted drop out of their own home
     # feed (and its boosts).
-    hidden = Moderation.blocked_target_ids(id) ++ Moderation.muted_target_ids(id)
+    hidden = Moderation.hidden_author_ids(id)
 
     note_account_ids = [id | following_account_ids -- hidden]
     boost_account_ids = [id | following_account_ids -- excluded -- pl.hide_boosts -- hidden]
@@ -142,6 +142,13 @@ defmodule SukhiFedi.Timelines do
   # leak into the home feed via someone else's boost. Paged in the same
   # id space as notes (see `@snowflake_epoch_ms`).
   defp home_boosts(account_ids, opts, limit, viewer_id) do
+    # A boost carries its boosted note's author into the feed too, so drop
+    # boosts of anyone the viewer has muted or blocked — the same authors
+    # whose own notes are already hidden. (A muted *booster* is filtered
+    # upstream via `account_ids`; this closes the other door, where someone
+    # the viewer follows boosts a muted account's post.)
+    hidden = Moderation.hidden_author_ids(viewer_id)
+
     rows =
       from(b in Boost,
         join: n in Note,
@@ -149,6 +156,7 @@ defmodule SukhiFedi.Timelines do
         join: ba in Account,
         on: ba.id == b.account_id,
         where: b.account_id in ^account_ids,
+        where: n.account_id not in ^hidden,
         where: n.visibility in ["public", "unlisted"],
         order_by: [desc: b.created_at],
         limit: ^limit,

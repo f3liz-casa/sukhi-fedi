@@ -68,6 +68,17 @@ defmodule SukhiFedi.Addons.Moderation do
     )
   end
 
+  @doc """
+  Account ids whose content a viewer should never see — everyone they've
+  blocked or muted. This is the one place that says "hidden from a viewer";
+  timelines hide both these authors' own notes and their notes surfaced by
+  someone else's boost. `nil` (an anonymous viewer) hides no one.
+  """
+  def hidden_author_ids(nil), do: []
+
+  def hidden_author_ids(account_id) when is_integer(account_id),
+    do: blocked_target_ids(account_id) ++ muted_target_ids(account_id)
+
   @doc "Subset of `target_ids` that have blocked `account_id` (reverse blocks)."
   def blocked_by_ids(account_id, target_ids) when is_integer(account_id) and is_list(target_ids) do
     Repo.all(
