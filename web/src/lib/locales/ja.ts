@@ -36,15 +36,16 @@ export const ja = {
   'nav.logout': 'ログアウト',
 
   // ── 表のページ ───────────────────────────────────────
-  'landing.heroTitle': 'ここは、しずかな Fediverse のお家です。',
+  'landing.heroTitle': 'ここは、sukhiという、小さなお星さまです。',
   'landing.tagline':
-    'すぐとなりに、ちょこんとすわって、人の話をきいたり、ときどき、自分のことを言ったりする場所。',
+    'すぐとなりに、ちょこんとすわって、人の話をきいたり、ときどき、自分のことを言ったりする場所。<br>Misskeyや、Mastodonなど、<span class="nobr">ほかのお星さまたちとも、つながっています。</span>',
   'landing.startTitle': 'はじめる',
-  'landing.startDesc': '招待コードを持っていれば、ここで作れます。',
+  'landing.startDesc':
+    '招待コードがあれば、ここでアカウントを作れます。コードは、もう住んでいる人にお願いするともらえます。',
   'landing.enterTitle': '入る',
-  'landing.enterDesc': 'もう住んでいる人は、こちらから。',
+  'landing.enterDesc': 'もう住んでいる人は、おかえりなさい。こちらからどうぞ。',
   'landing.about':
-    'sukhi-fedi は、ActivityPub に話せる Fediverse のサーバ。Mastodon や Misskey とつながっています。ここで作ったアカウントから、遠くの人の言葉をきいて、近くにいる人と話せます。',
+    'sukhi-fedi は、連合宇宙という、世界じゅうのサーバがゆるくつながったネットワークの中の、小さなお星さまです。Mastodon や Misskey の人たちともつながっています。ここでアカウントを作れば、遠くの人の言葉に耳をすませたり、近くの人と話したりできます。',
 
   // ── 書くところ ───────────────────────────────────────
   'compose.visPublic': 'みんなに',
@@ -155,20 +156,15 @@ export const ja = {
   'signup.handle': 'ハンドル',
   'signup.handleTitle': '小文字英字、数字、アンダースコアだけ。30字まで。',
   'signup.handleHelpPre': 'みんなに見える、あなたの名前。あとからは変えられません。小文字英字・数字・_（アンダースコア）、30字まで。例: ',
-  'signup.password': 'あいことば',
-  'signup.passwordHelp': '8字以上。',
   'signup.inviteCode': '招待コード',
   'signup.email': 'メールアドレス',
   'signup.emailHelp': '入り口になるアドレスです。6 桁の確認コードは、次の画面で入れてもらいます。',
-  'signup.passwordLegacy': 'あいことばも設定する（レガシー・任意）',
-  'signup.passwordOptionalHelp':
-    '入力しなければ、メールだけで入るアカウントになります。設定するなら 8 字以上。',
-  'signup.draftRestored': 'つづきからどうぞ。あいことばを付けたい場合は、もう一度入れてください。',
-  'signup.agreePre': '',
+  'signup.draftRestored': 'つづきからどうぞ。',
+  'signup.readFirst':
+    'ようこそ！<br>ここは、連合宇宙と呼ばれるネットワークの中、sukhiと呼ばれる小さなお星さまです。<br>ゆっくり座っていってください。<br>大事な言葉を、{link}に書いておきました。<br>ひと目見て、共にいてみたい、って思ってくだされば、うれしいです。',
   'signup.termsLink': '利用規約',
-  'signup.agreeMid': 'と',
   'signup.privacyLink': 'プライバシーポリシー',
-  'signup.agreePost': 'に同意します',
+  'signup.agree': '{terms}と{privacy}に同意します',
   'signup.create': '作る',
   'signup.haveAccountPre': 'すでに住んでいる人は、',
   'signup.haveAccountLink': 'こちらから入れます',

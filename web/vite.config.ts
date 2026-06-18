@@ -17,6 +17,10 @@ export default defineConfig({
       '/login': { target: 'http://localhost:4000', bypass: getToSpa },
       '/settings/password': { target: 'http://localhost:4000', bypass: getToSpa },
       '/logout': 'http://localhost:4000',
+      // 利用規約・プライバシーは Elixir 側の静的ページ。signup の「部屋」が
+      // /terms/body を fetch するので、dev でも :4000 へ流す。
+      '/terms': 'http://localhost:4000',
+      '/privacy': 'http://localhost:4000',
       '/.well-known': 'http://localhost:4000'
     }
   }

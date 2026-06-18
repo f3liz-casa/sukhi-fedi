@@ -20,7 +20,7 @@
 <section class="hero">
   <h1>{$t('landing.heroTitle')}</h1>
   <p class="tagline">
-    {$t('landing.tagline')}
+    {@html $t('landing.tagline')}
   </p>
 </section>
 
@@ -48,4 +48,16 @@
 <section class="section" style="text-align: center;">
   <LangSwitch />
 </section>
+
+<style>
+  /* 行をならす(一文目向け)。二文目の末尾は <span class="nobr"> でひと固まりに
+     して、「つながっています。」だけが取り残されないよう、折り返しを手前に
+     寄せる。nobr は {@html} で注入されるので :global で当てる。 */
+  .tagline {
+    text-wrap: balance;
+  }
+  .tagline :global(.nobr) {
+    white-space: nowrap;
+  }
+</style>
 

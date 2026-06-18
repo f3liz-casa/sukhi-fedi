@@ -39,15 +39,16 @@ export const ko: Dict = {
   'nav.logout': '로그아웃',
 
   // ── 첫 페이지 ────────────────────────────────────────
-  'landing.heroTitle': '여기는 조용한 Fediverse 의 집이에요.',
+  'landing.heroTitle': '여기는 sukhi라는, 작은 별이에요.',
   'landing.tagline':
-    '바로 옆에 살며시 앉아서 다른 사람의 이야기를 듣기도 하고, 가끔 자기 이야기를 하기도 하는 곳.',
+    '바로 옆에 살며시 앉아서 다른 사람의 이야기를 듣기도 하고, 가끔 자기 이야기를 하기도 하는 곳.<br>Mastodon이나 Misskey 등, <span class="nobr">다른 별들과도 이어져 있어요.</span>',
   'landing.startTitle': '시작하기',
-  'landing.startDesc': '초대 코드가 있으면 여기서 만들 수 있어요.',
+  'landing.startDesc':
+    '초대 코드가 있으면 여기서 계정을 만들 수 있어요. 코드는 이미 살고 있는 사람에게 부탁하면 받을 수 있어요.',
   'landing.enterTitle': '들어가기',
-  'landing.enterDesc': '이미 살고 있는 분은 이쪽에서.',
+  'landing.enterDesc': '이미 살고 있는 분은, 어서 오세요. 이쪽에서 들어오세요.',
   'landing.about':
-    'sukhi-fedi 는 ActivityPub 로 이야기하는 Fediverse 서버예요. Mastodon 이나 Misskey 와 이어져 있어요. 여기서 만든 계정으로 멀리 있는 사람의 말을 듣고, 가까이 있는 사람과 이야기할 수 있어요.',
+    'sukhi-fedi 는 연합 우주라는, 전 세계의 서버가 느슨하게 이어진 네트워크 속의 작은 별이에요. Mastodon 이나 Misskey 사람들과도 이어져 있어요. 여기서 계정을 만들면, 멀리 있는 사람의 말에 귀를 기울이거나 가까이 있는 사람과 이야기할 수 있어요.',
 
   // ── 쓰는 곳 ──────────────────────────────────────────
   'compose.visPublic': '모두에게',
@@ -158,20 +159,15 @@ export const ko: Dict = {
   'signup.handle': '핸들',
   'signup.handleTitle': '소문자 영문, 숫자, 밑줄만. 30자까지.',
   'signup.handleHelpPre': '모두에게 보이는, 당신의 이름. 나중에는 바꿀 수 없어요. 소문자 영문·숫자·_(밑줄), 30자까지. 예: ',
-  'signup.password': '비밀번호',
-  'signup.passwordHelp': '8자 이상.',
   'signup.inviteCode': '초대 코드',
   'signup.email': '메일 주소',
   'signup.emailHelp': '입구가 되는 주소예요. 6자리 확인 코드는 다음 화면에서 입력해요.',
-  'signup.passwordLegacy': '비밀번호도 설정하기 (레거시・선택)',
-  'signup.passwordOptionalHelp':
-    '입력하지 않으면 메일만으로 들어가는 계정이 돼요. 설정한다면 8자 이상.',
-  'signup.draftRestored': '이어서 하시면 돼요. 비밀번호를 붙이고 싶으면 다시 입력해 주세요.',
-  'signup.agreePre': '',
+  'signup.draftRestored': '이어서 하시면 돼요.',
+  'signup.readFirst':
+    '환영해요!<br>여기는 연합 우주라고 불리는 네트워크 속, sukhi라는 작은 행성이에요.<br>천천히 앉았다가 가주세요.<br>소중한 말을 "{link}"에 적어 두었어요.<br>한번 보시고, 함께 있고 싶다는 마음이 드셨다면 계정을 생성해 주세요.',
   'signup.termsLink': '이용약관',
-  'signup.agreeMid': '과 ',
   'signup.privacyLink': '개인정보 처리방침',
-  'signup.agreePost': '에 동의해요',
+  'signup.agree': '{terms}과 {privacy}에 동의해요',
   'signup.create': '만들기',
   'signup.haveAccountPre': '이미 살고 있는 분은 ',
   'signup.haveAccountLink': '이쪽에서 들어올 수 있어요',

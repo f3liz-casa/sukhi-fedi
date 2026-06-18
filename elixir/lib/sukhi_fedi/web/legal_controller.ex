@@ -83,6 +83,10 @@ defmodule SukhiFedi.Web.LegalController do
   .legal pre code { background: none; padding: 0; }
   .foot { padding: 1.5rem 1.25rem 3rem; border-top: 1px solid #e3e3e3; font-size: .9rem; color: #888; }
   .foot a { color: #666; margin-right: .6rem; }
+  .cta { max-width: 720px; margin: 0 auto; padding: .5rem 1.25rem 1rem; text-align: center; }
+  .cta-btn { display: inline-block; padding: .65rem 1.9rem; border: 1px solid #b6b4a4; border-radius: 8px;
+    color: #222; text-decoration: none; font-size: 1rem; }
+  .cta-btn:hover { background: #f0f0f0; }
   @media (prefers-color-scheme: dark) {
     body { color: #dcdde0; background: #16181c; }
     .legal a { color: #7aa2f7; }
@@ -92,17 +96,24 @@ defmodule SukhiFedi.Web.LegalController do
     .legal blockquote { color: #aab; background: #1c2027; border-left-color: #3a4150; }
     .legal pre, .legal code { background: #20242c; }
     .nav a, .foot, .foot a { color: #8b8f99; }
+    .cta-btn { color: #dcdde0; border-color: #3a4150; }
+    .cta-btn:hover { background: #20242c; }
   }
   """
+
+  # `?signup=true` ── 加入の途中から見に来た人。一番下に「読みました」を
+  # 出して /signup に戻れるようにする(誘い→読む→戻る、の流れ)。規約と
+  # プライバシーは行き来できるので、両方が signup を受ける。
+  defp signup?(conn), do: match?(%{"signup" => "true"}, conn.query_params)
 
   @spec privacy(Plug.Conn.t()) :: Plug.Conn.t()
   def privacy(conn) do
     case lang(conn) do
       "ko" ->
-        render(conn, "ko", "개인정보 처리방침", @privacy_ko, "/privacy", {"이용약관", "/terms?lang=ko"})
+        render(conn, "ko", "개인정보 처리방침", @privacy_ko, "/privacy", {"이용약관", "/terms"}, signup?(conn))
 
       _ ->
-        render(conn, "ja", "個人情報の取り扱いについて", @privacy_ja, "/privacy", {"利用規約", "/terms"})
+        render(conn, "ja", "個人情報の取り扱いについて", @privacy_ja, "/privacy", {"利用規約", "/terms"}, signup?(conn))
     end
   end
 
@@ -110,10 +121,10 @@ defmodule SukhiFedi.Web.LegalController do
   def terms(conn) do
     case lang(conn) do
       "ko" ->
-        render(conn, "ko", "이용약관", @terms_ko, "/terms", {"개인정보 처리방침", "/privacy?lang=ko"})
+        render(conn, "ko", "이용약관", @terms_ko, "/terms", {"개인정보 처리방침", "/privacy"}, signup?(conn))
 
       _ ->
-        render(conn, "ja", "利用規約", @terms_ja, "/terms", {"プライバシーポリシー", "/privacy"})
+        render(conn, "ja", "利用規約", @terms_ja, "/terms", {"プライバシーポリシー", "/privacy"}, signup?(conn))
     end
   end
 
@@ -124,14 +135,38 @@ defmodule SukhiFedi.Web.LegalController do
     end
   end
 
+  # Join a path with the non-nil query parts, in order. [] -> bare path.
+  defp query_url(path, parts) do
+    case Enum.reject(parts, &is_nil/1) do
+      [] -> path
+      qs -> path <> "?" <> Enum.join(qs, "&")
+    end
+  end
+
   # Build the self-contained page at runtime: pick the baked body, wrap a
   # tiny chrome (home, the other doc in the same language, a language
-  # toggle). Pure string work — cannot fail.
-  defp render(conn, lang, title, body, self_path, {cross_label, cross_href}) do
-    {home, toggle_label, toggle_href} =
+  # toggle). Pure string work — cannot fail. `signup?` adds a "read it"
+  # button at the bottom that returns to /signup, and keeps the signup flag
+  # on the cross-link and the language toggle so neither loses the way back.
+  defp render(conn, lang, title, body, self_path, {cross_label, cross_path}, signup?) do
+    sq = if signup?, do: "signup=true", else: nil
+    lang_q = if lang == "ko", do: "lang=ko", else: nil
+
+    {home, toggle_label, toggle_lang} =
       if lang == "ko",
-        do: {"처음으로", "日本語", self_path},
-        else: {"トップへ", "한국어", self_path <> "?lang=ko"}
+        do: {"처음으로", "日本語", nil},
+        else: {"トップへ", "한국어", "lang=ko"}
+
+    toggle_href = query_url(self_path, [sq, toggle_lang])
+    cross_href = query_url(cross_path, [sq, lang_q])
+
+    cta =
+      if signup? do
+        label = if lang == "ko", do: "읽었어요", else: "読みました"
+        ~s(<div class="cta"><a class="cta-btn" href="/signup">#{label}</a></div>)
+      else
+        ""
+      end
 
     font = if lang == "ko", do: @font_ko, else: @font_ja
 
@@ -148,6 +183,7 @@ defmodule SukhiFedi.Web.LegalController do
     <body>
     <nav class="nav"><a href="/">← #{home}</a><a href="#{cross_href}">#{cross_label}</a><a href="#{toggle_href}">#{toggle_label}</a></nav>
     <main class="legal">#{body}</main>
+    #{cta}
     <footer class="foot"><a href="#{cross_href}">#{cross_label}</a><a href="#{toggle_href}">#{toggle_label}</a><a href="/">#{home}</a></footer>
     </body>
     </html>
