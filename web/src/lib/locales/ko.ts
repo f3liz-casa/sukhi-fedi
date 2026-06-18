@@ -41,7 +41,7 @@ export const ko: Dict = {
   // ── 첫 페이지 ────────────────────────────────────────
   'landing.heroTitle': '여기는 sukhi라는, 작은 별이에요.',
   'landing.tagline':
-    '바로 옆에 살며시 앉아서 다른 사람의 이야기를 듣기도 하고, 가끔 자기 이야기를 하기도 하는 곳.<br>Mastodon이나 Misskey 등, <span class="nobr">다른 별들과도 이어져 있어요.</span>',
+    '바로 옆에 살며시 앉아서 다른 사람의 이야기를 듣기도 하고, 가끔 자기 이야기를 하기도 하는 곳.<br>Mastodon이나 Misskey 등, 다른 별들과도 이어져 있어요.',
   'landing.startTitle': '시작하기',
   'landing.startDesc':
     '초대 코드가 있으면 여기서 계정을 만들 수 있어요. 코드는 이미 살고 있는 사람에게 부탁하면 받을 수 있어요.',

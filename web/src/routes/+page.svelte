@@ -50,14 +50,10 @@
 </section>
 
 <style>
-  /* 行をならす(一文目向け)。二文目の末尾は <span class="nobr"> でひと固まりに
-     して、「つながっています。」だけが取り残されないよう、折り返しを手前に
-     寄せる。nobr は {@html} で注入されるので :global で当てる。 */
+  /* 折り返しは許しつつ(スマホで横にはみ出さない)、短い最終行=はぐれ行を
+     避けるよう、行末をならす。 */
   .tagline {
-    text-wrap: balance;
-  }
-  .tagline :global(.nobr) {
-    white-space: nowrap;
+    text-wrap: pretty;
   }
 </style>
 
