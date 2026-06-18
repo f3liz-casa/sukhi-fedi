@@ -15,6 +15,7 @@ defmodule SukhiFedi.Polls do
   import Ecto.Query
 
   alias Ecto.Multi
+  alias SukhiFedi.Outbox
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Poll, PollOption, PollVote}
 
@@ -65,7 +66,14 @@ defmodule SukhiFedi.Polls do
     # still highlighted from our `poll_votes` either way.
     {tallies, voters_count} =
       if remote_poll?(poll) do
-        {Map.new(options, fn o -> {o.id, o.votes_count} end), poll.voters_count}
+        # Surface votes cast here even before the origin's count reflects them.
+        # Some servers (e.g. hackers.pub) never send an Update, so the cached
+        # remote count would otherwise show our local voters as having vanished.
+        # max/2 (not +) avoids double-counting once the origin does catch up.
+        remote = Map.new(options, fn o -> {o.id, o.votes_count} end)
+        local = tally_for_poll(pid)
+        merged = Map.merge(remote, local, fn _id, r, l -> max(r, l) end)
+        {merged, max(poll.voters_count || 0, local_voters_count(pid))}
       else
         {tally_for_poll(pid), local_voters_count(pid)}
       end
@@ -206,6 +214,7 @@ defmodule SukhiFedi.Polls do
   def vote(account_id, poll_id, choices) when is_integer(account_id) do
     with pid when not is_nil(pid) <- SukhiFedi.Coercion.parse_id(poll_id),
          %Poll{} = poll <- Repo.get(Poll, pid),
+         poll = Repo.preload(poll, :note),
          :ok <- check_poll_visible(poll, account_id),
          :ok <- check_not_expired(poll),
          option_ids when is_list(option_ids) <- normalize_choices(poll, choices) do
@@ -237,6 +246,7 @@ defmodule SukhiFedi.Polls do
             conflict_target: [:account_id, :poll_id, :option_id]
           )
         end)
+        |> maybe_enqueue_ballots(poll, account_id, option_ids)
 
       case Repo.transaction(multi) do
         {:ok, _} ->
@@ -255,6 +265,45 @@ defmodule SukhiFedi.Polls do
       :too_many -> {:error, :too_many_choices}
       _ -> {:error, :not_found}
     end
+  end
+
+  # When the poll lives on another server, a local vote means nothing until the
+  # origin hears it — so federate one Create(Note) ballot per chosen option (the
+  # Mastodon vote shape: `name` = option, `inReplyTo` = the Question). For a
+  # local poll the author is us and the rows already count, so nothing to send.
+  # Enqueued in the same transaction as the vote, so the vote and its outbound
+  # event commit together (no recorded-but-never-sent gap).
+  defp maybe_enqueue_ballots(multi, %Poll{} = poll, account_id, option_ids) do
+    if remote_poll?(poll) and is_binary(poll.note.ap_id) do
+      titles = option_titles(option_ids)
+      question_ap_id = poll.note.ap_id
+
+      Enum.reduce(option_ids, multi, fn opt_id, acc ->
+        Outbox.enqueue_multi(
+          acc,
+          {:vote_event, opt_id},
+          "sns.outbox.vote.created",
+          "vote",
+          fn _ -> "#{poll.id}:#{opt_id}:#{account_id}" end,
+          fn _ ->
+            %{
+              account_id: account_id,
+              question_ap_id: question_ap_id,
+              name: Map.get(titles, opt_id, ""),
+              poll_id: poll.id,
+              option_id: opt_id
+            }
+          end
+        )
+      end)
+    else
+      multi
+    end
+  end
+
+  defp option_titles(option_ids) do
+    Repo.all(from o in PollOption, where: o.id in ^option_ids, select: {o.id, o.title})
+    |> Map.new()
   end
 
   # ── helpers ────────────────────────────────────────────────────────────

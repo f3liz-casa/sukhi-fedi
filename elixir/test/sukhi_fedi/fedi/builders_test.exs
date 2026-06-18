@@ -92,6 +92,31 @@ defmodule SukhiFedi.Fedi.BuildersTest do
     refute Map.has_key?(object, "sensitive")
   end
 
+  test "vote: a Create(Note) ballot — name = option, inReplyTo = Question, to = author" do
+    result =
+      build!("vote", %{
+        "actor" => FediGolden.actor(),
+        "name" => "Option A",
+        "inReplyTo" => "https://remote.test/notes/poll1",
+        "to" => ["https://remote.test/users/pollster"],
+        "noteId" => "#{FediGolden.actor()}/poll-votes/5-7",
+        "activityId" => "#{FediGolden.actor()}/poll-votes/5-7/activity",
+        "recipientInboxes" => ["https://remote.test/users/pollster/inbox"]
+      })
+
+    assert result["recipientInboxes"] == ["https://remote.test/users/pollster/inbox"]
+    activity = result["note"]
+    assert activity["type"] == "Create"
+    assert activity["to"] == ["https://remote.test/users/pollster"]
+
+    object = activity["object"]
+    assert object["type"] == "Note"
+    assert object["name"] == "Option A"
+    assert object["inReplyTo"] == "https://remote.test/notes/poll1"
+    # A ballot carries no body.
+    refute Map.has_key?(object, "content")
+  end
+
   test "follow: LD signature round-trips through our verifier" do
     result =
       build!("follow", %{

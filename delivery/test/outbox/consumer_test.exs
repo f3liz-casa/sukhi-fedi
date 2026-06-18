@@ -69,6 +69,10 @@ defmodule SukhiDelivery.Outbox.ConsumerTest do
                Consumer.dispatch("sns.outbox.note.created", %{"account_id" => "not-an-int"})
     end
 
+    test "vote.created missing fields → :missing_fields (no crash, no DB)" do
+      assert :missing_fields = Consumer.dispatch("sns.outbox.vote.created", %{})
+    end
+
     test "note.deleted missing fields → :missing_fields" do
       assert :missing_fields = Consumer.dispatch("sns.outbox.note.deleted", %{})
     end
