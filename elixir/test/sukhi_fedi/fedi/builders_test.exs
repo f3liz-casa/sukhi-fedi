@@ -62,6 +62,36 @@ defmodule SukhiFedi.Fedi.BuildersTest do
     refute Map.has_key?(doc, "name")
   end
 
+  test "note: carries the author's content warning and sensitive flag" do
+    object =
+      build!("note", %{
+        "actor" => FediGolden.actor(),
+        "content" => "<p>spoiler body</p>",
+        "summary" => "cw: spoilers",
+        "sensitive" => true,
+        "recipientInboxes" => [],
+        "noteId" => "https://sukhi.test/notes/2",
+        "activityId" => "https://sukhi.test/notes/2/activity"
+      })["note"]["object"]
+
+    assert object["summary"] == "cw: spoilers"
+    assert object["sensitive"] == true
+  end
+
+  test "note: omits summary/sensitive when the author set neither" do
+    object =
+      build!("note", %{
+        "actor" => FediGolden.actor(),
+        "content" => "<p>plain</p>",
+        "recipientInboxes" => [],
+        "noteId" => "https://sukhi.test/notes/3",
+        "activityId" => "https://sukhi.test/notes/3/activity"
+      })["note"]["object"]
+
+    refute Map.has_key?(object, "summary")
+    refute Map.has_key?(object, "sensitive")
+  end
+
   test "follow: LD signature round-trips through our verifier" do
     result =
       build!("follow", %{

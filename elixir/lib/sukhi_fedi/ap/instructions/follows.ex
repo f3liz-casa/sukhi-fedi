@@ -224,6 +224,8 @@ defmodule SukhiFedi.AP.Instructions.Follows do
           select: %{
             id: n.id,
             content: n.content,
+            cw: n.cw,
+            sensitive: n.sensitive,
             quote_of_ap_id: n.quote_of_ap_id,
             in_reply_to_ap_id: n.in_reply_to_ap_id
           }
@@ -238,6 +240,8 @@ defmodule SukhiFedi.AP.Instructions.Follows do
               account_id: account_id,
               note_id: n.id,
               content: n.content,
+              cw: n.cw,
+              sensitive: n.sensitive,
               quote_of_ap_id: n.quote_of_ap_id,
               in_reply_to_ap_id: n.in_reply_to_ap_id,
               follower_inbox: follower_inbox

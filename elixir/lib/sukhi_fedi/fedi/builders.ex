@@ -81,6 +81,10 @@ defmodule SukhiFedi.Fedi.Builders do
         "cc" => audience.cc
       }
       |> put_if("inReplyTo", p["inReplyToId"])
+      # The author's content warning (AP `summary`) and sensitive flag were
+      # never carried before, so remotes rendered CW'd / NSFW posts unwarned.
+      |> put_if("summary", p["summary"])
+      |> put_if("sensitive", p["sensitive"])
 
     activity = wrap_create(p, object, audience)
 

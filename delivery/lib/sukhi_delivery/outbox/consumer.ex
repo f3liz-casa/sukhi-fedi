@@ -131,6 +131,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
           |> maybe_put_attachments(p["media"])
+          |> maybe_put_cw(p["cw"])
+          |> maybe_put_sensitive(p["sensitive"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -444,6 +446,8 @@ defmodule SukhiDelivery.Outbox.Consumer do
           }
           |> maybe_put_quote(p["quote_of_ap_id"])
           |> maybe_put_attachments(p["media"])
+          |> maybe_put_cw(p["cw"])
+          |> maybe_put_sensitive(p["sensitive"])
 
         translate_and_fanout("note", translator_payload, actor_uri, activity_id, recipients,
           extract_note: true
@@ -731,6 +735,18 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp maybe_put_quote(payload, _), do: payload
+
+  # The content warning rides as AP `summary`; only send it when present.
+  defp maybe_put_cw(payload, cw) when is_binary(cw) and cw != "" do
+    Map.put(payload, :summary, cw)
+  end
+
+  defp maybe_put_cw(payload, _), do: payload
+
+  # `sensitive` defaults to absent (= not sensitive) on the wire, so only send
+  # the flag when it's actually set.
+  defp maybe_put_sensitive(payload, true), do: Map.put(payload, :sensitive, true)
+  defp maybe_put_sensitive(payload, _), do: payload
 
   # Media descriptors built gateway-side by `SukhiFedi.AP.MediaSerialize`
   # ride through the outbox event under `media`. The bun `note` / `dm`
