@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+defmodule SukhiFedi.Integration.RemoteAccountsTest do
+  @moduledoc """
+  A re-fetch of a remote actor must not let a degraded/partial document null a
+  good shadow row. Identity + freshness are always written; everything else is
+  merged only when the fetched value is present.
+  """
+
+  use SukhiFedi.IntegrationCase, async: false
+
+  @moduletag :integration
+
+  alias SukhiFedi.Federation.RemoteAccounts
+  alias SukhiFedi.Repo
+  alias SukhiFedi.Schema.Account
+
+  @uri "https://remote.example/users/bob"
+
+  defp full_actor do
+    %{
+      "id" => @uri,
+      "preferredUsername" => "bob",
+      "name" => "Bob Full",
+      "summary" => "a rich bio",
+      "inbox" => "https://remote.example/users/bob/inbox",
+      "publicKey" => %{"id" => "#{@uri}#main-key", "publicKeyPem" => "PEMDATA"},
+      "icon" => %{"url" => "https://remote.example/avatar.png"},
+      "image" => %{"url" => "https://remote.example/banner.png"}
+    }
+  end
+
+  test "a partial refetch does not clobber richer stored profile fields" do
+    {:ok, full} = RemoteAccounts.upsert_from_actor_json(full_actor())
+    assert full.summary == "a rich bio"
+    assert full.avatar_url == "https://remote.example/avatar.png"
+
+    # A degraded re-fetch: just the identity, no icon/image/summary/inbox/key.
+    sparse = %{"id" => @uri, "preferredUsername" => "bob"}
+    {:ok, refetched} = RemoteAccounts.upsert_from_actor_json(sparse)
+
+    # Same row, updated in place — and every richer field survives.
+    assert refetched.id == full.id
+    assert refetched.display_name == "Bob Full"
+    assert refetched.summary == "a rich bio"
+    assert refetched.avatar_url == "https://remote.example/avatar.png"
+    assert refetched.banner_url == "https://remote.example/banner.png"
+    assert refetched.inbox_url == "https://remote.example/users/bob/inbox"
+    assert refetched.public_key_pem == "PEMDATA"
+  end
+
+  test "a refetch still applies a genuinely-changed field" do
+    {:ok, _} = RemoteAccounts.upsert_from_actor_json(full_actor())
+
+    changed = Map.put(full_actor(), "summary", "a new bio")
+    {:ok, refetched} = RemoteAccounts.upsert_from_actor_json(changed)
+    assert refetched.summary == "a new bio"
+  end
+
+  test "a brand-new sparse actor still gets the handle as display_name" do
+    {:ok, acct} =
+      RemoteAccounts.upsert_from_actor_json(%{
+        "id" => "https://remote.example/users/nameless",
+        "preferredUsername" => "nameless"
+      })
+
+    assert acct.display_name == "nameless"
+    # Ecto's cast treats "" as empty and skips it, so a blank summary lands as
+    # nil (same as the original code's `summary: ... || ""`); the point here is
+    # the handle fallback for display_name.
+    assert acct.summary in [nil, ""]
+    assert Repo.get(Account, acct.id)
+  end
+end
