@@ -72,9 +72,12 @@ export const ko: Dict = {
   'compose.visLabel': '공개 범위',
   'compose.uploading': '올리고 있어요…',
   'compose.submit': '보내기',
+  'compose.draftRestored': '쓰던 글이 남아 있었어요.',
+  'compose.discardDraft': '지우기',
 
   // ── 글(노트)──────────────────────────────────────────
   'status.boostedBy': '님이 부스트',
+  'status.expandBoost': '펼치기',
   'status.now': '방금',
   'status.minutesAgo': '{n}분 전',
   'status.hoursAgo': '{n}시간 전',
@@ -460,6 +463,12 @@ export const ko: Dict = {
   'profile.tabsLabel': '게시물과 글 전환',
   'profile.tabPosts': '게시물',
   'profile.tabArticles': '글',
+  // 사적인 메모(나에게만 보이는 부르는 이름). 본명은 덮어쓰지 않고 아래에 살짝.
+  'profile.noteLabel': '사적인 메모／부르는 이름(나에게만 보여요)',
+  'profile.notePlaceholder': '이 사람을 뭐라고 적어둘까요?',
+  'profile.noteAdd': '사적인 메모 적기',
+  'profile.noteSave': '넣어두기',
+  'profile.noteCancel': '그만두기',
 
   // ── 스레드 ───────────────────────────────────────────
   'thread.noteNotFound': '그 글은 찾을 수 없었어요.',

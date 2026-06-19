@@ -69,9 +69,12 @@ export const ja = {
   'compose.visLabel': '公開の範囲',
   'compose.uploading': '上がっています…',
   'compose.submit': '送る',
+  'compose.draftRestored': '書きかけが、残っていました。',
+  'compose.discardDraft': '消す',
 
   // ── ノート（投稿）─────────────────────────────────────
   'status.boostedBy': 'がブースト',
+  'status.expandBoost': '開く',
   'status.now': 'いま',
   'status.minutesAgo': '{n} 分前',
   'status.hoursAgo': '{n} 時間前',
@@ -457,6 +460,12 @@ export const ja = {
   'profile.tabsLabel': '投稿と記事の切り替え',
   'profile.tabPosts': '投稿',
   'profile.tabArticles': '記事',
+  // 私的メモ(あなただけに見える呼び名)。本名は上書きせず、下にそっと。
+  'profile.noteLabel': '私的メモ／呼び名（あなただけに見える）',
+  'profile.notePlaceholder': 'この人を、なんと呼んでおく?',
+  'profile.noteAdd': '私的メモを書く',
+  'profile.noteSave': 'しまう',
+  'profile.noteCancel': 'やめる',
 
   // ── スレッド ─────────────────────────────────────────
   'thread.noteNotFound': 'そのノートは、見つかりませんでした。',

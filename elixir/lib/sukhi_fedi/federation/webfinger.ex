@@ -69,10 +69,11 @@ defmodule SukhiFedi.Federation.WebFinger do
   defp do_fetch_jrd(url, headers, handle) do
     # `redirect: false` — a 30x Location could otherwise bounce us from a
     # public host to an internal one, past the guard above.
-    case Req.get(url, headers: headers, redirect: false, receive_timeout: @timeout_ms) do
-      {:ok, %{status: 200, body: body}} when is_map(body) ->
-        {:ok, body}
-
+    case SukhiFedi.Fedi.HttpFetch.capped_get(url,
+           headers: headers,
+           redirect: false,
+           receive_timeout: @timeout_ms
+         ) do
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
         JSON.decode(body)
 

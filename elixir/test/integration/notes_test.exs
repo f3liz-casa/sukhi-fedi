@@ -534,6 +534,38 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert bob_note.id in ids
       refute carol_note.id in ids
     end
+
+    test "home/2 hides a muted author's post surfaced by a followed user's boost" do
+      alice = create_account!("mute_boost_alice")
+      bob = create_account!("mute_boost_bob")
+      carol = create_account!("mute_boost_carol")
+      dave = create_account!("mute_boost_dave")
+
+      # alice follows only bob, the booster — not the authors he boosts.
+      Repo.insert!(%Follow{
+        follower_uri: local_uri("mute_boost_alice"),
+        followee_id: bob.id,
+        state: "accepted"
+      })
+
+      {:ok, carol_note} = Notes.create_status(carol, %{"status" => "from carol"})
+      {:ok, dave_note} = Notes.create_status(dave, %{"status" => "from dave"})
+      {:ok, _} = Notes.reblog(bob, carol_note.id)
+      {:ok, _} = Notes.reblog(bob, dave_note.id)
+
+      {:ok, _} = SukhiFedi.Addons.Moderation.mute(alice.id, carol.id)
+
+      boosted_ids =
+        alice
+        |> Timelines.home(limit: 50)
+        |> Enum.filter(&Map.get(&1, :__boost__))
+        |> Enum.map(& &1.note.id)
+
+      # bob's boost of dave's post still reaches home; his boost of the
+      # muted carol's post does not.
+      assert dave_note.id in boosted_ids
+      refute carol_note.id in boosted_ids
+    end
   end
 
   describe "Timelines" do

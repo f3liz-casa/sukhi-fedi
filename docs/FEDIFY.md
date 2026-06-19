@@ -7,6 +7,12 @@
 > `bun/handlers/` or `bun/fedify/`. Upstream llms.txt index:
 > <https://fedify.dev/llms.txt>.
 
+> **Status (v0.3.0+):** Bun/Fedify is retired in production — the
+> Elixir-native `SukhiFedi.Fedi.*` service serves all `fedify.*.v1`
+> subjects now. This doc still applies to the `bun/` code, which is kept
+> for the dev stack, rollback, and as the oracle that mints the golden
+> fixtures the native port is checked against.
+
 ## 1. What we actually use
 
 Fedify is a large framework (`Federation` builder, inbox listener DSL,
@@ -19,7 +25,7 @@ we import from Fedify is the primitive layer:
 | ------------------------------------------ | ---------------------------------------------- |
 | vocab classes (`Follow`, `Accept`, `Note`, `Create`, `Update`, `Undo`, `Announce`, `Like`, `Delete`, `Add`, `Remove`, `Block`, `Flag`, `Move`, `EmojiReact`, `Tombstone`) | `bun/handlers/**` |
 | `.toJsonLd({ contextLoader })` / `.fromJsonLd(raw, { documentLoader })` | every handler |
-| `signObject` (Linked Data / object-integrity proof on the activity) | `bun/handlers/build/*.ts` |
+| `signJsonLd` (RsaSignature2017 LD-Signature on the activity), wrapped by our `signAndSerialize` | `bun/fedify/utils.ts` → `bun/handlers/build/*.ts` |
 | `signRequest(req, key, keyId, { preferRfc9421 })`             | `bun/handlers/sign_delivery.ts` |
 | `verifyRequest(req, { documentLoader })`                      | `bun/handlers/verify.ts`       |
 | `fetchDocumentLoader`                                         | `bun/fedify/context.ts`        |
@@ -282,14 +288,14 @@ verify against Mastodon.** All delivery signing already routes through
 | Dereference a remote actor (authed)        | `follow.getActor({ documentLoader: actorLoader })`             |
 | Verify incoming HTTP signature             | `verifyRequest(request, { documentLoader })`                   |
 | Sign outgoing HTTP request                 | `signRequest(req, privateKey, new URL(keyId), { preferRfc9421: true })` |
-| Sign an embedded activity (LD-sig)         | `signObject(activity, privateKey, new URL(keyId), { documentLoader })` |
+| Sign an outbound activity (LD-sig)         | `signJsonLd(jsonLd, privateKey, new URL(keyId), { contextLoader })` — via our `signAndSerialize` |
 | Create actor keys                          | `generateCryptoKeyPair("Ed25519" \| "RSASSA-PKCS1-v1_5")` + `exportJwk` |
 | Import stored JWK                          | `importJwk(jwk, "private" \| "public")`                        |
 | Authenticated GET loader for secure hosts  | `getAuthenticatedDocumentLoader({ keyId, privateKey })`        |
 
 ## 5. When fedify upgrades
 
-Our `package.json` pin is `@fedify/fedify: ^1.0.0`. On minor bumps:
+Our `package.json` pin is `@fedify/fedify: ^2.2.3`. On minor bumps:
 
 1. Re-run `bun test` — `bun/handlers/inbox_test.ts` and
    `bun/fedify/key_cache_test.ts` cover the live surface.

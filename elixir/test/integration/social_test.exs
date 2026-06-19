@@ -249,6 +249,54 @@ defmodule SukhiFedi.Integration.SocialTest do
     end
   end
 
+  describe "set_account_note/3" do
+    test "a set note surfaces as the relationship's `note`, replacing the empty default" do
+      alice = create_account!("alice_note_set")
+      bob = create_account!("bob_note_set")
+
+      # Default: no note ⇒ "".
+      [before] = Social.list_relationships(alice, [bob.id])
+      assert before.note == ""
+
+      assert {:ok, _} = Social.set_account_note(alice, bob.id, "old colleague")
+
+      [after_set] = Social.list_relationships(alice, [bob.id])
+      assert after_set.note == "old colleague"
+
+      # The note is the viewer's own: bob sees nothing about alice.
+      [bobs_view] = Social.list_relationships(bob, [alice.id])
+      assert bobs_view.note == ""
+    end
+
+    test "is an upsert — setting again replaces, leaving one row; \"\" clears" do
+      alice = create_account!("alice_note_up")
+      bob = create_account!("bob_note_up")
+
+      {:ok, _} = Social.set_account_note(alice, bob.id, "first")
+      {:ok, _} = Social.set_account_note(alice, bob.id, "second")
+
+      n =
+        Repo.aggregate(
+          from(an in SukhiFedi.Schema.AccountNote,
+            where: an.author_account_id == ^alice.id and an.target_account_id == ^bob.id
+          ),
+          :count,
+          :id
+        )
+
+      assert n == 1
+      assert [%{note: "second"}] = Social.list_relationships(alice, [bob.id])
+
+      {:ok, _} = Social.set_account_note(alice, bob.id, "")
+      assert [%{note: ""}] = Social.list_relationships(alice, [bob.id])
+    end
+
+    test "note about an unknown account → :not_found" do
+      alice = create_account!("alice_note_404")
+      assert {:error, :not_found} = Social.set_account_note(alice, 99_999_999, "x")
+    end
+  end
+
   describe "Accounts.lookup_by_acct/1" do
     test "local username resolves" do
       a = create_account!("local_lookup")
