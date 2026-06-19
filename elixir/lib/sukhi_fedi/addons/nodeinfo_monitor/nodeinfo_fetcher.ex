@@ -93,14 +93,11 @@ defmodule SukhiFedi.Addons.NodeinfoMonitor.NodeinfoFetcher do
       {"user-agent", "sukhi-fedi-monitor/0.1.0"}
     ]
 
-    case Req.get(url,
+    case SukhiFedi.Fedi.HttpFetch.capped_get(url,
            headers: headers,
            receive_timeout: @timeout_ms,
            finch: SukhiFedi.Finch
          ) do
-      {:ok, %{status: 200, body: body}} when is_map(body) ->
-        {:ok, body}
-
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
         case JSON.decode(body) do
           {:ok, json} -> {:ok, json}

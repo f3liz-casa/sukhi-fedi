@@ -19,7 +19,7 @@ defmodule SukhiFedi.Fedi.Fetcher do
 
   alias SukhiFedi.Cache.Ets
   alias SukhiFedi.Federation.UrlGuard
-  alias SukhiFedi.Fedi.{HttpSignature, JWK}
+  alias SukhiFedi.Fedi.{HttpFetch, HttpSignature, JWK}
 
   @accept ~s(application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams")
   @max_redirects 5
@@ -96,9 +96,6 @@ defmodule SukhiFedi.Fedi.Fetcher do
             next -> get_json(next, signer, redirects_left - 1)
           end
 
-        %{status: 200, body: body} when is_map(body) ->
-          {:ok, body}
-
         %{status: 200, body: body} when is_binary(body) ->
           JSON.decode(body)
 
@@ -115,7 +112,7 @@ defmodule SukhiFedi.Fedi.Fetcher do
         {private_key, key_id} -> HttpSignature.sign_get(url, private_key, key_id) |> Map.put("accept", @accept)
       end
 
-    Req.get(url,
+    HttpFetch.capped_get(url,
       headers: headers,
       redirect: false,
       finch: SukhiFedi.Finch,
