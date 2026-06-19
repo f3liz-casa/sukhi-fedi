@@ -24,9 +24,22 @@
     <span class="stack-tight">
       <span class="display-name">{@html renderEmojis(phrase(name), account.emojis)}<CircleBadge accountId={account.id} /></span>
       <span class="muted">@{account.acct}</span>
+      <!-- 私的メモがあれば、本名の下にそっと。連合しない、あなただけの呼び名。 -->
+      {#if relationship?.note}
+        <span class="account-row-note">{relationship.note}</span>
+      {/if}
     </span>
   </a>
   {#if relationship}
     <FollowButton accountId={account.id} {relationship} />
   {/if}
 </article>
+
+<style>
+  /* 私的メモ。本名の下に、ひかえめに。 */
+  .account-row-note {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    opacity: 0.8;
+  }
+</style>

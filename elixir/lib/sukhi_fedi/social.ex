@@ -10,7 +10,7 @@ defmodule SukhiFedi.Social do
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
   alias SukhiFedi.Addons.Moderation
-  alias SukhiFedi.Schema.{Account, Follow}
+  alias SukhiFedi.Schema.{Account, AccountNote, Follow}
 
   # ── reads ─────────────────────────────────────────────────────────────────
 
@@ -322,6 +322,10 @@ defmodule SukhiFedi.Social do
         |> Repo.all()
         |> Map.new()
 
+      # The viewer's private memo about each target (local-only, never
+      # federated). One query, id-keyed, so the render stays a map lookup.
+      note_map = account_notes_for(viewer.id, target_ids)
+
       Enum.map(target_ids, fn id ->
         state = Map.get(following_set, id)
         muting? = MapSet.member?(muting_set, id)
@@ -340,10 +344,47 @@ defmodule SukhiFedi.Social do
           muting_notifications: muting?,
           domain_blocking: is_binary(domain) and MapSet.member?(blocked_domains, domain),
           endorsed: false,
-          note: ""
+          note: Map.get(note_map, id, "")
         }
       end)
     end
+  end
+
+  @doc """
+  Set (or clear) the viewer's private note about `target_id`.
+
+  Local-only and never federated: a label the author keeps about another
+  account, shown only to them alongside the target's real name. An empty
+  string clears it. Upsert on the (author, target) pair so there is at
+  most one note per target. Returns `{:ok, note}` or `{:error, reason}`.
+  """
+  @spec set_account_note(Account.t(), integer(), String.t()) ::
+          {:ok, AccountNote.t()} | {:error, :not_found | term()}
+  def set_account_note(%Account{id: author_id}, target_id, comment)
+      when is_integer(target_id) and is_binary(comment) do
+    if Repo.exists?(from(a in Account, where: a.id == ^target_id)) do
+      %AccountNote{}
+      |> AccountNote.changeset(%{
+        author_account_id: author_id,
+        target_account_id: target_id,
+        comment: comment
+      })
+      |> Repo.insert(
+        on_conflict: {:replace, [:comment, :updated_at]},
+        conflict_target: [:author_account_id, :target_account_id]
+      )
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp account_notes_for(author_id, target_ids) do
+    from(n in AccountNote,
+      where: n.author_account_id == ^author_id and n.target_account_id in ^target_ids,
+      select: {n.target_account_id, n.comment}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   # ── helpers ──────────────────────────────────────────────────────────────

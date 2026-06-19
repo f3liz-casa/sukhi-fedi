@@ -118,6 +118,8 @@ export type Relationship = {
   requested: boolean;
   blocking?: boolean;
   muting?: boolean;
+  // あなただけに見える私的メモ。連合はしない、ローカルだけの呼び名。
+  note?: string;
 };
 
 export type TimelineKind = 'home' | 'public' | 'tag';
@@ -608,6 +610,14 @@ export const blockAccount = (id: string) => relAction(`/api/v1/accounts/${encode
 export const unblockAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/unblock`);
 export const muteAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/mute`);
 export const unmuteAccount = (id: string) => relAction(`/api/v1/accounts/${encodeURIComponent(id)}/unmute`);
+
+// 私的メモ(あなただけに見える呼び名)を書く / 消す。空文字で消える。
+// 連合はしない、ローカルだけの約束。更新後の Relationship を返す。
+export function setAccountNote(id: string, comment: string): Promise<Relationship> {
+  return req('POST', `/api/v1/accounts/${encodeURIComponent(id)}/note`, 'set_note', {
+    json: { comment }
+  }).then((r) => json<Relationship>(r));
+}
 
 // blocks/mutes 一覧はサーバ側がページネーションせず全件返す（Account 配列）。
 export async function getBlocks(): Promise<Account[]> {

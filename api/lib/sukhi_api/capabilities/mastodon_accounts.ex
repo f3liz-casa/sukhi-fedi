@@ -25,6 +25,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
        scope: "write:accounts"},
       {:get, "/api/v1/accounts/lookup", &lookup/1},
       {:get, "/api/v1/accounts/relationships", &relationships/1, scope: "read:follows"},
+      {:post, "/api/v1/accounts/:id/note", &note/1, scope: "write:accounts"},
       {:get, "/api/v1/accounts/:id", &show/1},
       {:get, "/api/v1/accounts/:id/statuses", &statuses/1},
       {:get, "/api/v1/accounts/:id/followers", &followers/1},
@@ -498,6 +499,64 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
   end
 
   defp extract_ids(_), do: []
+
+  # ── note (private memo) ──────────────────────────────────────────────────
+
+  # Mastodon `POST /api/v1/accounts/:id/note`, body `{comment}`. A private,
+  # local-only label the viewer keeps about the target; an empty/absent
+  # comment clears it. Returns the updated Relationship — its `note` field
+  # now carries what was just set.
+  def note(req) do
+    %{current_account: viewer} = req[:assigns]
+    id = req[:path_params]["id"]
+
+    case viewer do
+      nil ->
+        ok(403, %{error: "this endpoint requires a user-bound token"})
+
+      %{} = v ->
+        with {:ok, int_id} <- parse_int(id),
+             comment = decode_note_comment(req),
+             {:ok, {:ok, _saved}} <-
+               GatewayRpc.call(SukhiFedi.Social, :set_account_note, [v, int_id, comment]) do
+          rel =
+            case GatewayRpc.call(SukhiFedi.Social, :list_relationships, [v, [int_id]]) do
+              {:ok, [r]} -> r
+              _ -> %{id: int_id}
+            end
+
+          ok(200, MastodonRelationship.render(rel))
+        else
+          {:error, :bad_int} -> ok(400, %{error: "invalid_id"})
+          {:ok, {:error, :not_found}} -> ok(404, %{error: "account_not_found"})
+          {:error, :not_connected} -> ok(503, %{error: "gateway_not_connected"})
+          {:error, {:badrpc, r}} -> ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+          _ -> ok(500, %{error: "internal_error"})
+        end
+    end
+  end
+
+  defp decode_note_comment(req) do
+    headers = req[:headers] || []
+    ct = content_type(headers)
+
+    params =
+      cond do
+        String.contains?(ct, "application/json") ->
+          case JSON.decode(req[:body] || "") do
+            {:ok, %{} = m} -> m
+            _ -> %{}
+          end
+
+        String.contains?(ct, "application/x-www-form-urlencoded") ->
+          URI.decode_query(req[:body] || "")
+
+        true ->
+          %{}
+      end
+
+    to_string(params["comment"] || "")
+  end
 
   # ── helpers ──────────────────────────────────────────────────────────────
 

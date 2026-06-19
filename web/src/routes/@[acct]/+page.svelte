@@ -11,6 +11,7 @@
     unblockAccount,
     muteAccount,
     unmuteAccount,
+    setAccountNote,
     type Account,
     type Relationship,
     type Status
@@ -76,6 +77,30 @@
   // ブロック / ミュート。relationship を握り直して表示に反映する。
   let modPending = $state(false);
   let menuOpen = $state(false);
+
+  // 私的メモ(あなただけに見える呼び名)。本名の隣にそっと置くだけで、
+  // 本名を上書きはしない。たたんでおいて、開いたときだけ書ける。
+  let noteOpen = $state(false);
+  let noteDraft = $state('');
+  let notePending = $state(false);
+
+  function openNote() {
+    noteDraft = rel?.note ?? '';
+    noteOpen = true;
+  }
+
+  async function saveNote() {
+    if (!account || notePending) return;
+    notePending = true;
+    try {
+      rel = await setAccountNote(account.id, noteDraft.trim());
+      noteOpen = false;
+    } catch {
+      // 失敗は黙って欄を開けたまま戻す。
+    } finally {
+      notePending = false;
+    }
+  }
 
   async function toggleBlock() {
     if (!account || modPending) return;
@@ -203,6 +228,38 @@
           {@html renderEmojis(phrase(account.display_name || account.username), account.emojis)}
         </p>
         <p class="muted">@{account.acct}</p>
+        {#if rel}
+          <!-- 本名の下に、あなただけに見える呼び名をそっと。本名は上に
+               残したまま、上書きはしない。 -->
+          {#if noteOpen}
+            <div class="account-note-edit">
+              <label class="account-note-label" for="account-note-input">{$t('profile.noteLabel')}</label>
+              <textarea
+                id="account-note-input"
+                class="account-note-input"
+                rows="2"
+                bind:value={noteDraft}
+                placeholder={$t('profile.notePlaceholder')}
+              ></textarea>
+              <div class="account-note-actions">
+                <button type="button" class="chip" onclick={saveNote} disabled={notePending}>
+                  {$t('profile.noteSave')}
+                </button>
+                <button type="button" class="chip" onclick={() => (noteOpen = false)} disabled={notePending}>
+                  {$t('profile.noteCancel')}
+                </button>
+              </div>
+            </div>
+          {:else if rel.note}
+            <button type="button" class="account-note-line" onclick={openNote}>
+              <span class="account-note-tag">{$t('profile.noteLabel')}</span> {rel.note}
+            </button>
+          {:else}
+            <button type="button" class="account-note-add" onclick={openNote}>
+              {$t('profile.noteAdd')}
+            </button>
+          {/if}
+        {/if}
       </div>
       {#if isSelf}
         <a class="chip" href="/settings">{$t('profile.edit')}</a>
@@ -375,6 +432,40 @@
   .pinned-label {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  /* 私的メモ。本名の下に、ひかえめに。連合しない、あなただけの呼び名。
+     クリックで開くだけで、視線をうばわない。 */
+  .account-note-line,
+  .account-note-add {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .account-note-tag {
+    color: var(--color-text-muted);
+    opacity: 0.7;
+  }
+  .account-note-edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .account-note-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+  .account-note-input {
+    width: 100%;
+    font-size: var(--text-sm);
+  }
+  .account-note-actions {
+    display: flex;
+    gap: var(--space-2);
   }
 
   /* 投稿 / 記事 の切り替え。控えめに、下線で今いる場所だけ示す。 */
