@@ -13,7 +13,7 @@ defmodule SukhiFedi.Notes.Create do
   alias SukhiFedi.Notes.{Ids, Read}
   alias SukhiFedi.{Outbox, Repo}
   alias SukhiFedi.Schema.{ConversationParticipant, Media, Note}
-  alias SukhiFedi.Schema.Account
+  alias SukhiFedi.Schema.{Account, NoteCleanupLedger}
 
   @doc """
   Create a note and enqueue the `sns.outbox.note.created` event atomically.
@@ -612,14 +612,61 @@ defmodule SukhiFedi.Notes.Create do
   end
 
   defp do_delete(%Note{} = note) do
-    # ap_id is persisted now, but fall back to deriving it so a row created
-    # before the backfill still federates its Delete (nil here is exactly
-    # the bug that left deletes stuck — see Ids.note_ap_id).
-    ap_id = note.ap_id || Ids.note_ap_id(note.id)
-
     Multi.new()
     |> Multi.delete(:note, note)
-    |> Outbox.enqueue_multi(
+    |> enqueue_note_delete(note)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{note: deleted}} -> {:ok, deleted}
+      {:error, _step, reason, _} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Hard-delete a local note for self-cleanup: remove the row (and its media
+  via cascade), append the cleanup ledger row recording its birth + deletion,
+  and enqueue the **same** federated `Delete(Note)` a manual delete sends, so
+  remote peers forget it. All three ride one `Ecto.Multi` so the Delete is
+  never lost (transactional outbox; the irreversible-loss discipline).
+
+  `now`/`reason` are passed by the caller so a batch shares one timestamp.
+  Idempotent: a note that is already gone returns `:noop` without hitting the
+  DB, so a retried Oban batch converges safely.
+  """
+  @spec delete_note_for_cleanup(Note.t(), DateTime.t(), String.t() | nil) ::
+          {:ok, Note.t()} | {:noop, nil} | {:error, term()}
+  def delete_note_for_cleanup(%Note{} = note, %DateTime{} = now, reason) do
+    Multi.new()
+    |> Multi.delete(:note, note)
+    |> Multi.insert(
+      :ledger,
+      NoteCleanupLedger.changeset(%{
+        account_id: note.account_id,
+        note_id: note.id,
+        note_created_at: note.created_at,
+        deleted_at: now,
+        reason: reason
+      })
+    )
+    |> enqueue_note_delete(note)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{note: deleted}} -> {:ok, deleted}
+      {:error, _step, failed, _} -> {:error, failed}
+    end
+  end
+
+  # The one federated-Delete enqueue, shared by hard delete and soft archive.
+  # ap_id is persisted now, but fall back to deriving it so a row created
+  # before the backfill still federates its Delete (nil here is exactly the
+  # bug that left deletes stuck — see Ids.note_ap_id). The delivery node's
+  # `handle_note_deleted` needs only account_id + ap_id; it never re-reads the
+  # row, so a kept-but-archived row federates its Delete identically.
+  defp enqueue_note_delete(multi, %Note{} = note) do
+    ap_id = note.ap_id || Ids.note_ap_id(note.id)
+
+    Outbox.enqueue_multi(
+      multi,
       :outbox_event,
       "sns.outbox.note.deleted",
       "note",
@@ -628,11 +675,6 @@ defmodule SukhiFedi.Notes.Create do
         %{note_id: note.id, ap_id: ap_id, account_id: note.account_id}
       end
     )
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{note: deleted}} -> {:ok, deleted}
-      {:error, _step, reason, _} -> {:error, reason}
-    end
   end
 
   defp normalize_visibility(v) when v in ["public", "unlisted", "followers", "direct"], do: v

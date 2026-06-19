@@ -55,8 +55,10 @@
     }
   }
 
-  // スレッドをひらく。最新メッセージのスレッド表示へ移りつつ、その場で
+  // スレッドをひらく。メッセージのスレッド表示へ移りつつ、その場で
   // 既読にする。既読にできなくても遷移は止めない(表示が主、印は従)。
+  // 遷移先はこの会話のスレッド(/messages/:id)── そこで参加者みんなに
+  // 宛てて返信できる(グループ DM がひとりに縮まないように)。
   async function open(c: Conversation) {
     if (c.unread) {
       try {
@@ -66,8 +68,7 @@
         // 既読の同期失敗はそっとしておく。
       }
     }
-    const s = c.last_status;
-    if (s) goto(`/@${s.account.acct}/${s.id}`);
+    void goto(`/messages/${c.id}`);
   }
 
   function withLabel(c: Conversation): string {

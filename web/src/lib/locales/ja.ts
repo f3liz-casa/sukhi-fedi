@@ -159,6 +159,8 @@ export const ja = {
   'settings.language': 'ことば',
   'settings.changePassword': '合言葉を変える',
   'settings.security': 'ログインと安全',
+  'settings.migration': 'アカウントの引っ越し',
+  'settings.cleanup': '古い投稿のお片づけ',
   'settings.emojiCreditPre': '絵文字は ',
   'settings.emojiCreditParenOpen': '（',
   'settings.emojiCreditParenClose': '）。',
@@ -310,6 +312,54 @@ export const ja = {
   'security.reloginLink': 'ログインへ',
   'security.backToSettings': '設定にもどる',
 
+  // ── 古い投稿のお片づけ（settings/cleanup）──────────
+  'cleanup.title': '古い投稿のお片づけ',
+  'cleanup.intro':
+    '自分の古い投稿を、本当に削除します。手元からも消え、相手のサーバにも「忘れて」とお願いを送ります。ピン留めとダイレクトは、そのまま残します。消える前に、まず件数を見てから決められます。',
+  'cleanup.olderThan': 'どのくらい前のものを',
+  'cleanup.spanAll': 'ぜんぶ',
+  'cleanup.span30': '30 日より前',
+  'cleanup.span90': '90 日より前',
+  'cleanup.span365': '1 年より前',
+  'cleanup.span730': '2 年より前',
+  'cleanup.preview': '件数を見てみる',
+  'cleanup.willPre': 'いまの設定だと、',
+  'cleanup.willPost': ' 件を削除します。',
+  'cleanup.keepsPre': 'ピン留めの ',
+  'cleanup.keepsMid': ' 件と、ダイレクトの ',
+  'cleanup.keepsPost': ' 件は、そのまま残します。',
+  'cleanup.confirmHelp': 'これはあとから戻せません。よければ、本人確認をして実行してください。',
+  'cleanup.execute': 'お片づけする',
+  'cleanup.startedPre': '',
+  'cleanup.startedPost': ' 件の削除を、はじめました。',
+  'cleanup.startedHelp': '少しずつ静かに進みます。連合の「忘れて」も、順に送られます。',
+  'cleanup.again': 'もう一度',
+
+  // ── アカウントの引っ越し（settings/migration）──────────
+  'migration.title': 'アカウントの引っ越し',
+  'migration.intro':
+    'ほかのアカウントへ、静かに移れます。フォローしてくれている人は、新しいほうへ付いてきてくれます。',
+  'migration.aliasesTitle': '別名（これも自分です）',
+  'migration.aliasesHelp':
+    'むかし使っていたアカウントを、ここに足しておけます。連合するので、向こうからこちらへ引っ越すときの「同意」になります。5 つまで。',
+  'migration.aliasPlaceholder': 'https://例.com/users/なまえ',
+  'migration.aliasAdd': '足す',
+  'migration.aliasRemove': '消す',
+  'migration.aliasesSaved': '別名を、更新しました。',
+  'migration.aliasesNone': 'まだ、ありません。',
+  'migration.moveTitle': 'いま、引っ越す',
+  'migration.moveHelp':
+    '引っ越し先の URL を入れてください。先に、引っ越し先の別名にこのアカウントを入れておいてください（双方向の同意）。',
+  'migration.movePlaceholder': 'https://例.com/users/なまえ',
+  'migration.moveButton': 'このアカウントを移す',
+  'migration.moveConfirm': '本当に移しますか。フォロワーは新しいアカウントへ案内されます。',
+  'migration.moved': 'このアカウントは、移りました:',
+  'migration.err.target_must_alias_back':
+    '引っ越し先が、まだこのアカウントを別名に入れていません。向こうで先に足してもらってください。',
+  'migration.err.invalid_target': 'その引っ越し先の URL が、うまく読めませんでした。',
+  'migration.err.already_moved': 'このアカウントは、もう移っています。',
+  'migration.err.generic': 'うまくいきませんでした。',
+
   // ── メールのお願い（EmailNudge）──────────────────────
   'nudge.bodyNone': 'もしものとき（合言葉を忘れたとき等）のために、メールアドレスを登録してください。',
   'nudge.bodyUnverified': 'メールアドレスの確認が、まだ済んでいません。コードを送って、済ませられます。',
@@ -403,6 +453,8 @@ export const ja = {
   'messages.nameSep': '、',
   'messages.unread': '未読',
   'messages.openThread': 'スレッドをひらく',
+  'messages.back': 'メッセージ一覧へ',
+  'messages.threadEmpty': 'このやりとりには、まだメッセージがありません。',
 
   // ── さがす ───────────────────────────────────────────
   'search.title': 'さがす',

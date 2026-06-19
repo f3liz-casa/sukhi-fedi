@@ -152,6 +152,9 @@ defmodule SukhiFedi.Timelines do
     # silenced account's post.)
     hidden = Moderation.hidden_author_ids(viewer_id) ++ Moderation.silenced_author_ids()
 
+    # The boosted `Note` is a joined (non-leading) binding here, so the
+    # visibility rules — hidden authors, public/unlisted — apply as `where`s
+    # on `n` rather than through the pipe form.
     rows =
       from(b in Boost,
         join: n in Note,
@@ -244,7 +247,8 @@ defmodule SukhiFedi.Timelines do
     # `Moderation.silenced_author_ids/0` either way.
     silenced = Moderation.silenced_author_ids()
 
-    from(n in Note, where: n.visibility == "public")
+    Note
+    |> where([n], n.visibility == "public")
     |> where([n], n.account_id not in ^silenced)
     |> maybe_local_only(local?)
     |> apply_paging(opts)
@@ -283,7 +287,8 @@ defmodule SukhiFedi.Timelines do
     # `notes.domain IN allowed` already excludes local notes (NULL domain),
     # so this is the local-notes negation for the bubble: remote-only by
     # construction, no separate `local: false` toggle.
-    from(n in Note, where: n.visibility == "public" and n.domain in ^allowed)
+    Note
+    |> where([n], n.visibility == "public" and n.domain in ^allowed)
     |> where([n], n.account_id not in ^hidden)
     |> maybe_only_media(opts[:only_media])
     |> maybe_hide_sensitive(opts[:hide_sensitive])

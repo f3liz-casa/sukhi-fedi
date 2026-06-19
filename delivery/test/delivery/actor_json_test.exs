@@ -89,4 +89,21 @@ defmodule SukhiDelivery.AP.ActorJsonTest do
              }
            ]
   end
+
+  test "build_person/1 emits alsoKnownAs / movedTo only when set" do
+    bare = ActorJson.build_person(%Account{username: "dave", public_key_pem: "PEM"})
+    refute Map.has_key?(bare, "alsoKnownAs")
+    refute Map.has_key?(bare, "movedTo")
+
+    migrating =
+      ActorJson.build_person(%Account{
+        username: "erin",
+        public_key_pem: "PEM",
+        aliases: ["https://old.example/users/erin"],
+        moved_to_uri: "https://new.example/users/erin"
+      })
+
+    assert migrating["alsoKnownAs"] == ["https://old.example/users/erin"]
+    assert migrating["movedTo"] == "https://new.example/users/erin"
+  end
 end

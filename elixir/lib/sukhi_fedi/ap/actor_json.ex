@@ -63,6 +63,8 @@ defmodule SukhiFedi.AP.ActorJson do
     |> maybe_put_image("icon", account.avatar_url)
     |> maybe_put_image("image", account.banner_url)
     |> maybe_put_fields(account.fields)
+    |> maybe_put_also_known_as(account.aliases)
+    |> maybe_put_moved_to(account.moved_to_uri)
   end
 
   # Profile fields ride as AP `attachment` PropertyValue rows — the shape
@@ -95,6 +97,22 @@ defmodule SukhiFedi.AP.ActorJson do
   end
 
   defp maybe_put_assertion_method(map, _account, _actor_uri), do: map
+
+  # Account migration (Mastodon Move). `alsoKnownAs` lists the prior
+  # identities the user has claimed as "also me"; a destination server
+  # reading this is how a Move *to* us is verified bidirectionally on
+  # their side. `movedTo` is set on the *old* identity once it has moved,
+  # so remotes follow the redirect. Both omitted when absent, so a bare
+  # actor stays bare.
+  defp maybe_put_also_known_as(map, [_ | _] = aliases),
+    do: Map.put(map, "alsoKnownAs", aliases)
+
+  defp maybe_put_also_known_as(map, _), do: map
+
+  defp maybe_put_moved_to(map, uri) when is_binary(uri) and uri != "",
+    do: Map.put(map, "movedTo", uri)
+
+  defp maybe_put_moved_to(map, _), do: map
 
   defp maybe_put_image(map, _key, nil), do: map
   defp maybe_put_image(map, _key, ""), do: map

@@ -20,6 +20,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
       sns.outbox.add.created        → Bun `add` (featured)    → followers
       sns.outbox.remove.created     → Bun `remove` (featured) → followers
       sns.outbox.follow.backfill    → Bun `note` translator   → single new-follower inbox
+      sns.outbox.move.created       → `move` translator       → followers (account migration)
 
       sns.outbox.actor.updated      → AP.ActorJson Update(Person)  → followers + relays
 
@@ -95,6 +96,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   def dispatch("sns.outbox.add.created", p), do: handle_collection_op(p, :add)
   def dispatch("sns.outbox.remove.created", p), do: handle_collection_op(p, :remove)
   def dispatch("sns.outbox.follow.backfill", p), do: handle_follow_backfill(p)
+  def dispatch("sns.outbox.move.created", p), do: handle_move(p)
 
   def dispatch("sns.outbox.actor.updated", p), do: handle_actor_updated(p)
 
@@ -492,6 +494,32 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   defp handle_follow_backfill(_), do: :missing_fields
 
+  # Account migration. Fan a Move out to the migrating account's followers
+  # so their servers re-point the follow to `target` (the new identity).
+  defp handle_move(%{"account_id" => account_id, "target" => target} = p)
+       when is_binary(target) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipients = followers_inboxes(actor_uri)
+        domain = SukhiDelivery.Config.domain!()
+        activity_id = "https://#{domain}/moves/#{p["move_id"]}"
+
+        payload = %{
+          actor: actor_uri,
+          target: target,
+          activityId: activity_id,
+          recipientInboxes: recipients
+        }
+
+        translate_and_fanout("move", payload, actor_uri, activity_id, recipients)
+    end
+  end
+
+  defp handle_move(_), do: :missing_fields
+
   defp handle_actor_updated(%{"account_id" => account_id}) do
     case Repo.get(Account, parse_id(account_id)) do
       nil ->
@@ -548,6 +576,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
   defp extract_body(result, "like", _opts), do: Map.get(result, "like", result)
   defp extract_body(result, "emoji_react", _opts), do: Map.get(result, "emojiReact", result)
   defp extract_body(result, "undo", _opts), do: Map.get(result, "undo", result)
+  defp extract_body(result, "move", _opts), do: Map.get(result, "move", result)
   defp extract_body(result, "add", _opts), do: Map.get(result, "activity", result)
   defp extract_body(result, "remove", _opts), do: Map.get(result, "activity", result)
   defp extract_body(result, _type, _opts), do: result

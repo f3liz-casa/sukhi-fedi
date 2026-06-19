@@ -19,8 +19,10 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.Auth.PasskeyLoginController
   alias SukhiFedi.Web.Auth.PasswordController
   alias SukhiFedi.Web.Auth.SecurityController
+  alias SukhiFedi.Web.SelfCleanupController
   alias SukhiFedi.Web.Auth.SignupEmailController
   alias SukhiFedi.Web.MediaProxyController
+  alias SukhiFedi.Web.PublicPreviewController
 
   plug(Plug.Logger)
   plug(SukhiFedi.Web.AccessLogPlug)
@@ -196,6 +198,22 @@ defmodule SukhiFedi.Web.Router do
     SecurityController.session_revoke(conn)
   end
 
+  # ── Self-cleanup (archive own old posts; cookie-gated, reauth on execute) ─
+  # The page is the SPA; preview is read-only (dry-run), execute is the
+  # owner-re-proof–gated commit. See SelfCleanupController.
+
+  get "/settings/cleanup" do
+    serve_spa(conn)
+  end
+
+  post "/settings/cleanup/preview" do
+    SelfCleanupController.preview(conn)
+  end
+
+  post "/settings/cleanup/execute" do
+    SelfCleanupController.execute(conn)
+  end
+
   # ── Static assets for the SPA + login page ─────────────────────────────
   # The SvelteKit build at `web/build` is copied (or symlinked) into
   # `priv/static`. Cloudflare Pages style deploys can ignore this and
@@ -212,8 +230,16 @@ defmodule SukhiFedi.Web.Router do
     WebfingerController.call(conn, [])
   end
 
+  # A crawler / no-JS browser asking for `/users/:name` gets the HTML
+  # preview when it's enabled; an ActivityPub consumer (Accept names AP
+  # JSON) gets the actor JSON exactly as before. The negotiation lives in
+  # PublicPreviewController.wants_html_preview?/1 (one place).
   get "/users/:name" do
-    ActorController.show(conn, [])
+    if PublicPreviewController.wants_html_preview?(conn) do
+      PublicPreviewController.profile(conn)
+    else
+      ActorController.show(conn, [])
+    end
   end
 
   get "/users/:name/featured" do
@@ -232,8 +258,14 @@ defmodule SukhiFedi.Web.Router do
     CollectionController.outbox(conn, [])
   end
 
+  # Same negotiation as the actor route: HTML preview for crawler / no-JS,
+  # the AP Note JSON for an ActivityPub consumer.
   get "/users/:name/notes/:note_id" do
-    NoteController.show(conn, [])
+    if PublicPreviewController.wants_html_preview?(conn) do
+      PublicPreviewController.note(conn)
+    else
+      NoteController.show(conn, [])
+    end
   end
 
   post "/users/:name/inbox" do
@@ -492,10 +524,44 @@ defmodule SukhiFedi.Web.Router do
   # 文字列マッチして SPA に渡す。
   match _ do
     if String.starts_with?(conn.request_path, "/@") do
-      serve_spa(conn)
+      serve_at_path(conn)
     else
       send_resp(conn, 404, "not found")
     end
+  end
+
+  # `/@alice` (profile) and `/@alice/123` (a note) are SPA routes. For an
+  # app client we serve the SPA shell as before; for a crawler / no-JS GET
+  # with the preview enabled we render the same HTML the actor/note routes
+  # do, by re-deriving the `:name`/`:note_id` path params from the URL (the
+  # `*glob` can't bind a `/@`-leading segment, so we split here). Any other
+  # `/@…` path (followers/following) keeps falling through to the shell.
+  defp serve_at_path(conn) do
+    if PublicPreviewController.wants_html_preview?(conn) do
+      case path_segments(conn) do
+        ["@" <> username] ->
+          PublicPreviewController.profile(put_path_param(conn, "name", username))
+
+        ["@" <> username, id] ->
+          conn
+          |> put_path_param("name", username)
+          |> put_path_param("note_id", id)
+          |> PublicPreviewController.note()
+
+        _ ->
+          serve_spa(conn)
+      end
+    else
+      serve_spa(conn)
+    end
+  end
+
+  defp path_segments(conn) do
+    conn.request_path |> String.trim_leading("/") |> String.split("/", trim: true)
+  end
+
+  defp put_path_param(conn, key, value) do
+    %{conn | path_params: Map.put(conn.path_params, key, value)}
   end
 
   defp serve_spa(conn) do

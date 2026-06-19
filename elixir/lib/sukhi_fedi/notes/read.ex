@@ -94,7 +94,8 @@ defmodule SukhiFedi.Notes.Read do
         do: ["public", "unlisted", "followers"],
         else: ["public", "unlisted"]
 
-    from(n in query, where: n.visibility in ^allowed)
+    query
+    |> where([n], n.visibility in ^allowed)
   end
 
   # An accepted local follow edge from viewer → author. A local follower's

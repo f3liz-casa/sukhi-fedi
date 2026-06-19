@@ -11,7 +11,8 @@
   import {
     loadComposeDraft,
     saveComposeDraft,
-    clearComposeDraft
+    clearComposeDraft,
+    reconcileComposeDraft
   } from '$lib/compose-draft';
   import { goto } from '$app/navigation';
   import { t } from '$lib/i18n';
@@ -21,11 +22,17 @@
     // 返信のとき、返信先 acct をテキスト先頭に入れたい場合に使う
     // (Mastodon 互換クライアントは「@user@host 」を頭につけて出す慣習)
     prefillMention = false,
+    // グループ DM への返信で、参加者みんなを宛先にしたいときに使う。
+    // DM の宛先は本文の @ 言及から決まるので、最後の発言者一人だけを
+    // 入れると会話が黙って一対一に縮む。全員の acct を渡せばグループの
+    // まま返せる。指定があるときは prefillMention より優先する。
+    prefillRecipients = null,
     onposted,
     oncancel
   }: {
     replyTo?: Status | null;
     prefillMention?: boolean;
+    prefillRecipients?: string[] | null;
     onposted?: (s: Status) => void;
     oncancel?: () => void;
   } = $props();
@@ -38,10 +45,20 @@
   // 初期値だけ prop を見たい(あとはユーザが書き換える)ので untrack で
   // 拾う。これがないと state_referenced_locally の warning が出る。
   let text = $state(
-    untrack(() =>
-      restored?.text ?? (prefillMention && replyTo ? `@${replyTo.account.acct} ` : '')
-    )
+    untrack(() => restored?.text ?? initialMentionText())
   );
+
+  // 返信の頭につける @ 言及。グループの宛先が渡されていればそれを全部、
+  // なければ(prefillMention のとき)返信先一人だけ。
+  function initialMentionText(): string {
+    const handles =
+      prefillRecipients && prefillRecipients.length > 0
+        ? prefillRecipients
+        : prefillMention && replyTo
+          ? [replyTo.account.acct]
+          : [];
+    return handles.length > 0 ? handles.map((h) => `@${h}`).join(' ') + ' ' : '';
+  }
   let spoiler = $state(untrack(() => restored?.spoiler ?? ''));
   let useSpoiler = $state(untrack(() => restored?.useSpoiler ?? false));
   let sensitive = $state(untrack(() => restored?.sensitive ?? false));
@@ -76,19 +93,54 @@
   // 復元したことを、一言だけそっと伝える。捨てるか、送ると消える。
   let showRestored = $state(!!restored);
 
+  // サーバとの突き合わせが済むまでは、空の下書きで写しを消さない
+  // (開いた直後の空フォームが、別端末の下書きを先に消してしまう競合を
+  // 防ぐ)。済んだら true になり、以後は save/clear がふつうに動く。
+  let reconciled = $state(false);
+
   // 書きながら、すこし手が止まったら覚える。トップの新規ノート専用。
   // 中身が空っぽになったら、覚えていたものは消す(空の下書きは残さない)。
   $effect(() => {
     if (replyTo) return;
     const snapshot = { text, spoiler, useSpoiler, sensitive, visibility };
+    const empty = snapshot.text.trim() === '' && snapshot.spoiler.trim() === '';
+    // まだ突き合わせ前の空フォームは、何もしない(写しを消さない)。
+    if (empty && !reconciled) return;
     const id = setTimeout(() => {
-      if (snapshot.text.trim() === '' && snapshot.spoiler.trim() === '') {
+      if (empty) {
         clearComposeDraft();
       } else {
         saveComposeDraft(snapshot);
       }
     }, 800);
     return () => clearTimeout(id);
+  });
+
+  // 開いたとき、ローカルとサーバの下書きを静かに突き合わせる。トップの
+  // 新規ノート専用。ローカルが正本なので、まだ何も書いていないときだけ
+  // サーバの写し(別端末の続き)を迎え入れる ─ 書きかけを上書きしない。
+  // untrack で、ここで読む値が依存に乗らないようにする(初回だけ動かす)。
+  $effect(() => {
+    if (replyTo) {
+      reconciled = true;
+      return;
+    }
+    void reconcileComposeDraft()
+      .then((d) => {
+        untrack(() => {
+          if (!d) return;
+          if (text.trim() !== '' || spoiler.trim() !== '') return;
+          text = d.text;
+          spoiler = d.spoiler;
+          useSpoiler = d.useSpoiler;
+          sensitive = d.sensitive;
+          visibility = d.visibility;
+          showRestored = !!d.text || !!d.spoiler;
+        });
+      })
+      .finally(() => {
+        reconciled = true;
+      });
   });
 
   // 「捨てる」。書いたものを空に戻して、覚えていた下書きも消す。
@@ -183,7 +235,7 @@
     void submit();
   }}
 >
-  {#if replyTo}
+  {#if replyTo && oncancel}
     <p class="composer-reply">
       <span>{$t('compose.replyTo', { acct: replyTo.account.acct })}</span>
       <button type="button" class="chip" onclick={() => oncancel?.()}>{$t('compose.cancel')}</button>

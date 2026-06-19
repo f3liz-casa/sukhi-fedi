@@ -32,6 +32,12 @@ export type Account = {
   following_count?: number;
   statuses_count?: number;
   fields?: Field[];
+  // アカウント引っ越し(Mastodon Move)。moved は引っ越し先の最小アカウント、
+  // 引っ越していなければ null。プロフィールに静かに「@new へ移りました」を
+  // 出すための真実の状態 ─ 数字も煽りもなし。aliases は本人が宣言した
+  // 「これも自分」の一覧。
+  moved?: Account | null;
+  aliases?: string[];
   // verify_credentials だけが返す。admin は { name: "admin", ... }。
   // 管理ページへの入口を出すかどうかの判定に使う。
   role?: { id: string; name: string; permissions: string } | null;
@@ -56,6 +62,10 @@ export type Status = {
   id: string;
   created_at: string;
   content: string;
+  // Sukhi extension: the verbatim MFM source for a Misskey-family note
+  // (absent on local posts and non-Misskey remotes). When present, the
+  // client renders the static MFM subset from it instead of `content`.
+  mfm?: string | null;
   // Sukhi extension: an Article's bare title (hackers.pub long-form post).
   // Present ⇒ this status is an article; we route it to its reader page.
   // The same title is also folded into `content` as a leading <h2>.
@@ -344,6 +354,43 @@ export async function deleteStatus(statusId: string): Promise<void> {
   await req('DELETE', `/api/v1/statuses/${encodeURIComponent(statusId)}`, 'delete');
 }
 
+// ── compose draft (server, cross-device) ─────────────────────────────
+// The Misskey-native `/api/i/notes/drafts` surface: one draft per
+// account, never federated. The local `sf.compose_draft` cache
+// (compose-draft.ts) syncs through these. 'optional' auth — a draft
+// sync that 401s shouldn't end a session (the composer falls back to the
+// local copy and the rest of the SPA still authenticates normally).
+
+export type ServerDraft = {
+  text: string;
+  spoiler: string;
+  useSpoiler: boolean;
+  sensitive: boolean;
+  visibility: Visibility;
+  updated_at: string | null;
+};
+
+// null = no server draft yet (204).
+export async function getServerDraft(): Promise<ServerDraft | null> {
+  const res = await req('GET', '/api/i/notes/drafts', 'draft_get', { auth: 'optional' });
+  if (res.status === 204) return null;
+  return json<ServerDraft>(res);
+}
+
+export async function putServerDraft(d: {
+  text: string;
+  spoiler: string;
+  useSpoiler: boolean;
+  sensitive: boolean;
+  visibility: Visibility;
+}): Promise<ServerDraft> {
+  return json<ServerDraft>(await req('PUT', '/api/i/notes/drafts', 'draft_put', { auth: 'optional', json: d }));
+}
+
+export async function deleteServerDraft(): Promise<void> {
+  await req('DELETE', '/api/i/notes/drafts', 'draft_delete', { auth: 'optional' });
+}
+
 // ── interactions ─────────────────────────────────────────────────────
 // Each toggle returns the updated Status.
 
@@ -458,6 +505,32 @@ export async function updateCredentials(input: CredentialsUpdate): Promise<Accou
   if (input.header) fd.set('header', input.header);
 
   return json(await req('PATCH', '/api/v1/accounts/update_credentials', 'update', { form: fd }));
+}
+
+// ── account migration (Move + alsoKnownAs) ───────────────────────────
+
+export type AccountMigration = {
+  aliases: string[];
+  moved_to: string | null;
+};
+
+export async function getMigration(): Promise<AccountMigration> {
+  return json(await req('GET', '/api/v1/accounts/migration', 'migration'));
+}
+
+// 別名(alsoKnownAs)の一覧をまるごと差し替える。サーバが妥当性と上限を
+// 見るので、ここは送るだけ。引っ越し先がこちらを別名に入れていることが、
+// Move を受ける側の同意になる。
+export async function setAliases(aliases: string[]): Promise<{ aliases: string[] }> {
+  return json(
+    await req('POST', '/api/v1/accounts/migration/aliases', 'aliases', { json: { aliases } })
+  );
+}
+
+// このアカウントを target へ引っ越す。target が alsoKnownAs にこちらを
+// 入れていない(双方向の同意がない)場合は 422 で返る。
+export async function moveAccount(target: string): Promise<{ moved_to: string | null }> {
+  return json(await req('POST', '/api/v1/accounts/migration/move', 'move', { json: { target } }));
 }
 
 // ── accounts: lookup / show ──────────────────────────────────────────

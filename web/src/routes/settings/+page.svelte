@@ -312,6 +312,8 @@
   <p class="prose-small" style="margin-top: var(--space-4);">
     <a class="chip" href="/settings/password">{$t('settings.changePassword')}</a>
     <a class="chip" href="/settings/security">{$t('settings.security')}</a>
+    <a class="chip" href="/settings/migration">{$t('settings.migration')}</a>
+    <a class="chip" href="/settings/cleanup">{$t('settings.cleanup')}</a>
   </p>
 
   <details class="rel-manage timeline" style="margin-top: var(--space-5);" ontoggle={onRelToggle}>
