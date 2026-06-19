@@ -8,6 +8,7 @@
   import StatusPoll from './StatusPoll.svelte';
   import Twemoji from './Twemoji.svelte';
   import { renderEmojis } from '$lib/emoji';
+  import { renderMfm } from '$lib/mfm';
   import { phrase } from '$lib/phrase';
   import { t, locale, type Locale, type TranslationKey } from '$lib/i18n';
 
@@ -39,6 +40,14 @@
   // リモートのアカウントは acct に「@ドメイン」が付く。そのときだけ
   // 元の投稿（status.url）への入口を出す。ローカルは詳細ページが本物。
   let isRemote = $derived(status.account.acct.includes('@'));
+
+  // 本文の HTML。Misskey 系のノートは MFM のソース(status.mfm)を持って
+  // いる。あればそこから静的なサブセットだけを描く(動きの装飾は落とす)。
+  // 無ければサーバが sanitize 済みの content をそのまま。どちらに描くかの
+  // 判断は §0 どおりここ一箇所。
+  let bodyHtml = $derived(
+    status.mfm ? renderMfm(status.mfm, status.emojis) : renderEmojis(status.content, status.emojis)
+  );
 
   // CW（spoiler）を開いているか。閉じている間は本文だけでなく添付も隠す。
   let cwOpen = $state(false);
@@ -82,8 +91,8 @@
   let expanded = $state(false);
 
   $effect(() => {
-    // status.content を読むことで、別の投稿に差し替わったら測り直す。
-    void status.content;
+    // bodyHtml を読むことで、別の投稿に差し替わったら測り直す。
+    void bodyHtml;
     // リーダーページでは畳まない。それ以外で背が高ければ畳む。
     collapsible = !full && !!contentEl && contentEl.scrollHeight > COLLAPSE_PX;
   });
@@ -178,7 +187,7 @@
     {#if status.spoiler_text}
       <details bind:open={cwOpen}>
         <summary>{status.spoiler_text}</summary>
-        <div class="content">{@html renderEmojis(status.content, status.emojis)}</div>
+        <div class="content">{@html bodyHtml}</div>
       </details>
     {:else}
       <div
@@ -187,7 +196,7 @@
         class:reader={full}
       >
         <div class="content" bind:this={contentEl}>
-          {@html renderEmojis(status.content, status.emojis)}
+          {@html bodyHtml}
         </div>
       </div>
       {#if !full}
@@ -288,8 +297,38 @@
   .content :global(h2) {
     font-size: 1.1rem;
   }
+
+  /* 静的 MFM の見た目。動きの装飾は描かないので、ここにあるのは静かな
+     書式だけ。値はすべてトークンから(§10)。サーバ描画のリモート HTML も
+     同じ要素を使うので、両方ここで整う。 */
+  .content :global(.mfm-center) {
+    text-align: center;
+  }
+  .content :global(blockquote) {
+    margin: var(--space-2) 0;
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--color-border);
+    color: var(--color-text-muted);
+  }
+  .content :global(code) {
+    font-size: 0.95em;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0 var(--space-1);
+  }
   .content :global(pre) {
     overflow-x: auto;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+  }
+  .content :global(pre) :global(code) {
+    display: block;
+    border: none;
+    background: none;
+    padding: 0;
   }
 
   /* 元の投稿への入口。タイムスタンプの隣に、小さく薄く。主張しない。 */

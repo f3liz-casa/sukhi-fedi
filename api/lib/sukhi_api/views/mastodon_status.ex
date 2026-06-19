@@ -62,6 +62,11 @@ defmodule SukhiApi.Views.MastodonStatus do
       favourites_count: Map.get(counts, :favourites, 0),
       edited_at: nil,
       content: render_content(note),
+      # Sukhi extension: the verbatim MFM source for a Misskey-family note
+      # (nil for a local post or a non-Misskey remote one). Mastodon clients
+      # ignore the unknown key; our web client renders the static MFM subset
+      # from it instead of the flattened `content` HTML.
+      mfm: Map.get(note, :mfm),
       # Sukhi extension: an Article's bare title (nil for a plain Note).
       # The same title is also folded into `content` as a leading <h2> for
       # Mastodon clients; our web client reads this key to route the post

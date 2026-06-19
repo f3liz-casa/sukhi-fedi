@@ -62,6 +62,7 @@ defmodule SukhiFedi.Fedi.Builders do
   def build("emoji_react", p), do: emoji_react(p)
   def build("undo", p), do: undo(p)
   def build("delete", p), do: delete(p)
+  def build("move", p), do: move(p)
   def build("add", p), do: collection_op("Add", p)
   def build("remove", p), do: collection_op("Remove", p)
   def build(other, _p), do: {:error, "unknown object_type: #{other}"}
@@ -268,6 +269,31 @@ defmodule SukhiFedi.Fedi.Builders do
 
     with {:ok, signed} <- sign_and_prove(p, activity) do
       {:ok, %{"delete" => signed, "recipientInboxes" => p["recipientInboxes"]}}
+    end
+  end
+
+  # Account migration (Mastodon Move). `actor` and `object` are the old
+  # identity; `target` is the new one. Addressed to followers so their
+  # servers re-point the follow to `target` (the same activity our inbound
+  # handler consumes). Consent lives on the actor JSON, not here: the new
+  # actor must list the old one in `alsoKnownAs`.
+  defp move(p) do
+    audience = Audience.followers_only(p["actor"])
+
+    activity = %{
+      "@context" => @context,
+      "id" => p["activityId"],
+      "type" => "Move",
+      "actor" => p["actor"],
+      "object" => p["actor"],
+      "target" => p["target"],
+      "published" => now(),
+      "to" => audience.to,
+      "cc" => audience.cc
+    }
+
+    with {:ok, signed} <- sign_and_prove(p, activity) do
+      {:ok, %{"move" => signed, "recipientInboxes" => p["recipientInboxes"]}}
     end
   end
 

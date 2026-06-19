@@ -34,6 +34,11 @@ defmodule SukhiDelivery.Schema.Account do
     # Mirrors AP `manuallyApprovesFollowers` / Mastodon `locked`.
     # ActorJson.build_person/1 reads it when fanning out Update(Actor).
     field :locked, :boolean, default: false
+    # Account migration (gateway-side migration). ActorJson.build_person/1
+    # reads these to emit AP `alsoKnownAs` / `movedTo` on outbound actor
+    # JSON, mirroring the gateway.
+    field :aliases, {:array, :string}, default: []
+    field :moved_to_uri, :string
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: false)
   end

@@ -101,9 +101,28 @@ defmodule SukhiApi.Views.MastodonAccount do
       statuses_count: Map.get(counts, :statuses, 0),
       last_status_at: nil,
       emojis: Map.get(account, :emojis) || [],
-      fields: fields(account)
+      fields: fields(account),
+      # Account migration. `moved` is Mastodon's "this account has moved"
+      # marker, rendered quietly as a link to the new identity (no number,
+      # no banner — the truthful state, nothing more). `null` when not
+      # moved. `aliases` is the person's declared "also me" set.
+      moved: moved(Map.get(account, :moved_to_uri)),
+      aliases: Map.get(account, :aliases) || []
     }
   end
+
+  # A minimal account-shaped object pointing at the new identity. We don't
+  # fetch the target per render (that would be an N+1 on every list); the
+  # URI is enough for a client to show "moved to" and link through.
+  defp moved(uri) when is_binary(uri) and uri != "" do
+    handle = uri |> URI.parse() |> Map.get(:path, "") |> to_string() |> Path.basename()
+    host = uri |> URI.parse() |> Map.get(:host)
+    acct = if is_binary(host) and host != "", do: "#{handle}@#{host}", else: handle
+
+    %{id: uri, acct: acct, username: handle, display_name: handle, url: uri, uri: uri}
+  end
+
+  defp moved(_), do: nil
 
   # Profile fields → Mastodon `fields`. Stored as `%{"name", "value"}`
   # rows (sanitized on write); `verified_at` is always nil — we don't run

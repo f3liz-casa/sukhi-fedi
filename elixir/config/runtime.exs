@@ -15,6 +15,30 @@ end
 # to offline analysis. Generate with `openssl rand -hex 32`.
 config :sukhi_fedi, :metrics_token, System.get_env("METRICS_TOKEN")
 
+# Server-rendered HTML preview for logged-out visitors and crawlers
+# (SukhiFedi.Web.PublicPreviewController). The SPA is JS-only, so without
+# this a shared `/@alice` or note link unfurls as an empty shell.
+#   PUBLIC_PREVIEW=off  (default) — no preview; AP JSON / SPA shell as before.
+#   PUBLIC_PREVIEW=meta           — only OG/Twitter-card + JSON-LD head meta.
+#   PUBLIC_PREVIEW=full           — meta + a readable static body.
+# Only public-visibility content is ever rendered. Off by default so a
+# quiet instance stays a shell to strangers until an operator opts in.
+public_preview =
+  case System.get_env("PUBLIC_PREVIEW", "off") do
+    "meta" -> :meta
+    "full" -> :full
+    _ -> :off
+  end
+
+config :sukhi_fedi, :public_preview, public_preview
+
+# Whether the preview pages invite indexing. Defaults to the quiet
+# `noindex, nofollow`; a public instance sets PUBLIC_PREVIEW_ROBOTS to
+# `index, follow` (or any meta-robots string) to be crawled.
+config :sukhi_fedi,
+       :public_preview_robots,
+       System.get_env("PUBLIC_PREVIEW_ROBOTS", "noindex, nofollow")
+
 # Addon selection.
 #   ENABLED_ADDONS: comma list of ids, or "all" (default).
 #   ADDON_PRESETS:  comma list of preset ids (see SukhiFedi.Addon.Presets).

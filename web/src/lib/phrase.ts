@@ -18,7 +18,12 @@ export function phrase(text: string): string {
     .join('<wbr />');
 }
 
-function escapeHtml(s: string): string {
+// The one place that turns untrusted text into HTML-safe text: every
+// reserved character becomes an entity, so nothing the user typed can open
+// a tag or attribute. `phrase()` runs it per token; the static MFM renderer
+// (mfm.ts) runs it once over the whole source before applying formatting,
+// so the only `<` left in the working string are the tags it inserts itself.
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

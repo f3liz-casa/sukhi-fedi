@@ -162,6 +162,8 @@ export const ko: Dict = {
   'settings.language': '언어',
   'settings.changePassword': '비밀번호 변경',
   'settings.security': '로그인과 안전',
+  'settings.migration': '계정 이사',
+  'settings.cleanup': '오래된 글 정리',
   'settings.emojiCreditPre': '이모지는 ',
   'settings.emojiCreditParenOpen': ' (',
   'settings.emojiCreditParenClose': ').',
@@ -313,6 +315,54 @@ export const ko: Dict = {
   'security.reloginLink': '로그인으로',
   'security.backToSettings': '설정으로 돌아가기',
 
+  // ── 오래된 글 정리(settings/cleanup)──────────
+  'cleanup.title': '오래된 글 정리',
+  'cleanup.intro':
+    '내 오래된 글을 정말로 삭제해요. 여기서도 사라지고, 상대 서버에도 "잊어 달라"는 부탁을 보내요. 고정한 글과 다이렉트는 그대로 둬요. 사라지기 전에, 먼저 건수를 보고 정할 수 있어요.',
+  'cleanup.olderThan': '얼마나 지난 것을',
+  'cleanup.spanAll': '전부',
+  'cleanup.span30': '30일보다 전',
+  'cleanup.span90': '90일보다 전',
+  'cleanup.span365': '1년보다 전',
+  'cleanup.span730': '2년보다 전',
+  'cleanup.preview': '건수 보기',
+  'cleanup.willPre': '지금 설정이면 ',
+  'cleanup.willPost': '건을 삭제해요.',
+  'cleanup.keepsPre': '고정한 ',
+  'cleanup.keepsMid': '건과 다이렉트 ',
+  'cleanup.keepsPost': '건은 그대로 둬요.',
+  'cleanup.confirmHelp': '이건 나중에 되돌릴 수 없어요. 괜찮으면 본인 확인을 하고 실행해 주세요.',
+  'cleanup.execute': '정리하기',
+  'cleanup.startedPre': '',
+  'cleanup.startedPost': '건의 삭제를 시작했어요.',
+  'cleanup.startedHelp': '조금씩 가만히 진행돼요. 연합의 "잊어 달라"도 차례로 보내져요.',
+  'cleanup.again': '한 번 더',
+
+  // ── 계정 이사(settings/migration)──────────────────────
+  'migration.title': '계정 이사',
+  'migration.intro':
+    '다른 계정으로 조용히 옮길 수 있습니다. 팔로우해 주는 사람들은 새 계정으로 함께 따라옵니다.',
+  'migration.aliasesTitle': '별명(이것도 나입니다)',
+  'migration.aliasesHelp':
+    '예전에 쓰던 계정을 여기에 넣어 둘 수 있습니다. 연합되므로, 그쪽에서 이쪽으로 이사 올 때의 "동의"가 됩니다. 5개까지.',
+  'migration.aliasPlaceholder': 'https://예.com/users/이름',
+  'migration.aliasAdd': '추가',
+  'migration.aliasRemove': '지우기',
+  'migration.aliasesSaved': '별명을 업데이트했습니다.',
+  'migration.aliasesNone': '아직 없습니다.',
+  'migration.moveTitle': '지금 이사하기',
+  'migration.moveHelp':
+    '이사 갈 곳의 URL을 넣어 주세요. 먼저 그쪽의 별명에 이 계정을 넣어 두어야 합니다(양방향 동의).',
+  'migration.movePlaceholder': 'https://예.com/users/이름',
+  'migration.moveButton': '이 계정을 옮기기',
+  'migration.moveConfirm': '정말 옮기시겠어요? 팔로워는 새 계정으로 안내됩니다.',
+  'migration.moved': '이 계정은 이사했습니다:',
+  'migration.err.target_must_alias_back':
+    '이사 갈 곳이 아직 이 계정을 별명에 넣지 않았습니다. 그쪽에서 먼저 추가해 달라고 해 주세요.',
+  'migration.err.invalid_target': '그 이사 갈 곳 URL을 잘 읽지 못했습니다.',
+  'migration.err.already_moved': '이 계정은 이미 이사했습니다.',
+  'migration.err.generic': '잘되지 않았습니다.',
+
   // ── 메일 부탁(EmailNudge)─────────────────────────────
   'nudge.bodyNone': '혹시 모를 때(비밀번호를 잊었을 때 등)를 위해 메일 주소를 등록해 주세요.',
   'nudge.bodyUnverified': '메일 주소 확인이 아직 끝나지 않았어요. 코드를 보내서 마칠 수 있어요.',
@@ -406,6 +456,8 @@ export const ko: Dict = {
   'messages.nameSep': ', ',
   'messages.unread': '안 읽음',
   'messages.openThread': '스레드 열기',
+  'messages.back': '메시지 목록으로',
+  'messages.threadEmpty': '이 대화에는 아직 메시지가 없어요.',
 
   // ── 찾기 ─────────────────────────────────────────────
   'search.title': '찾기',

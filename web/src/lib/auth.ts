@@ -699,6 +699,36 @@ export async function revokeSession(id: number, reauth: Reauth): Promise<void> {
   await settingsPost(`/settings/sessions/${id}/revoke`, reauth);
 }
 
+// ── 自分の古い投稿のお片づけ(アーカイブ) ───────────────────────────────
+// ローカルにアーカイブ(行は残す)+ Delete を連合。preview は正直な
+// 件数の下見(下書き = まだ何もしない)、execute は本人確認ごしの実行。
+// 数字は煽りではなく、消える前に正直に見せるためのもの。
+export type CleanupPreview = {
+  older_than_days: number;
+  // アーカイブされる件数(下見)。
+  affected: number;
+  // 守られて残るもの。
+  protected: { pinned: number; direct: number };
+};
+
+export async function previewCleanup(olderThanDays: number): Promise<CleanupPreview> {
+  return (await settingsPost('/settings/cleanup/preview', {
+    older_than_days: olderThanDays
+  })) as CleanupPreview;
+}
+
+// 実行: 本人確認(password か reauth コード)ごし。バックグラウンドの
+// 常時トグルではなく、毎回はっきり押してもらう一回きりの動作。
+export async function executeCleanup(
+  olderThanDays: number,
+  reauth: Reauth
+): Promise<CleanupPreview> {
+  return (await settingsPost('/settings/cleanup/execute', {
+    older_than_days: olderThanDays,
+    ...reauth
+  })) as CleanupPreview;
+}
+
 // Navigate to the shared check page. Anubis challenges this path; the
 // page picks up `intent` and finishes the flow on the other side.
 //

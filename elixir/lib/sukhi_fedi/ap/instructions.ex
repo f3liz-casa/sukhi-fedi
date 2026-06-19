@@ -15,11 +15,21 @@ defmodule SukhiFedi.AP.Instructions do
     * `Instructions.Boosts`    — Announce (notify + materialise) +
       Undo(Announce)
     * `Instructions.Pins`      — Add/Remove on a featured collection
+    * `Instructions.Migrations`— Move (account migration: re-point follows)
     * `Instructions.Extract`   — pure AP JSON extractors
     * `Instructions.Resolve`   — actor/note resolution (shadow ingest)
   """
 
-  alias SukhiFedi.AP.Instructions.{Boosts, DMs, Extract, Follows, Mirror, Pins, Reactions}
+  alias SukhiFedi.AP.Instructions.{
+    Boosts,
+    DMs,
+    Extract,
+    Follows,
+    Migrations,
+    Mirror,
+    Pins,
+    Reactions
+  }
 
   @doc """
   Executes an instruction map returned from the fedify.inbox.v1 endpoint.
@@ -51,6 +61,7 @@ defmodule SukhiFedi.AP.Instructions do
       Pins.maybe_handle_pin_unpin(object_data)
       Mirror.maybe_handle_delete(object_data)
       Mirror.maybe_handle_update(object_data)
+      Migrations.maybe_handle_move(object_data)
       maybe_handle_undo(object_data)
     else
       # Forwarded/relayed: the signer is not the activity's actor. Only

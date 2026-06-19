@@ -39,6 +39,15 @@ defmodule SukhiFedi.Schema.Account do
     field :suspended_by_id, :id
     field :suspension_reason, :string
 
+    # Account migration (Mastodon Move + AP `alsoKnownAs` / `movedTo`).
+    # `aliases` is the set of other identities this person declares as
+    # "also me" (the inbound Move handler reads a *new* actor's aliases to
+    # confirm bidirectional consent). `moved_to_uri` is set on the *old*
+    # identity once it has moved away, so every screen shows the truthful
+    # "moved to @new" state. For remote rows both mirror the upstream actor.
+    field :aliases, {:array, :string}, default: []
+    field :moved_to_uri, :string
+
     # Remote-actor mirror columns. `domain IS NULL` ⇔ local account.
     # For remote rows `actor_uri` is the canonical AP id and `inbox_url`
     # / `shared_inbox_url` come from the actor JSON.
@@ -89,6 +98,8 @@ defmodule SukhiFedi.Schema.Account do
       :avatar_url,
       :banner_url,
       :locked,
+      :aliases,
+      :moved_to_uri,
       :last_fetched_at
     ])
     |> update_change(:summary, &SukhiFedi.HTML.sanitize/1)

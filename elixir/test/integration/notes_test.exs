@@ -149,6 +149,39 @@ defmodule SukhiFedi.Integration.NotesTest do
       assert is_binary(note.conversation_ap_id)
     end
 
+    test "group direct status → one dm.created addressed to every remote participant, one conversation" do
+      alice = create_account!("alice_group_dm")
+      _bob = create_remote_account!("bob", "remote.one")
+      _carol = create_remote_account!("carol", "remote.two")
+
+      assert {:ok, note} =
+               Notes.create_status(alice, %{
+                 "status" => "@bob@remote.one @carol@remote.two huddle",
+                 "visibility" => "direct"
+               })
+
+      # One Create(Note) event for the whole group — threading by
+      # conversation, not one event per recipient.
+      ev =
+        Repo.one!(
+          from(e in OutboxEvent,
+            where:
+              e.subject == "sns.outbox.dm.created" and
+                e.aggregate_id == ^to_string(note.id)
+          )
+        )
+
+      # Addressed to *each* participant: the audience the delivery node
+      # hands the `dm` builder carries both, so neither server silently
+      # drops the activity.
+      assert "https://remote.one/users/bob" in ev.payload["recipient_actor_uris"]
+      assert "https://remote.two/users/carol" in ev.payload["recipient_actor_uris"]
+
+      # The group stays one thread.
+      assert ev.payload["conversation_ap_id"] == note.conversation_ap_id
+      assert is_binary(note.conversation_ap_id)
+    end
+
     test "direct reply inherits the parent's conversation" do
       alice = create_account!("alice_dm_thread")
       _bob = create_account!("bob_dm_thread")

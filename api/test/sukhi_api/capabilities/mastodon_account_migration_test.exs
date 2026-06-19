@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+defmodule SukhiApi.Capabilities.MastodonAccountMigrationTest do
+  use ExUnit.Case, async: false
+
+  alias SukhiApi.Router
+
+  defmodule FakeRpc do
+    def call(mod, fun, args), do: call(mod, fun, args, 5_000)
+
+    def call(SukhiFedi.AccountMigration, fun, args, _t), do: lookup(:fake_migration, fun, args)
+    def call(SukhiFedi.OAuth, fun, args, _t), do: lookup(:fake_oauth, fun, args)
+    def call(_, _, _, _), do: {:error, :not_connected}
+
+    defp lookup(env_key, fun, args) do
+      table = Application.get_env(:sukhi_api, env_key, %{})
+
+      case Map.get(table, {fun, args}, :not_configured) do
+        :not_configured ->
+          case Map.get(table, fun, :not_configured) do
+            :not_configured -> {:error, :not_connected}
+            v -> {:ok, v}
+          end
+
+        v ->
+          {:ok, v}
+      end
+    end
+  end
+
+  setup do
+    prev = %{
+      rpc: Application.get_env(:sukhi_api, :gateway_rpc_impl),
+      addons: Application.get_env(:sukhi_api, :enabled_addons),
+      migration: Application.get_env(:sukhi_api, :fake_migration),
+      oauth: Application.get_env(:sukhi_api, :fake_oauth)
+    }
+
+    Application.put_env(:sukhi_api, :gateway_rpc_impl, FakeRpc)
+    Application.put_env(:sukhi_api, :enabled_addons, :all)
+    Application.put_env(:sukhi_api, :fake_migration, %{})
+
+    Application.put_env(:sukhi_api, :fake_oauth, %{
+      verify_bearer:
+        {:ok,
+         %{
+           account: %{id: 7, username: "alice", display_name: "A", summary: ""},
+           app: %{id: 1, name: "x"},
+           scopes: ["read:accounts", "write:accounts"]
+         }}
+    })
+
+    on_exit(fn ->
+      restore(:gateway_rpc_impl, prev.rpc)
+      restore(:enabled_addons, prev.addons)
+      restore(:fake_migration, prev.migration)
+      restore(:fake_oauth, prev.oauth)
+    end)
+
+    :ok
+  end
+
+  defp restore(key, nil), do: Application.delete_env(:sukhi_api, key)
+  defp restore(key, v), do: Application.put_env(:sukhi_api, key, v)
+
+  defp authed(method, path, body) do
+    %{
+      method: method,
+      path: path,
+      headers: [{"authorization", "Bearer t"}, {"content-type", "application/json"}],
+      body: body
+    }
+  end
+
+  describe "POST /api/v1/accounts/migration/aliases" do
+    test "sets the alias list" do
+      uri = "https://old.example/users/alice"
+      Application.put_env(:sukhi_api, :fake_migration, %{set_aliases: {:ok, %{aliases: [uri]}}})
+
+      {:ok, resp} =
+        Router.handle(
+          authed("POST", "/api/v1/accounts/migration/aliases", JSON.encode!(%{aliases: [uri]}))
+        )
+
+      assert resp.status == 200
+      assert JSON.decode!(resp.body)["aliases"] == [uri]
+    end
+  end
+
+  describe "POST /api/v1/accounts/migration/move" do
+    test "consent missing → 422 target_must_alias_back" do
+      Application.put_env(:sukhi_api, :fake_migration, %{move: {:error, :consent_missing}})
+
+      {:ok, resp} =
+        Router.handle(
+          authed(
+            "POST",
+            "/api/v1/accounts/migration/move",
+            JSON.encode!(%{target: "https://new.example/users/alice"})
+          )
+        )
+
+      assert resp.status == 422
+      assert JSON.decode!(resp.body)["error"] == "target_must_alias_back"
+    end
+
+    test "success → 200 with moved_to" do
+      target = "https://new.example/users/alice"
+      Application.put_env(:sukhi_api, :fake_migration, %{move: {:ok, %{moved_to_uri: target}}})
+
+      {:ok, resp} =
+        Router.handle(
+          authed("POST", "/api/v1/accounts/migration/move", JSON.encode!(%{target: target}))
+        )
+
+      assert resp.status == 200
+      assert JSON.decode!(resp.body)["moved_to"] == target
+    end
+  end
+
+  test "no bearer → 401" do
+    {:ok, resp} =
+      Router.handle(%{method: "GET", path: "/api/v1/accounts/migration", headers: []})
+
+    assert resp.status == 401
+  end
+end

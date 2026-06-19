@@ -57,7 +57,14 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
         public_key_id: get_in(actor_json, ["publicKey", "id"]),
         public_key_pem: get_in(actor_json, ["publicKey", "publicKeyPem"]),
         avatar_url: image_url(actor_json["icon"]),
-        banner_url: image_url(actor_json["image"])
+        banner_url: image_url(actor_json["image"]),
+        # Account-migration mirror: the other identities this actor declares
+        # as "also me" (`alsoKnownAs`) and the identity it has moved to
+        # (`movedTo`). The inbound Move handler reads the *new* actor's
+        # `aliases` to confirm bidirectional consent; `moved_to_uri` lets
+        # every screen render the truthful "moved to @new" state.
+        aliases: also_known_as(actor_json["alsoKnownAs"]),
+        moved_to_uri: moved_to(actor_json["movedTo"])
       }
 
       case Repo.get_by(Account, actor_uri: actor_uri) do
@@ -137,6 +144,33 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
   defp image_url(%{"url" => url}) when is_binary(url), do: url
   defp image_url(url) when is_binary(url), do: url
   defp image_url(_), do: nil
+
+  # `alsoKnownAs` is a set of actor URIs. Mastodon emits an array; AS2
+  # allows a single string, so we tolerate both. Keep only well-formed
+  # http(s) URIs — a blank or non-URI entry would never match a Move's
+  # actor anyway, and we don't want junk in the consent check.
+  defp also_known_as(uris) when is_list(uris), do: uris |> Enum.flat_map(&aka_uri/1) |> Enum.uniq()
+  defp also_known_as(uri) when is_binary(uri), do: aka_uri(uri)
+  defp also_known_as(_), do: []
+
+  defp aka_uri(uri) when is_binary(uri) do
+    case URI.parse(uri) do
+      %URI{scheme: s, host: h} when s in ["http", "https"] and is_binary(h) and h != "" -> [uri]
+      _ -> []
+    end
+  end
+
+  defp aka_uri(_), do: []
+
+  # `movedTo` is a single actor URI (the identity this actor migrated to).
+  defp moved_to(uri) when is_binary(uri) do
+    case aka_uri(uri) do
+      [u] -> u
+      [] -> nil
+    end
+  end
+
+  defp moved_to(_), do: nil
 
   # Pull the actor's `attachment` PropertyValue rows into our profile
   # `fields` shape. Non-PropertyValue attachments (some servers attach
