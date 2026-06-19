@@ -216,6 +216,7 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
             |> Map.take(["display_name", "note", "locked", "bot"])
             |> maybe_put("avatar_url", avatar_url)
             |> maybe_put("banner_url", banner_url)
+            |> maybe_put("fields", decode_fields(fields["fields"]))
 
           {:ok, attrs}
         end
@@ -266,6 +267,22 @@ defmodule SukhiApi.Capabilities.MastodonAccounts do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # Profile fields ride as a JSON-encoded array string in one form part
+  # (`[{"name":..,"value":..}, ...]`); the SPA is the only writer. A
+  # missing part means "don't touch fields" → nil so `maybe_put` skips
+  # it; an empty array clears them. The list itself is sanitized and
+  # capped by the gateway changeset (`Account.cast_fields/1`).
+  defp decode_fields(nil), do: nil
+
+  defp decode_fields(json) when is_binary(json) do
+    case JSON.decode(json) do
+      {:ok, list} when is_list(list) -> list
+      _ -> nil
+    end
+  end
+
+  defp decode_fields(_), do: nil
 
   # ── lookup ───────────────────────────────────────────────────────────────
 

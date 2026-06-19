@@ -68,6 +68,26 @@ defmodule SukhiFedi.AP.ActorJsonTest do
     # No Ed25519 key minted yet (pre-backfill row) → no assertionMethod.
     refute Map.has_key?(person, "assertionMethod")
     assert person["manuallyApprovesFollowers"] == false
+    # No fields → no attachment, so a bare actor stays bare.
+    refute Map.has_key?(person, "attachment")
+  end
+
+  test "build_person/1 emits fields as attachment PropertyValue rows" do
+    account = %Account{
+      username: "carol",
+      public_key_pem: "PEM",
+      fields: [%{"name" => "site", "value" => "<a href=\"https://x\">x</a>"}]
+    }
+
+    person = ActorJson.build_person(account)
+
+    assert person["attachment"] == [
+             %{
+               "type" => "PropertyValue",
+               "name" => "site",
+               "value" => "<a href=\"https://x\">x</a>"
+             }
+           ]
   end
 
   test "actor_uri/1 accepts a struct or a username" do

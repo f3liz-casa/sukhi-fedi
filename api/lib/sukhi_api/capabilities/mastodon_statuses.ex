@@ -17,7 +17,7 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
 
   alias SukhiApi.GatewayRpc
   alias SukhiApi.StatusHydration
-  alias SukhiApi.Views.MastodonStatus
+  alias SukhiApi.Views.{MastodonScheduledStatus, MastodonStatus}
 
   @impl true
   def routes do
@@ -41,29 +41,65 @@ defmodule SukhiApi.Capabilities.MastodonStatuses do
       %{} = v ->
         attrs = decode_status_attrs(req)
 
-        case GatewayRpc.call(SukhiFedi.Notes, :create_status, [v, attrs]) do
-          {:ok, {:ok, note}} ->
-            maybe_stream_dm(note)
-            ok(200, StatusHydration.one(note, v))
-
-          {:ok, {:error, {:validation, errors}}} ->
-            ok(422, %{error: "validation_failed", details: errors})
-
-          {:ok, {:error, :media_not_owned}} ->
-            ok(422, %{error: "media_not_owned"})
-
-          {:ok, {:error, reason}} ->
-            ok(422, %{error: inspect(reason)})
-
-          {:error, :not_connected} ->
-            ok(503, %{error: "gateway_not_connected"})
-
-          {:error, {:badrpc, r}} ->
-            ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
-
-          _ ->
-            ok(500, %{error: "internal_error"})
+        # A `scheduled_at` turns this into a deferred publish: store the
+        # params + an Oban job and return a ScheduledStatus, rather than
+        # posting now. Everything else about the attrs is identical — the
+        # worker replays them through this same create path at publish time.
+        case attrs["scheduled_at"] || attrs[:scheduled_at] do
+          nil -> create_now(v, attrs)
+          at -> create_scheduled(v, attrs, at)
         end
+    end
+  end
+
+  defp create_now(v, attrs) do
+    case GatewayRpc.call(SukhiFedi.Notes, :create_status, [v, attrs]) do
+      {:ok, {:ok, note}} ->
+        maybe_stream_dm(note)
+        ok(200, StatusHydration.one(note, v))
+
+      {:ok, {:error, {:validation, errors}}} ->
+        ok(422, %{error: "validation_failed", details: errors})
+
+      {:ok, {:error, :media_not_owned}} ->
+        ok(422, %{error: "media_not_owned"})
+
+      {:ok, {:error, reason}} ->
+        ok(422, %{error: inspect(reason)})
+
+      {:error, :not_connected} ->
+        ok(503, %{error: "gateway_not_connected"})
+
+      {:error, {:badrpc, r}} ->
+        ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+
+      _ ->
+        ok(500, %{error: "internal_error"})
+    end
+  end
+
+  defp create_scheduled(v, attrs, at) do
+    case GatewayRpc.call(SukhiFedi.ScheduledStatuses, :create, [v, attrs, at]) do
+      {:ok, {:ok, scheduled}} ->
+        ok(200, MastodonScheduledStatus.render(scheduled))
+
+      {:ok, {:error, :too_soon}} ->
+        ok(422, %{error: "scheduled_at must be at least 5 minutes in the future"})
+
+      {:ok, {:error, :invalid_time}} ->
+        ok(422, %{error: "scheduled_at is not a valid datetime"})
+
+      {:ok, {:error, reason}} ->
+        ok(422, %{error: inspect(reason)})
+
+      {:error, :not_connected} ->
+        ok(503, %{error: "gateway_not_connected"})
+
+      {:error, {:badrpc, r}} ->
+        ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+
+      _ ->
+        ok(500, %{error: "internal_error"})
     end
   end
 

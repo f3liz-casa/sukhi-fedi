@@ -56,6 +56,25 @@ defmodule SukhiFedi.Integration.RemoteAccountsTest do
     assert refetched.summary == "a new bio"
   end
 
+  test "incoming attachment PropertyValue rows become sanitized, capped fields" do
+    actor =
+      full_actor()
+      |> Map.put("attachment", [
+        %{"type" => "PropertyValue", "name" => "site", "value" => "<a href=\"https://x\">x</a>"},
+        # A non-PropertyValue attachment (some servers attach images) is ignored.
+        %{"type" => "Image", "url" => "https://remote.example/pic.png"},
+        # Scripts in the value are scrubbed by the same bio scrubber.
+        %{"type" => "PropertyValue", "name" => "bio", "value" => "<script>evil()</script>safe"}
+      ])
+
+    {:ok, acct} = RemoteAccounts.upsert_from_actor_json(actor)
+
+    assert [%{"name" => "site", "value" => site}, %{"name" => "bio", "value" => bio}] = acct.fields
+    assert site == "<a href=\"https://x\">x</a>"
+    refute bio =~ "script"
+    assert bio =~ "safe"
+  end
+
   test "a brand-new sparse actor still gets the handle as display_name" do
     {:ok, acct} =
       RemoteAccounts.upsert_from_actor_json(%{

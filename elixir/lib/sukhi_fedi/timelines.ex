@@ -67,8 +67,10 @@ defmodule SukhiFedi.Timelines do
     pl = Lists.home_filter_members(id)
 
     # Accounts the viewer has blocked or muted drop out of their own home
-    # feed (and its boosts).
-    hidden = Moderation.hidden_author_ids(id)
+    # feed (and its boosts). Accounts on a `:silence`-severity instance drop
+    # out of *everyone's* feed (operator policy, not per-viewer) — the same
+    # id-subtraction, one global set.
+    hidden = Moderation.hidden_author_ids(id) ++ Moderation.silenced_author_ids()
 
     note_account_ids = [id | following_account_ids -- hidden]
     boost_account_ids = [id | following_account_ids -- excluded -- pl.hide_boosts -- hidden]
@@ -144,10 +146,11 @@ defmodule SukhiFedi.Timelines do
   defp home_boosts(account_ids, opts, limit, viewer_id) do
     # A boost carries its boosted note's author into the feed too, so drop
     # boosts of anyone the viewer has muted or blocked — the same authors
-    # whose own notes are already hidden. (A muted *booster* is filtered
-    # upstream via `account_ids`; this closes the other door, where someone
-    # the viewer follows boosts a muted account's post.)
-    hidden = Moderation.hidden_author_ids(viewer_id)
+    # whose own notes are already hidden — plus anyone on a silenced instance.
+    # (A muted *booster* is filtered upstream via `account_ids`; this closes
+    # the other door, where someone the viewer follows boosts a muted or
+    # silenced account's post.)
+    hidden = Moderation.hidden_author_ids(viewer_id) ++ Moderation.silenced_author_ids()
 
     rows =
       from(b in Boost,
@@ -235,7 +238,14 @@ defmodule SukhiFedi.Timelines do
     opts = normalize_opts(opts)
     local? = Map.get(opts, :local, true)
 
+    # Silenced instances stay off public too, for everyone (anonymous
+    # included). The default `local: true` already drops remote authors, so
+    # this only bites the federated TL (`local: false`); the rule lives in
+    # `Moderation.silenced_author_ids/0` either way.
+    silenced = Moderation.silenced_author_ids()
+
     from(n in Note, where: n.visibility == "public")
+    |> where([n], n.account_id not in ^silenced)
     |> maybe_local_only(local?)
     |> apply_paging(opts)
     |> maybe_only_media(opts[:only_media])
@@ -243,6 +253,44 @@ defmodule SukhiFedi.Timelines do
     |> Repo.all()
     |> Repo.preload([:account, :media, :tags])
     |> SukhiFedi.Notes.with_refs()
+  end
+
+  @doc """
+  Bubble (ご近所) timeline: public-visibility *remote* notes from the small
+  admin-curated set of trusted instances (`Moderation.bubble_domains/0`).
+  Newest first. A subtractive, curated feed — an empty allow-set means an
+  empty bubble, never the firehose.
+
+  Reuses the public timeline's filters/paging; just narrows the origin to the
+  allowed domains. `viewer_id` (optional) lets a logged-in reader's own
+  blocks/mutes drop out via `Moderation.hidden_author_ids/1`, the same
+  id-subtraction every feed uses.
+
+  Opts: `:max_id`, `:since_id`, `:min_id`, `:limit`, `:only_media`,
+  `:hide_sensitive`, `:viewer_id`.
+  """
+  @spec bubble(keyword() | map()) :: [Note.t()]
+  def bubble(opts \\ []) do
+    opts = normalize_opts(opts)
+    viewer_id = Map.get(opts, :viewer_id)
+
+    # The allow-set is the one gate (Moderation.bubble_domains/0). A trusted
+    # instance that's also silenced still drops out — silence wins, same set
+    # public/home subtract — and a viewer's own blocks/mutes drop out too.
+    allowed = Moderation.bubble_domains()
+    hidden = Moderation.hidden_author_ids(viewer_id) ++ Moderation.silenced_author_ids()
+
+    # `notes.domain IN allowed` already excludes local notes (NULL domain),
+    # so this is the local-notes negation for the bubble: remote-only by
+    # construction, no separate `local: false` toggle.
+    from(n in Note, where: n.visibility == "public" and n.domain in ^allowed)
+    |> where([n], n.account_id not in ^hidden)
+    |> maybe_only_media(opts[:only_media])
+    |> maybe_hide_sensitive(opts[:hide_sensitive])
+    |> apply_paging(opts)
+    |> Repo.all()
+    |> Repo.preload([:account, :media, :tags])
+    |> SukhiFedi.Notes.with_refs(viewer_id)
   end
 
   # Local-origin notes carry no `ap_id` (it's synthesized on demand), so a

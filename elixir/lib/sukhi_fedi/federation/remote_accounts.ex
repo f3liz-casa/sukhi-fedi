@@ -50,6 +50,7 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
       mergeable = %{
         display_name: actor_json["name"],
         summary: actor_json["summary"],
+        fields: property_values(actor_json["attachment"]),
         emojis: Emojis.from_tag(actor_json["tag"]),
         inbox_url: actor_json["inbox"],
         shared_inbox_url: shared_inbox(actor_json),
@@ -136,6 +137,23 @@ defmodule SukhiFedi.Federation.RemoteAccounts do
   defp image_url(%{"url" => url}) when is_binary(url), do: url
   defp image_url(url) when is_binary(url), do: url
   defp image_url(_), do: nil
+
+  # Pull the actor's `attachment` PropertyValue rows into our profile
+  # `fields` shape. Non-PropertyValue attachments (some servers attach
+  # images here) are ignored. The values land in `changeset_remote`,
+  # whose `cast_fields` gate sanitizes and caps them — same as our own.
+  defp property_values(attachment) when is_list(attachment) do
+    Enum.flat_map(attachment, fn
+      %{"type" => "PropertyValue", "name" => name, "value" => value}
+      when is_binary(name) and is_binary(value) ->
+        [%{"name" => name, "value" => value}]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp property_values(_), do: []
 
   # Keep only fields with a present value, so an update never clobbers a stored
   # value with a blank one from a partial refetch.

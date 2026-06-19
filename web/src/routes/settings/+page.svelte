@@ -24,6 +24,18 @@
   let displayName = $state('');
   let note = $state('');
   let locked = $state(false);
+  // プロフィールのひとこと欄。本人が選んで置く、静かな key/value の行。
+  // 連合するので、どの画面でも同じものが見える。最大 4 行。
+  const MAX_FIELDS = 4;
+  let fields = $state<{ name: string; value: string }[]>([]);
+
+  function addField() {
+    if (fields.length < MAX_FIELDS) fields = [...fields, { name: '', value: '' }];
+  }
+
+  function removeField(i: number) {
+    fields = fields.filter((_, idx) => idx !== i);
+  }
   let avatarFile = $state<File | null>(null);
   let headerFile = $state<File | null>(null);
 
@@ -76,6 +88,9 @@
       // 自分が前に入れた素のテキストに近づけるだけで、サーバが正本。
       note = stripTags(me.note ?? '');
       locked = !!me.locked;
+      // 値は HTML で返ってくる(リンクを含むことがある)。編集はテキストで
+      // 扱いたいので、note と同じ最小処理でタグを落とす。サーバが正本。
+      fields = (me.fields ?? []).map((f) => ({ name: stripTags(f.name), value: stripTags(f.value) }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg === 'unauthorized') {
@@ -173,6 +188,9 @@
         display_name: displayName,
         note,
         locked,
+        fields: fields
+          .map((f) => ({ name: f.name.trim(), value: f.value.trim() }))
+          .filter((f) => f.name !== ''),
         avatar: avatarFile,
         header: headerFile
       });
@@ -224,6 +242,33 @@
       <span>{$t('settings.bio')}</span>
       <textarea bind:value={note} rows="4" maxlength="500"></textarea>
     </label>
+
+    <div class="stack-tight">
+      <span>{$t('settings.fields')}</span>
+      <p class="muted" style="font-size: var(--text-sm);">{$t('settings.fieldsHint')}</p>
+      {#each fields as f, i (i)}
+        <div class="field-row">
+          <input
+            type="text"
+            bind:value={f.name}
+            maxlength="255"
+            placeholder={$t('settings.fieldName')}
+            aria-label={$t('settings.fieldName')}
+          />
+          <input
+            type="text"
+            bind:value={f.value}
+            maxlength="512"
+            placeholder={$t('settings.fieldValue')}
+            aria-label={$t('settings.fieldValue')}
+          />
+          <button type="button" class="chip" onclick={() => removeField(i)}>{$t('settings.fieldRemove')}</button>
+        </div>
+      {/each}
+      {#if fields.length < MAX_FIELDS}
+        <button type="button" class="chip" onclick={addField}>{$t('settings.fieldAdd')}</button>
+      {/if}
+    </div>
 
     <label class="stack-tight">
       <span>{avatarPreview ? $t('settings.avatarNew') : $t('settings.avatarNow')}</span>
@@ -320,3 +365,18 @@
     rel="noopener noreferrer">CC-BY 4.0</a
   >{$t('settings.emojiCreditParenClose')}
 </footer>
+
+<style>
+  /* プロフィールのひとこと欄の編集行。名前と値を横に並べ、狭い幅では
+     縦に折り返す。値の入力を広めに。 */
+  .field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .field-row input {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+</style>

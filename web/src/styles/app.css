@@ -797,6 +797,11 @@ button:disabled {
   color: var(--color-text-muted);
 }
 
+.composer-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 .composer-row {
   display: flex;
   flex-wrap: wrap;

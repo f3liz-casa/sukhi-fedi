@@ -188,6 +188,14 @@ defmodule SukhiFedi.Web.Router do
     SecurityController.passkey_delete(conn)
   end
 
+  get "/settings/sessions" do
+    SecurityController.sessions(conn)
+  end
+
+  post "/settings/sessions/:id/revoke" do
+    SecurityController.session_revoke(conn)
+  end
+
   # ── Static assets for the SPA + login page ─────────────────────────────
   # The SvelteKit build at `web/build` is copied (or symlinked) into
   # `priv/static`. Cloudflare Pages style deploys can ignore this and

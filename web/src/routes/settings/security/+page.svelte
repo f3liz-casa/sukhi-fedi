@@ -16,8 +16,11 @@
     registerPasskey,
     deletePasskey,
     removePassword,
+    fetchSessions,
+    revokeSession,
     type AuthState,
-    type Reauth
+    type Reauth,
+    type Session
   } from '$lib/auth';
   import { passkeySupported } from '$lib/webauthn';
   import ReauthField from '$lib/components/ReauthField.svelte';
@@ -47,6 +50,9 @@
         void goto('/');
         return;
       }
+      // 端末一覧は session cookie 専用 ─ 変更系が使える(manageable)
+      // ときだけ読む。bearer だけの加入直後は出さない。
+      if (auth.manageable) await loadSessions();
     } catch {
       error = $t('common.readFailed');
     } finally {
@@ -265,6 +271,40 @@
   function fmtDate(iso: string | null): string {
     if (!iso) return '—';
     return iso.slice(0, 10);
+  }
+
+  // ── 入っている端末 ────────────────────────────────────────────────────
+  let sessions = $state<Session[]>([]);
+  let sessionBusy = $state(false);
+  let sessionError = $state<string | null>(null);
+  // 取り消しはうっかりが怖いので、行ごとに本人確認欄を開く(パスキー削除と同じ)。
+  let revokingId = $state<number | null>(null);
+  let revokePassword = $state('');
+  let revokeReauthCode = $state('');
+
+  async function loadSessions() {
+    try {
+      sessions = await fetchSessions();
+    } catch {
+      sessionError = $t('common.readFailed');
+    }
+  }
+
+  async function doRevoke(id: number) {
+    if (sessionBusy) return;
+    sessionBusy = true;
+    sessionError = null;
+    try {
+      await revokeSession(id, reauthOf(revokePassword, revokeReauthCode));
+      revokingId = null;
+      revokePassword = '';
+      revokeReauthCode = '';
+      await loadSessions();
+    } catch (e) {
+      sessionError = explain(e);
+    } finally {
+      sessionBusy = false;
+    }
   }
 </script>
 
@@ -490,6 +530,73 @@
 
     {#if passkeyError}
       <p class="error">{passkeyError}</p>
+    {/if}
+  </section>
+
+  <!-- 入っている端末 -->
+  <section class="timeline sec">
+    <h2>{$t('security.sessionsTitle')}</h2>
+    <p class="prose-small">{$t('security.sessionsHelp')}</p>
+
+    {#if sessions.length === 0}
+      <p class="muted">{$t('security.sessionsNone')}</p>
+    {:else}
+      <ul class="passkeys">
+        {#each sessions as s (s.id)}
+          <li>
+            <span>
+              {s.user_agent ?? $t('security.sessionUnknownDevice')}
+              {#if s.current}<span class="muted">{$t('security.sessionCurrent')}</span>{/if}
+            </span>
+            <span class="muted">
+              {$t('security.sessionWhere')}: {s.ip} · {$t('security.lastUsed')}: {fmtDate(
+                s.last_seen_at
+              )}
+            </span>
+            {#if revokingId === s.id}
+              <form
+                class="form stack-tight inline-delete"
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  void doRevoke(s.id);
+                }}
+              >
+                <ReauthField
+                  hasPassword={auth.has_password}
+                  bind:password={revokePassword}
+                  bind:reauthCode={revokeReauthCode}
+                />
+                <button type="submit" class="btn px-6 py-2" disabled={sessionBusy}
+                  >{$t('security.sessionRevoke')}</button
+                >
+                <button
+                  type="button"
+                  class="chip"
+                  onclick={() => {
+                    revokingId = null;
+                    revokePassword = '';
+                    revokeReauthCode = '';
+                  }}>{$t('security.cancel')}</button
+                >
+              </form>
+            {:else}
+              <button
+                type="button"
+                class="chip"
+                onclick={() => {
+                  revokingId = s.id;
+                  revokePassword = '';
+                  revokeReauthCode = '';
+                }}>{s.current ? $t('security.sessionSignOutHere') : $t('security.sessionRevoke')}</button
+              >
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if sessionError}
+      <p class="error">{sessionError}</p>
     {/if}
   </section>
 

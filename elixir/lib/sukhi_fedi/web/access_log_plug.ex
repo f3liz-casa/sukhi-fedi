@@ -22,7 +22,7 @@ defmodule SukhiFedi.Web.AccessLogPlug do
       ua = header(conn, "user-agent")
       accept = header(conn, "accept")
       sig = if header(conn, "signature") == "-", do: "unsigned", else: "signed"
-      remote = client_ip(conn)
+      remote = SukhiFedi.Web.RateLimitPlug.peer_id(conn)
       query = if conn.query_string in [nil, ""], do: "", else: "?#{conn.query_string}"
 
       Logger.info(
@@ -38,20 +38,6 @@ defmodule SukhiFedi.Web.AccessLogPlug do
     case get_req_header(conn, name) do
       [value | _] -> value
       _ -> "-"
-    end
-  end
-
-  # Behind cloudflared the raw remote_ip is the tunnel socket, not the
-  # peer. Prefer the CF header; fall back to remote_ip for direct hits.
-  defp client_ip(conn) do
-    case get_req_header(conn, "cf-connecting-ip") do
-      [ip | _] ->
-        ip
-
-      _ ->
-        conn.remote_ip
-        |> :inet.ntoa()
-        |> to_string()
     end
   end
 end

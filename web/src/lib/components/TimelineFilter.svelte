@@ -4,17 +4,25 @@
   // タイムライン(home/public/tag/リスト)共通の表示フィルター。チェックを変えたら
   // onchange で親が頭から読み直す。hide_boosts は home でだけ意味があるので、
   // showHideBoosts で出し分ける(リストや public では出さない)。右寄せ。
+  //
+  // viewMode は「画像・メディアのみ」のときだけ出る、一覧↔写真の切り替え。
+  // 同じ行を並べ替えるだけ(読み直さない)なので onchange は通さず、親が
+  // bind で受けて描き分ける。showViewMode を立てた置き場だけに出す。
   let {
     onlyMedia = $bindable(false),
     hideBoosts = $bindable(false),
     hideSensitive = $bindable(false),
+    viewMode = $bindable<'list' | 'photo'>('list'),
     showHideBoosts = false,
+    showViewMode = false,
     onchange
   }: {
     onlyMedia?: boolean;
     hideBoosts?: boolean;
     hideSensitive?: boolean;
+    viewMode?: 'list' | 'photo';
     showHideBoosts?: boolean;
+    showViewMode?: boolean;
     onchange?: () => void;
   } = $props();
 
@@ -40,6 +48,28 @@
         <input type="checkbox" bind:checked={onlyMedia} onchange={() => onchange?.()} />
         <span>{$t('timeline.onlyMedia')}</span>
       </label>
+      {#if showViewMode && onlyMedia}
+        <!-- メディアのみのときだけ、一覧↔写真。同じ投稿を並べ替えるだけなので
+             読み直さず、写真のときはサムネの壁になる。 -->
+        <div class="view-mode" role="group" aria-label={$t('timeline.viewMode')}>
+          <button
+            type="button"
+            class="chip"
+            aria-pressed={viewMode === 'list'}
+            onclick={() => (viewMode = 'list')}
+          >
+            {$t('timeline.viewList')}
+          </button>
+          <button
+            type="button"
+            class="chip"
+            aria-pressed={viewMode === 'photo'}
+            onclick={() => (viewMode = 'photo')}
+          >
+            {$t('timeline.viewPhoto')}
+          </button>
+        </div>
+      {/if}
       {#if showHideBoosts}
         <label class="filter-row">
           <input type="checkbox" bind:checked={hideBoosts} onchange={() => onchange?.()} />
@@ -84,5 +114,11 @@
   }
   .filter-row:hover {
     background: var(--fill-hover);
+  }
+  /* 一覧↔写真。フィルター行と同じ余白の中に、二つの chip を横に並べる。 */
+  .view-mode {
+    display: flex;
+    gap: var(--space-2);
+    padding: 0.375rem 0.5rem;
   }
 </style>

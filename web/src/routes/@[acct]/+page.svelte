@@ -23,6 +23,8 @@
   import AddToListButton from '$lib/components/AddToListButton.svelte';
   import Composer from '$lib/components/Composer.svelte';
   import Twemoji from '$lib/components/Twemoji.svelte';
+  import TimelineFilter from '$lib/components/TimelineFilter.svelte';
+  import MediaGrid from '$lib/components/MediaGrid.svelte';
   import { phrase } from '$lib/phrase';
   import { renderEmojis } from '$lib/emoji';
   import { t } from '$lib/i18n';
@@ -43,6 +45,12 @@
   let articleItems = $state<Status[]>([]);
   let articleNextMaxId = $state<string | null>(null);
   let hasArticles = $derived(articleItems.length > 0);
+
+  // 投稿タブの表示フィルター。「画像・メディアのみ」を入れると only_media で
+  // 読み直し、そのとき「写真」を選ぶとサムネの壁(MediaGrid)に切り替わる。
+  // viewMode は描き分けるだけなので読み直さない。
+  let onlyMedia = $state(false);
+  let viewMode = $state<'list' | 'photo'>('list');
 
   let acct = $derived($page.params.acct ?? '');
   let isSelf = $derived(!!account && !!me && me.id === account.id);
@@ -151,7 +159,7 @@
       }
       const empty = { items: [] as Status[], nextMaxId: null };
       const [page1, pins, articles] = await Promise.all([
-        getAccountStatuses(account.id),
+        getAccountStatuses(account.id, { onlyMedia }),
         // ピン留めは featured collection。取れなくてもプロフィール本体は出す。
         getAccountStatuses(account.id, { pinned: true }).catch(() => empty),
         // 記事タブの種。あればタブを出す。無ければ静かに空のまま。
@@ -186,11 +194,26 @@
     if (!account || loading) return;
     loading = true;
     try {
-      const p = await getAccountStatuses(account.id, { maxId: nextMaxId });
+      const p = await getAccountStatuses(account.id, { maxId: nextMaxId, onlyMedia });
       items = [...items, ...p.items];
       nextMaxId = p.nextMaxId;
     } catch {
       // 続きが取れなかったら静かに止める。
+    } finally {
+      loading = false;
+    }
+  }
+
+  // フィルター(画像・メディアのみ)を変えたら、投稿の一覧だけ頭から読み直す。
+  async function applyFilters() {
+    if (!account || loading) return;
+    loading = true;
+    try {
+      const p = await getAccountStatuses(account.id, { onlyMedia });
+      items = p.items;
+      nextMaxId = p.nextMaxId;
+    } catch {
+      // 取れなければ静かに、いまの一覧のまま。
     } finally {
       loading = false;
     }
@@ -304,6 +327,21 @@
       <div class="profile-note">{@html renderEmojis(account.note, account.emojis)}</div>
     {/if}
 
+    {#if account.fields && account.fields.length > 0}
+      <!-- プロフィールのひとこと欄。本人が自分で選んで置いた、静かな
+           key/value の行。連合するので、どの画面でも同じものが見える。
+           verified_at は使わない（こちらでは rel="me" 検証をしないので、
+           「確認済み」を装わない）。 -->
+      <dl class="profile-fields">
+        {#each account.fields as f (f.name)}
+          <div class="profile-field">
+            <dt>{@html renderEmojis(f.name, account.emojis)}</dt>
+            <dd>{@html renderEmojis(f.value, account.emojis)}</dd>
+          </div>
+        {/each}
+      </dl>
+    {/if}
+
     <p class="profile-counts">
       <a href={`/@${account.acct}/following`}>
         <strong>{account.following_count ?? 0}</strong> {$t('profile.followingSuffix')}
@@ -347,43 +385,67 @@
       {/if}
     </section>
   {:else}
-    {#if pinnedItems.length > 0}
-      <section class="timeline pinned">
-        <p class="pinned-label"><Twemoji emoji="📌" /> {$t('profile.pinned')}</p>
-        {#each pinnedItems as s (s.id)}
+    <div class="measure">
+      <TimelineFilter bind:onlyMedia bind:viewMode showViewMode onchange={applyFilters} />
+    </div>
+
+    {#if onlyMedia && viewMode === 'photo'}
+      <!-- 写真モード: メディアを持つ投稿をサムネの壁で。ピン留めは一覧の作法
+           なのでここでは出さない。 -->
+      <section class="timeline">
+        {#if items.length === 0 && !loading}
+          <p class="prose-small">{$t('profile.empty')}</p>
+        {/if}
+
+        <MediaGrid {items} />
+
+        {#if !initial && loading}
+          <p class="loading">{$t('common.loading')}</p>
+        {/if}
+
+        {#if nextMaxId && !loading}
+          <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
+        {/if}
+      </section>
+    {:else}
+      {#if pinnedItems.length > 0}
+        <section class="timeline pinned">
+          <p class="pinned-label"><Twemoji emoji="📌" /> {$t('profile.pinned')}</p>
+          {#each pinnedItems as s (s.id)}
+            <StatusCard
+              status={s}
+              canReply
+              onreply={onReply}
+              onupdate={onPinUpdate}
+              ondelete={(d) => (pinnedItems = pinnedItems.filter((it) => it.id !== d.id))}
+            />
+          {/each}
+        </section>
+      {/if}
+
+      <section class="timeline">
+        {#if items.length === 0 && !loading}
+          <p class="prose-small">{$t('profile.empty')}</p>
+        {/if}
+
+        {#each items as s (s.id)}
           <StatusCard
             status={s}
             canReply
             onreply={onReply}
-            onupdate={onPinUpdate}
-            ondelete={(d) => (pinnedItems = pinnedItems.filter((it) => it.id !== d.id))}
+            ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
           />
         {/each}
+
+        {#if !initial && loading}
+          <p class="loading">{$t('common.loading')}</p>
+        {/if}
+
+        {#if nextMaxId && !loading}
+          <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
+        {/if}
       </section>
     {/if}
-
-    <section class="timeline">
-      {#if items.length === 0 && !loading}
-        <p class="prose-small">{$t('profile.empty')}</p>
-      {/if}
-
-      {#each items as s (s.id)}
-        <StatusCard
-          status={s}
-          canReply
-          onreply={onReply}
-          ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
-        />
-      {/each}
-
-      {#if !initial && loading}
-        <p class="loading">{$t('common.loading')}</p>
-      {/if}
-
-      {#if nextMaxId && !loading}
-        <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
-      {/if}
-    </section>
   {/if}
 {/if}
 
@@ -432,6 +494,32 @@
   .pinned-label {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  /* プロフィールのひとこと欄。落ち着いた区切りの行。各行は名前（淡く）と
+     値を横に並べ、狭い幅では縦に折り返す。動かない、飾らない。 */
+  .profile-fields {
+    margin: 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .profile-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+  }
+  .profile-field dt {
+    color: var(--color-text-muted);
+    flex: 0 0 auto;
+    min-width: 6rem;
+  }
+  .profile-field dd {
+    margin: 0;
+    flex: 1 1 12rem;
+    min-width: 0;
+    word-break: break-word;
   }
 
   /* 私的メモ。本名の下に、ひかえめに。連合しない、あなただけの呼び名。

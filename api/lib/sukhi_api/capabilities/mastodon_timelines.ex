@@ -53,24 +53,47 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
     base_opts = Pagination.parse_opts(req[:query])
     parsed = parse_query(req[:query])
 
-    opts =
-      base_opts
-      |> with_filters(req[:query])
-      |> Map.put(:local, parsed["local"] in ["true", "1", nil])
-      |> Map.put(:remote, parsed["remote"] in ["true", "1"])
+    # `bubble=true` folds the ご近所 feed into the public route (one endpoint,
+    # cleanest for client compat): public remote notes from the curated
+    # allow-set only. A logged-in reader's id rides along so their own
+    # blocks/mutes drop out, matching every other feed.
+    if parsed["bubble"] in ["true", "1"] do
+      viewer = req[:assigns][:current_account]
+      opts = with_filters(base_opts, req[:query]) |> maybe_put_viewer(viewer)
 
-    case GatewayRpc.call(SukhiFedi.Timelines, :public, [Map.to_list(opts)]) do
-      {:ok, notes} when is_list(notes) ->
-        render_page(notes, "/api/v1/timelines/public", opts)
+      case GatewayRpc.call(SukhiFedi.Timelines, :bubble, [Map.to_list(opts)]) do
+        {:ok, notes} when is_list(notes) ->
+          render_page(notes, "/api/v1/timelines/public", opts, viewer)
 
-      {:error, :not_connected} ->
-        ok(503, %{error: "gateway_not_connected"})
+        {:error, :not_connected} ->
+          ok(503, %{error: "gateway_not_connected"})
 
-      {:error, {:badrpc, r}} ->
-        ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+        {:error, {:badrpc, r}} ->
+          ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
 
-      _ ->
-        ok(500, %{error: "internal_error"})
+        _ ->
+          ok(500, %{error: "internal_error"})
+      end
+    else
+      opts =
+        base_opts
+        |> with_filters(req[:query])
+        |> Map.put(:local, parsed["local"] in ["true", "1", nil])
+        |> Map.put(:remote, parsed["remote"] in ["true", "1"])
+
+      case GatewayRpc.call(SukhiFedi.Timelines, :public, [Map.to_list(opts)]) do
+        {:ok, notes} when is_list(notes) ->
+          render_page(notes, "/api/v1/timelines/public", opts)
+
+        {:error, :not_connected} ->
+          ok(503, %{error: "gateway_not_connected"})
+
+        {:error, {:badrpc, r}} ->
+          ok(503, %{error: "gateway_rpc_failed", detail: inspect(r)})
+
+        _ ->
+          ok(500, %{error: "internal_error"})
+      end
     end
   end
 
@@ -122,6 +145,9 @@ defmodule SukhiApi.Capabilities.MastodonTimelines do
     |> Map.put(:hide_boosts, parsed["hide_boosts"] in ["true", "1"])
     |> Map.put(:hide_sensitive, parsed["hide_sensitive"] in ["true", "1"])
   end
+
+  defp maybe_put_viewer(opts, %{id: id}), do: Map.put(opts, :viewer_id, id)
+  defp maybe_put_viewer(opts, _), do: opts
 
   defp parse_query(nil), do: %{}
   defp parse_query(""), do: %{}

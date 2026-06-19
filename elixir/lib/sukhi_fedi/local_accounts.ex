@@ -327,31 +327,133 @@ defmodule SukhiFedi.LocalAccounts do
 
   @session_ttl_days 30
 
+  @typedoc """
+  The device behind a login, as resolved from the request at the cookie
+  chokepoint (`Web.Auth.SessionCookie.mint/2`). Both fields may be nil
+  — a mint outside a request has no fingerprint.
+  """
+  @type session_context :: %{
+          optional(:ip_text) => String.t() | nil,
+          optional(:user_agent) => String.t() | nil
+        }
+
   @doc """
   Mint a session row for `account` and return the plaintext token. The
   token is base64url-encoded random bytes; only the SHA-256 hash is
   persisted (same pattern as OAuth access tokens). The caller drops
   the plaintext into a `session_token` cookie.
-  """
-  @spec create_session(Account.t() | integer()) :: {:ok, String.t()}
-  def create_session(%Account{id: id}), do: create_session(id)
 
-  def create_session(account_id) when is_integer(account_id) do
+  The optional `context` carries the device fingerprint (coarse IP +
+  user-agent). When it names a device this account has *never* signed
+  in from before (`new_device?/2`), a single quiet "a new device signed
+  in" mail goes out — a heads-up after the fact, never a gate: the
+  session is minted regardless, and the real second factor (TOTP /
+  passkey) has already done its job upstream.
+  """
+  @spec create_session(Account.t() | integer(), session_context()) :: {:ok, String.t()}
+  def create_session(account, context \\ %{})
+
+  def create_session(%Account{id: id}, context), do: create_session(id, context)
+
+  def create_session(account_id, context) when is_integer(account_id) do
     token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
     hash = :crypto.hash(:sha256, token) |> Base.encode16(case: :lower)
-    expires_at =
-      DateTime.utc_now()
-      |> DateTime.add(@session_ttl_days * 24 * 60 * 60, :second)
-      |> DateTime.truncate(:second)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    expires_at = DateTime.add(now, @session_ttl_days * 24 * 60 * 60, :second)
+
+    ip = context[:ip_text]
+    ua = context[:user_agent]
+
+    # Read the prior fingerprints *before* inserting this one, so the
+    # device that's signing in now never counts itself as "seen".
+    new_device? = new_device?({ip, ua}, prior_fingerprints(account_id))
 
     {:ok, _} =
       %SukhiFedi.Schema.Session{}
       |> Ecto.Changeset.cast(
-        %{token_hash: hash, expires_at: expires_at, account_id: account_id},
-        [:token_hash, :expires_at, :account_id]
+        %{
+          token_hash: hash,
+          expires_at: expires_at,
+          account_id: account_id,
+          ip_text: ip,
+          user_agent: ua,
+          last_seen_at: now
+        },
+        [:token_hash, :expires_at, :account_id, :ip_text, :user_agent, :last_seen_at]
       )
       |> Repo.insert()
 
+    if new_device?, do: notify_new_device(account_id, ip)
+
     {:ok, token}
+  end
+
+  @doc """
+  Every live (unexpired) session for `account`, newest first — what the
+  security page lists so the owner can see where they're signed in.
+  """
+  @spec list_sessions(Account.t() | integer()) :: [Session.t()]
+  def list_sessions(%Account{id: id}), do: list_sessions(id)
+
+  def list_sessions(account_id) when is_integer(account_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    from(s in Session,
+      where: s.account_id == ^account_id and s.expires_at > ^now,
+      order_by: [desc: s.created_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Revoke one of `account`'s own sessions by id. Scoped to the account,
+  so the id alone can't reach across owners. `{:error, :not_found}` when
+  no such row belongs to this account.
+  """
+  @spec revoke_session(Account.t() | integer(), integer()) :: :ok | {:error, :not_found}
+  def revoke_session(%Account{id: id}, session_id), do: revoke_session(id, session_id)
+
+  def revoke_session(account_id, session_id)
+      when is_integer(account_id) and is_integer(session_id) do
+    {count, _} =
+      from(s in Session, where: s.id == ^session_id and s.account_id == ^account_id)
+      |> Repo.delete_all()
+
+    if count == 0, do: {:error, :not_found}, else: :ok
+  end
+
+  @doc """
+  Has this account signed in from this `{ip, user_agent}` pair before?
+
+  Pure so the new-device heads-up is decided in one place and unit-
+  testable in isolation. A fingerprint with no IP *and* no UA (nothing
+  to recognise a device by) is treated as already-known — silence beats
+  a false "new device" alarm. Otherwise the device is new exactly when
+  no prior session shares this pair.
+  """
+  @spec new_device?({String.t() | nil, String.t() | nil}, [{String.t() | nil, String.t() | nil}]) ::
+          boolean()
+  def new_device?({nil, nil}, _prior), do: false
+  def new_device?(fingerprint, prior), do: fingerprint not in prior
+
+  defp prior_fingerprints(account_id) do
+    from(s in Session, where: s.account_id == ^account_id, select: {s.ip_text, s.user_agent})
+    |> Repo.all()
+  end
+
+  # One plain mail to the account's own verified address — no push, no
+  # in-app badge, no count. Best-effort: a send that fails just means the
+  # heads-up didn't go, the login already stands. Skipped silently when
+  # there's no verified address to mail (passwordless accounts always
+  # have one, but a half-set-up account may not yet).
+  defp notify_new_device(account_id, ip) do
+    case Repo.get(Account, account_id) do
+      %Account{email_verified_at: %DateTime{}, email: email} = account when is_binary(email) ->
+        _ = SukhiFedi.Auth.LoginNotice.deliver(account, ip)
+        :ok
+
+      _ ->
+        :ok
+    end
   end
 end
