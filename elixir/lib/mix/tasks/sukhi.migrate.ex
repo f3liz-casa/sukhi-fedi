@@ -6,6 +6,10 @@ defmodule Mix.Tasks.Sukhi.Migrate do
   Walks `priv/repo/migrations/core/` and each enabled addon's migration
   path. Replaces `mix ecto.migrate` in this project because migrations
   are spread across addon subdirs.
+
+  Inherits `SukhiFedi.Release.check_migration_sanity/0` (it runs inside
+  `migrate_all/0`), so dev refuses an out-of-order schema the same way the
+  release entrypoint does.
   """
 
   use Mix.Task

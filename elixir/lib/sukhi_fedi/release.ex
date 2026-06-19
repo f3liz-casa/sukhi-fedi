@@ -7,6 +7,13 @@ defmodule SukhiFedi.Release do
 
   Walks `priv/repo/migrations/core/` and each enabled addon's
   `migrations_path/0`, in that order.
+
+  Before applying anything, `migrate_all/0` runs `check_migration_sanity/0`,
+  which refuses to migrate against a schema this release can't reason about
+  (an unapplied migration sitting *below* one already applied — an
+  out-of-order history that `:up` `all: true` would silently skip over).
+  `Mix.Tasks.Sukhi.Migrate` routes through `migrate_all/0`, so dev gets the
+  same gate.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -16,7 +23,9 @@ defmodule SukhiFedi.Release do
   def migrate_all do
     load_app()
 
-    paths = [core_path() | addon_paths()]
+    check_migration_sanity()
+
+    paths = migration_paths()
 
     for repo <- repos() do
       {:ok, _, _} =
@@ -24,6 +33,69 @@ defmodule SukhiFedi.Release do
           Ecto.Migrator.run(repo, paths, :up, all: true)
         end)
     end
+  end
+
+  @doc """
+  Refuse to migrate against an out-of-order schema. For each repo, over the
+  exact same path set `migrate_all/0` uses, ask Ecto which migrations are
+  applied vs pending; if any pending (`:down`) migration sits *below* the
+  highest applied (`:up`) version, raise listing the offending versions.
+
+  Such a state means the database carries history this release can't account
+  for — a migration was applied out of order, or this release is missing one
+  that ran below its newest. `:up` with `all: true` would happily run the
+  stragglers without complaint, leaving the schema in an order no release
+  reasoned about. Better to stop, loudly.
+  """
+  def check_migration_sanity do
+    load_app()
+
+    paths = migration_paths()
+
+    for repo <- repos() do
+      {:ok, _, _} =
+        Ecto.Migrator.with_repo(repo, fn repo ->
+          repo
+          |> Ecto.Migrator.migrations(paths)
+          |> migrations_out_of_order()
+          |> case do
+            [] ->
+              :ok
+
+            offending ->
+              raise """
+              #{inspect(repo)}: refusing to migrate — pending migrations sit \
+              below an already-applied one. The schema's history is out of \
+              order; this release can't reason about it. Offending versions: \
+              #{Enum.join(offending, ", ")}.
+              """
+          end
+        end)
+    end
+
+    :ok
+  end
+
+  # Pending (`:down`) versions that sit below the highest applied (`:up`)
+  # one, given `Ecto.Migrator.migrations/2`'s `[{status, version, name}]`.
+  # Empty when the history is a clean prefix of applied followed by pending.
+  # Public (and DB-free) so the rule is testable in isolation; not API.
+  @doc false
+  def migrations_out_of_order(migrations) do
+    applied = for {:up, version, _name} <- migrations, do: version
+    highest_up = Enum.max(applied, fn -> nil end)
+
+    case highest_up do
+      nil ->
+        []
+
+      _ ->
+        for {:down, version, _name} <- migrations, version < highest_up, do: version
+    end
+  end
+
+  defp migration_paths do
+    [core_path() | addon_paths()]
   end
 
   defp core_path do
