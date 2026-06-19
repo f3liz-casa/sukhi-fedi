@@ -669,6 +669,36 @@ export async function deletePasskey(id: number, reauth: Reauth): Promise<void> {
   await settingsPost(`/settings/passkeys/${id}/delete`, reauth);
 }
 
+// いま入っている端末の一覧。current が「この端末」。新しい端末で
+// 入ったときの「あたらしい端末でログインがありました」メールと対の、
+// あとから見直すための窓。数字や煽りは出さない ─ ただの台帳。
+export type Session = {
+  id: number;
+  // だいたいの場所(粗いIP)。'?' は分からなかったとき。
+  ip: string;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  current: boolean;
+};
+
+export async function fetchSessions(): Promise<Session[]> {
+  const res = await fetch('/settings/sessions', {
+    credentials: 'same-origin',
+    headers: bearerHeaders()
+  });
+  if (res.status === 401) return [];
+  if (!res.ok) throw new Error(`sessions_failed_${res.status}`);
+  const body = (await res.json()) as { sessions: Session[] };
+  return body.sessions;
+}
+
+// 端末をログアウトさせる。要素を外すのと同じ本人確認(password か
+// reauth コード)ごし。
+export async function revokeSession(id: number, reauth: Reauth): Promise<void> {
+  await settingsPost(`/settings/sessions/${id}/revoke`, reauth);
+}
+
 // Navigate to the shared check page. Anubis challenges this path; the
 // page picks up `intent` and finishes the flow on the other side.
 //

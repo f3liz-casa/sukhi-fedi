@@ -51,6 +51,21 @@ defmodule SukhiDelivery.AP.ActorJson do
     |> maybe_put_assertion_method(account, actor_uri)
     |> maybe_put_image("icon", account.avatar_url)
     |> maybe_put_image("image", account.banner_url)
+    |> maybe_put_fields(account.fields)
+  end
+
+  # Profile fields ride as AP `attachment` PropertyValue rows — the shape
+  # Mastodon and Misskey/Sharkey both render — so a remote viewer sees the
+  # same rows a local one does. Omitted entirely when the person has none,
+  # so a bare actor stays bare (same as icon/image).
+  defp maybe_put_fields(map, [_ | _] = fields) do
+    Map.put(map, "attachment", Enum.map(fields, &property_value/1))
+  end
+
+  defp maybe_put_fields(map, _), do: map
+
+  defp property_value(%{"name" => name, "value" => value}) do
+    %{"type" => "PropertyValue", "name" => name, "value" => value}
   end
 
   # FEP-521a: the Ed25519 key (FEP-8b32 Object Integrity Proofs) rides

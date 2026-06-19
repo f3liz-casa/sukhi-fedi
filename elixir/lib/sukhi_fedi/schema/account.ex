@@ -8,6 +8,12 @@ defmodule SukhiFedi.Schema.Account do
     field :display_name, :string
     field :summary, :string
     field :emojis, {:array, :map}, default: []
+    # Profile fields: a person's own static key/value rows (Mastodon
+    # `fields` / AP `attachment` PropertyValue). They federate, so a
+    # remote viewer sees exactly what the person wrote. Each row is
+    # `%{"name" => String.t(), "value" => String.t()}`; for remote rows
+    # this mirrors the upstream actor's `attachment`.
+    field :fields, {:array, :map}, default: []
     field :private_key_jwk, :map
     field :public_key_jwk, :map
     # PEM-encoded SubjectPublicKeyInfo — read by actor_controller.ex for
@@ -74,6 +80,7 @@ defmodule SukhiFedi.Schema.Account do
       :display_name,
       :summary,
       :emojis,
+      :fields,
       :actor_uri,
       :inbox_url,
       :shared_inbox_url,
@@ -85,6 +92,7 @@ defmodule SukhiFedi.Schema.Account do
       :last_fetched_at
     ])
     |> update_change(:summary, &SukhiFedi.HTML.sanitize/1)
+    |> update_change(:fields, &cast_fields/1)
     |> validate_required([:username, :domain, :actor_uri])
   end
 
@@ -100,8 +108,9 @@ defmodule SukhiFedi.Schema.Account do
     attrs = normalize_credentials_attrs(attrs)
 
     account
-    |> cast(attrs, [:display_name, :summary, :avatar_url, :banner_url, :is_bot, :locked])
+    |> cast(attrs, [:display_name, :summary, :fields, :avatar_url, :banner_url, :is_bot, :locked])
     |> update_change(:summary, &SukhiFedi.HTML.sanitize/1)
+    |> update_change(:fields, &cast_fields/1)
     |> validate_length(:display_name, max: 100)
     |> validate_length(:summary, max: 1024)
   end
@@ -156,6 +165,45 @@ defmodule SukhiFedi.Schema.Account do
       name: :accounts_local_email_index,
       message: "は、もう使われています"
     )
+  end
+
+  # The one gate for profile `fields`, walked by both the local edit and
+  # the remote mirror (so a remote actor's `attachment` is held to the
+  # same caps as our own users'). Keeps at most 4 rows; each name is
+  # plain text (escaped, like local note content) and each value is run
+  # through the shared bio scrubber `HTML.sanitize/1` — never an inline
+  # second scrubber (CODE_STYLE §0/§3). Blank-named rows are dropped.
+  @max_fields 4
+  @max_field_name 255
+  @max_field_value 512
+  defp cast_fields(rows) when is_list(rows) do
+    rows
+    |> Enum.map(&one_field/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.take(@max_fields)
+  end
+
+  defp cast_fields(_), do: []
+
+  defp one_field(row) when is_map(row) do
+    name = row |> field_str("name") |> String.slice(0, @max_field_name)
+    value = row |> field_str("value") |> SukhiFedi.HTML.sanitize() |> String.slice(0, @max_field_value)
+
+    case String.trim(name) do
+      "" -> nil
+      _ -> %{"name" => SukhiFedi.HTML.escape(name), "value" => value}
+    end
+  end
+
+  defp one_field(_), do: nil
+
+  defp field_str(row, key) do
+    case Map.get(row, key) || Map.get(row, String.to_existing_atom(key)) do
+      v when is_binary(v) -> v
+      _ -> ""
+    end
+  rescue
+    ArgumentError -> ""
   end
 
   defp normalize_credentials_attrs(attrs) when is_map(attrs) do

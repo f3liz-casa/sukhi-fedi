@@ -12,6 +12,10 @@ defmodule SukhiDelivery.Schema.Account do
     field :username, :string
     field :display_name, :string
     field :summary, :string
+    # Profile fields (gateway-side migration). ActorJson.build_person/1
+    # reads them to emit AP `attachment` PropertyValue rows when fanning
+    # out Update(Actor), mirroring the gateway.
+    field :fields, {:array, :map}, default: []
     field :public_key_pem, :string
     field :avatar_url, :string
     field :banner_url, :string

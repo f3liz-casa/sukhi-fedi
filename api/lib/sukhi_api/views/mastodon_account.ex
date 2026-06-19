@@ -101,8 +101,23 @@ defmodule SukhiApi.Views.MastodonAccount do
       statuses_count: Map.get(counts, :statuses, 0),
       last_status_at: nil,
       emojis: Map.get(account, :emojis) || [],
-      fields: []
+      fields: fields(account)
     }
+  end
+
+  # Profile fields → Mastodon `fields`. Stored as `%{"name", "value"}`
+  # rows (sanitized on write); `verified_at` is always nil — we don't run
+  # rel="me" link verification, so we never claim a row is verified.
+  defp fields(account) do
+    case Map.get(account, :fields) do
+      rows when is_list(rows) ->
+        Enum.map(rows, fn row ->
+          %{name: Map.get(row, "name", ""), value: Map.get(row, "value", ""), verified_at: nil}
+        end)
+
+      _ ->
+        []
+    end
   end
 
   defp proxy_image(true, kind, id, url) when is_binary(url) do
@@ -125,7 +140,7 @@ defmodule SukhiApi.Views.MastodonAccount do
         sensitive: false,
         language: nil,
         note: Map.get(account, :summary) || "",
-        fields: [],
+        fields: fields(account),
         follow_requests_count: 0
       },
       role:

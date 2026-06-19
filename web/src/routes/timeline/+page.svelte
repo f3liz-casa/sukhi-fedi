@@ -219,6 +219,11 @@
   >{$t('timeline.tabPublic')}</button>
   <button
     type="button"
+    aria-pressed={kind === 'bubble'}
+    onclick={() => selectKind('bubble')}
+  >{$t('timeline.tabBubble')}</button>
+  <button
+    type="button"
     aria-pressed={kind === 'tag'}
     onclick={() => selectKind('tag')}
   >{$t('timeline.tabTag')}</button>
@@ -256,6 +261,8 @@
     <p class="prose-small">
       {#if kind === 'home'}
         {$t('timeline.emptyHome')}
+      {:else if kind === 'bubble'}
+        {$t('timeline.emptyBubble')}
       {:else if kind === 'tag' && !tag}
         {$t('timeline.emptyTagPrompt')}
       {:else if kind === 'tag'}

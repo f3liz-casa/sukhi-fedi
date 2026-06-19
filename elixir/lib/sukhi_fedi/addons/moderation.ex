@@ -16,7 +16,7 @@ defmodule SukhiFedi.Addons.Moderation do
   import Ecto.Query
   alias Ecto.Multi
   alias SukhiFedi.{Outbox, Repo}
-  alias SukhiFedi.Schema.{Mute, Block, Report, InstanceBlock, Account, AdminAudit}
+  alias SukhiFedi.Schema.{Mute, Block, Report, InstanceBlock, BubbleInstance, Account, AdminAudit}
 
   # ── user-level mutes / blocks (no admin outbox) ──────────────────────────
 
@@ -305,6 +305,45 @@ defmodule SukhiFedi.Addons.Moderation do
   end
 
   @doc """
+  Inbound federation policy for `host` — the one place that turns a stored
+  instance-block severity into a decision. `:reject` drops the activity at
+  the door (accept-and-drop, see the inbox gate); `:silence` lets it in but
+  keeps its notes off the home/public surfaces (via `silenced_author_ids/0`,
+  the same id-subtraction circles use); `:pass` is the default for an
+  unblocked host (observe and surface normally).
+
+  Signature and proof checks are crypto-trust, not operator policy, so they
+  stay ahead of this in the inbox and are unaffected.
+  """
+  @spec instance_policy(String.t() | nil) :: :reject | :silence | :pass
+  def instance_policy(host) when is_binary(host) do
+    case Repo.one(from i in InstanceBlock, where: i.domain == ^host, select: i.severity) do
+      "silence" -> :silence
+      "suspend" -> :reject
+      _ -> :pass
+    end
+  end
+
+  def instance_policy(_), do: :pass
+
+  @doc """
+  Local account ids authored by `:silence`-severity instances. The global
+  sibling of `hidden_author_ids/1`: home and public subtract this set so a
+  silenced instance's posts are materialized (and federate/archive) but
+  never surface, for every viewer including anonymous ones.
+  """
+  @spec silenced_author_ids() :: [integer()]
+  def silenced_author_ids do
+    Repo.all(
+      from a in Account,
+        join: i in InstanceBlock,
+        on: i.domain == a.domain,
+        where: i.severity == "silence",
+        select: a.id
+    )
+  end
+
+  @doc """
   List federated domain blocks with offset pagination. Returns
   `{:ok, {blocks, total}}`.
   """
@@ -322,6 +361,89 @@ defmodule SukhiFedi.Addons.Moderation do
       |> Repo.all()
 
     {:ok, {blocks, total}}
+  end
+
+  # ── bubble (ご近所) allow-list ────────────────────────────────────────────
+
+  @doc """
+  The trusted-instance allow-set behind the bubble (ご近所) timeline — the one
+  place that says "which remote hosts are in the neighbourhood". The bubble
+  feed (`SukhiFedi.Timelines.bubble/1`) surfaces public posts only from these
+  domains; an empty set means an empty bubble (curated, not a firehose). The
+  sibling of `silenced_author_ids/0`: that subtracts hosts globally, this
+  admits a small chosen set.
+  """
+  @spec bubble_domains() :: [String.t()]
+  def bubble_domains do
+    Repo.all(from b in BubbleInstance, select: b.domain)
+  end
+
+  @spec add_bubble_instance(String.t(), integer()) ::
+          {:ok, BubbleInstance.t()} | {:error, term()}
+  def add_bubble_instance(domain, created_by_id)
+      when is_binary(domain) and is_integer(created_by_id) do
+    changeset =
+      Ecto.Changeset.cast(%BubbleInstance{}, %{domain: domain, created_by_id: created_by_id}, [
+        :domain,
+        :created_by_id
+      ])
+      |> Ecto.Changeset.validate_required([:domain])
+
+    Multi.new()
+    |> Multi.insert(:bubble, changeset, on_conflict: :nothing, conflict_target: :domain)
+    |> Multi.insert(
+      :audit,
+      AdminAudit.changeset(%{
+        action: "bubble_instance_added",
+        admin_account_id: created_by_id,
+        target_domain: domain
+      })
+    )
+    |> Outbox.enqueue_multi(
+      :outbox_event,
+      "sns.outbox.admin.bubble_instance_added",
+      "bubble_instance",
+      & &1.bubble.id,
+      fn %{bubble: b} -> %{domain: b.domain, by_id: created_by_id} end
+    )
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{bubble: b}} -> {:ok, b}
+      {:error, _, reason, _} -> {:error, reason}
+    end
+  end
+
+  @spec remove_bubble_instance(String.t(), integer()) ::
+          {:ok, %{domain: String.t()}} | {:error, :not_found}
+  def remove_bubble_instance(domain, by_id) when is_binary(domain) and is_integer(by_id) do
+    case Repo.get_by(BubbleInstance, domain: domain) do
+      nil ->
+        {:error, :not_found}
+
+      %BubbleInstance{} = bubble ->
+        Multi.new()
+        |> Multi.delete(:bubble, bubble)
+        |> Multi.insert(
+          :audit,
+          AdminAudit.changeset(%{
+            action: "bubble_instance_removed",
+            admin_account_id: by_id,
+            target_domain: bubble.domain
+          })
+        )
+        |> Outbox.enqueue_multi(
+          :outbox_event,
+          "sns.outbox.admin.bubble_instance_removed",
+          "bubble_instance",
+          & &1.bubble.id,
+          fn %{bubble: b} -> %{domain: b.domain, by_id: by_id} end
+        )
+        |> Repo.transaction()
+        |> case do
+          {:ok, %{bubble: b}} -> {:ok, %{domain: b.domain}}
+          {:error, _, reason, _} -> {:error, reason}
+        end
+    end
   end
 
   # ── account suspension ───────────────────────────────────────────────────

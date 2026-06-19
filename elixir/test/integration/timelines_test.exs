@@ -5,7 +5,8 @@ defmodule SukhiFedi.Integration.TimelinesTest do
   @moduletag :integration
 
   alias SukhiFedi.{Lists, Notes, Social, Timelines}
-  alias SukhiFedi.Schema.{Account, Note}
+  alias SukhiFedi.Addons.Moderation
+  alias SukhiFedi.Schema.{Account, Follow, Note}
 
   describe "home/2 with circles" do
     test "an exclusive circle's members leave home but stay in the circle feed" do
@@ -233,8 +234,120 @@ defmodule SukhiFedi.Integration.TimelinesTest do
     end
   end
 
+  describe "instance silence" do
+    test "a silenced instance's notes are materialized but kept off home and public" do
+      admin = create_account!("sil_admin")
+      alice = create_account!("sil_alice")
+      noisy = create_remote_account!("noisy", "loud.example")
+
+      # alice follows the remote author, who posts → normally home + public
+      Repo.insert!(%Follow{
+        follower_uri: local_uri(alice.username),
+        followee_id: noisy.id,
+        state: "accepted"
+      })
+
+      note =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: noisy.id,
+          content: "from a noisy place",
+          visibility: "public",
+          ap_id: "https://loud.example/users/noisy/statuses/1",
+          domain: "loud.example"
+        })
+        |> Repo.insert!()
+
+      home_before = alice |> Timelines.home() |> Enum.map(&Map.get(&1, :id))
+      public_before = Timelines.public(local: false) |> Enum.map(& &1.id)
+      assert note.id in home_before
+      assert note.id in public_before
+
+      # silence the instance → the note row stays (still in the DB) but leaves
+      # both surfaces, for the follower and for the federated public TL
+      {:ok, _} = Moderation.block_instance("loud.example", "silence", nil, admin.id)
+
+      assert Repo.get(Note, note.id)
+      refute note.id in (alice |> Timelines.home() |> Enum.map(&Map.get(&1, :id)))
+      refute note.id in (Timelines.public(local: false) |> Enum.map(& &1.id))
+    end
+  end
+
+  describe "bubble/1" do
+    test "shows only public remote notes from allowed domains; excludes local and non-allowed" do
+      admin = create_account!("bub_admin")
+      local = create_account!("bub_local")
+      friend = create_remote_account!("friend", "good.example")
+      stranger = create_remote_account!("stranger", "other.example")
+
+      # a local public note (never in the bubble — it's remote-only)
+      {:ok, local_note} = Notes.create_status(local, %{"status" => "from home"})
+
+      # a public note from a trusted neighbour (good.example)
+      good =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: friend.id,
+          content: "hi from next door",
+          visibility: "public",
+          ap_id: "https://good.example/users/friend/statuses/1",
+          domain: "good.example"
+        })
+        |> Repo.insert!()
+
+      # a followers-only note from the same trusted neighbour (not public)
+      private =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: friend.id,
+          content: "just for followers",
+          visibility: "followers",
+          ap_id: "https://good.example/users/friend/statuses/2",
+          domain: "good.example"
+        })
+        |> Repo.insert!()
+
+      # a public note from a non-allowed instance (other.example)
+      outside =
+        %Note{}
+        |> Note.changeset(%{
+          account_id: stranger.id,
+          content: "from the firehose",
+          visibility: "public",
+          ap_id: "https://other.example/users/stranger/statuses/1",
+          domain: "other.example"
+        })
+        |> Repo.insert!()
+
+      # empty allow-set → empty bubble (curated, never the firehose)
+      assert Timelines.bubble() == []
+
+      # add good.example to the bubble allow-set
+      {:ok, _} = Moderation.add_bubble_instance("good.example", admin.id)
+
+      ids = Timelines.bubble() |> Enum.map(& &1.id)
+      assert good.id in ids
+      refute local_note.id in ids
+      refute private.id in ids
+      refute outside.id in ids
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
     |> Repo.insert!()
   end
+
+  defp create_remote_account!(username, domain) do
+    %Account{
+      username: username,
+      domain: domain,
+      display_name: username,
+      summary: "",
+      actor_uri: "https://#{domain}/users/#{username}"
+    }
+    |> Repo.insert!()
+  end
+
+  defp local_uri(username), do: "https://#{SukhiFedi.Config.domain!()}/users/#{username}"
 end

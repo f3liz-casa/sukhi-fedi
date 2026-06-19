@@ -50,8 +50,9 @@ defmodule SukhiFedi.Web.RateLimitPlug do
   end
 
   @doc """
-  The requester's identity for rate buckets. Public because other
-  rate gates (e.g. `Auth.MailIpGate`) must bucket by the same notion
+  The requester's identity for rate buckets, and the one definition of
+  "the client's IP". Public because other gates (`Auth.MailIpGate`, the
+  access log, the session-device fingerprint) must read the same notion
   of "who" — two definitions of the client IP would drift.
 
   cloudflared is the sole ingress and Cloudflare's edge sets (and
@@ -59,8 +60,7 @@ defmodule SukhiFedi.Web.RateLimitPlug do
   client IP, so prefer it. Without this the socket peer is the tunnel
   container — identical for every external request — collapsing the
   whole instance into one bucket (no per-IP isolation, /login
-  credential-stuffing rides under one shared ceiling). Mirrors
-  AccessLogPlug.
+  credential-stuffing rides under one shared ceiling).
   """
   def peer_id(%Plug.Conn{} = conn) do
     case get_req_header(conn, "cf-connecting-ip") do

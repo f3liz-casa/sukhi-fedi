@@ -54,6 +54,12 @@
   let error = $state<string | null>(null);
   let fileInput: HTMLInputElement | undefined = $state();
 
+  // 予約投稿。チェックを入れたときだけ日時を見る。返信では出さない
+  // (返信を寝かせる場面はまずない)。下書きには含めない ─ 時刻は
+  // その場で決めるものなので、覚えて復元すると過去になっている。
+  let useSchedule = $state(false);
+  let scheduleAt = $state('');
+
   let visLabels: Record<Visibility, string> = $derived({
     public: $t('compose.visPublic'),
     unlisted: $t('compose.visUnlisted'),
@@ -120,6 +126,12 @@
 
   async function submit() {
     if (!canPost) return;
+    // 予約のチェックは入っているのに、日時が空。送らずに、そっと促す。
+    const scheduledAt = useSchedule && scheduleAt ? new Date(scheduleAt).toISOString() : null;
+    if (useSchedule && !scheduledAt) {
+      error = $t('compose.scheduleNeedsTime');
+      return;
+    }
     posting = true;
     error = null;
     try {
@@ -129,16 +141,22 @@
         sensitive: sensitive || (useSpoiler && !!spoiler) || undefined,
         visibility,
         in_reply_to_id: replyTo?.id ?? null,
-        media_ids: media.map((m) => m.id)
+        media_ids: media.map((m) => m.id),
+        scheduled_at: scheduledAt
       });
-      // 送れた。フォームを空に戻して親に渡す。覚えていた下書きも消す。
+      // 送れた。フォームを空に戻して、覚えていた下書きも消す。
       text = '';
       spoiler = '';
       useSpoiler = false;
       sensitive = false;
+      useSchedule = false;
+      scheduleAt = '';
       media = [];
       showRestored = false;
       clearComposeDraft();
+      // 予約のときは、まだタイムラインには出ない。出ていないものを
+      // 出すと嘘になるので、親には渡さない。
+      if (scheduledAt) return;
       onposted?.(s);
     } catch (e) {
       error = handleErr(e, $t('compose.postFailed'));
@@ -198,6 +216,14 @@
     ></textarea>
   </label>
 
+  {#if useSchedule}
+    <label class="stack-tight">
+      <span>{$t('compose.scheduleLabel')}</span>
+      <input type="datetime-local" bind:value={scheduleAt} />
+      <small class="composer-hint">{$t('compose.scheduleHint')}</small>
+    </label>
+  {/if}
+
   {#if media.length > 0}
     <ul class="composer-media">
       {#each media as m (m.id)}
@@ -234,6 +260,11 @@
     <label class="stack-tight">
       <input type="checkbox" bind:checked={sensitive} />
       <span>{$t('compose.sensitive')}</span>
+    </label>
+
+    <label class="stack-tight">
+      <input type="checkbox" bind:checked={useSchedule} />
+      <span>{$t('compose.schedule')}</span>
     </label>
 
     <label class="stack-tight">

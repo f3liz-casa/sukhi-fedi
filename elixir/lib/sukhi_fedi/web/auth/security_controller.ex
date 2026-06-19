@@ -14,6 +14,8 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
       POST /settings/passkeys/options       → {ref, publicKey}
       POST /settings/passkeys               {ref, attestation…, nickname}
       POST /settings/passkeys/:id/delete    {password?|reauth_code?}
+      GET  /settings/sessions               active sessions (current one marked)
+      POST /settings/sessions/:id/revoke    {password?|reauth_code?}
 
   Mutations are **session-cookie only** (`SessionCookie` moduledoc has
   the why: bearers travel through third-party apps). `GET /auth/state`
@@ -178,6 +180,50 @@ defmodule SukhiFedi.Web.Auth.SecurityController do
 
         {:error, :reauth} ->
           json(conn, 403, %{error: "reauth"})
+      end
+    end)
+  end
+
+  # ── sessions (where am I signed in) ──────────────────────────────────────
+
+  def sessions(conn) do
+    with_session(conn, fn account ->
+      current = SessionCookie.current_token_hash(conn)
+
+      list =
+        account
+        |> LocalAccounts.list_sessions()
+        |> Enum.map(&render_session(&1, current))
+
+      json(conn, 200, %{sessions: list})
+    end)
+  end
+
+  defp render_session(session, current_hash) do
+    %{
+      id: session.id,
+      ip: SukhiFedi.Auth.LoginNotice.coarse_ip(session.ip_text),
+      user_agent: session.user_agent,
+      created_at: DateTime.to_iso8601(session.created_at),
+      last_seen_at: session.last_seen_at && DateTime.to_iso8601(session.last_seen_at),
+      current: session.token_hash == current_hash
+    }
+  end
+
+  # Signing a device out is owner-proof gated, same as removing a factor:
+  # a hijacked session shouldn't be able to evict the real owner's
+  # devices. The account's own current session is fair game to revoke too
+  # — that's just "sign out here".
+  def session_revoke(conn) do
+    with_session(conn, fn account ->
+      with :ok <- reauth_ok(conn, account),
+           {id, ""} <- Integer.parse(to_string(conn.path_params["id"] || "")),
+           :ok <- LocalAccounts.revoke_session(account, id) do
+        json(conn, 200, %{ok: true})
+      else
+        {:error, :reauth} -> json(conn, 403, %{error: "reauth"})
+        {:error, :not_found} -> json(conn, 404, %{error: "not_found"})
+        _ -> json(conn, 404, %{error: "not_found"})
       end
     end)
   end

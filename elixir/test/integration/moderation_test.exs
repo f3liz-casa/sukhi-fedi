@@ -63,8 +63,46 @@ defmodule SukhiFedi.Integration.ModerationTest do
     end
   end
 
+  describe "instance_policy/1" do
+    test "maps stored severity to a federation decision; unblocked is :pass" do
+      admin = create_account!("ip_admin")
+
+      {:ok, _} = Moderation.block_instance("loud.example", "silence", "noisy", admin.id)
+      {:ok, _} = Moderation.block_instance("evil.example", "suspend", "abuse", admin.id)
+
+      assert Moderation.instance_policy("loud.example") == :silence
+      assert Moderation.instance_policy("evil.example") == :reject
+      assert Moderation.instance_policy("friendly.example") == :pass
+      assert Moderation.instance_policy(nil) == :pass
+    end
+
+    test "silenced_author_ids/0 returns only accounts on :silence instances" do
+      admin = create_account!("sa_admin")
+
+      {:ok, _} = Moderation.block_instance("loud.example", "silence", nil, admin.id)
+      {:ok, _} = Moderation.block_instance("evil.example", "suspend", nil, admin.id)
+
+      silenced = create_remote_account!("noisy", "loud.example")
+      _suspended = create_remote_account!("crook", "evil.example")
+      _local = create_account!("homebody")
+
+      assert Moderation.silenced_author_ids() == [silenced.id]
+    end
+  end
+
   defp create_account!(username) do
     %Account{username: username, display_name: username, summary: ""}
+    |> Repo.insert!()
+  end
+
+  defp create_remote_account!(username, domain) do
+    %Account{
+      username: username,
+      domain: domain,
+      display_name: username,
+      summary: "",
+      actor_uri: "https://#{domain}/users/#{username}"
+    }
     |> Repo.insert!()
   end
 end

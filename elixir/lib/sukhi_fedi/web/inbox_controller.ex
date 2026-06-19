@@ -51,10 +51,12 @@ defmodule SukhiFedi.Web.InboxController do
     case FedifyClient.verify(verify_payload) do
       {:ok, %{"ok" => true} = verify_result} ->
         cond do
-          blocked_domain?(raw_json) ->
-            # Domain is on the instance block list. Accept-and-drop (202) so
-            # the blocked peer can't tell it's being filtered — but run no
-            # handlers and don't archive.
+          actor_policy(raw_json) == :reject ->
+            # Domain is suspended (`:reject`). Accept-and-drop (202) so the
+            # blocked peer can't tell it's being filtered — but run no handlers
+            # and don't archive. A `:silence` domain is *not* rejected here: it
+            # falls through to materialize, and `Moderation.silenced_author_ids/0`
+            # keeps its notes off the home/public surfaces downstream.
             send_resp(conn, 202, "")
 
           not proof_acceptable?(raw_json) ->
@@ -120,15 +122,17 @@ defmodule SukhiFedi.Web.InboxController do
 
   defp proof_acceptable?(_), do: true
 
-  # True when the activity's actor lives on an instance-blocked domain.
-  defp blocked_domain?(raw_json) when is_map(raw_json) do
+  # The instance policy for the activity's actor host (the one place that
+  # decision lives is `Moderation.instance_policy/1`). `:reject` is the only
+  # value the gate acts on; `:silence`/`:pass` materialize.
+  defp actor_policy(raw_json) when is_map(raw_json) do
     case raw_json |> Map.get("actor") |> actor_uri() |> uri_host() do
-      host when is_binary(host) -> SukhiFedi.Addons.Moderation.instance_blocked?(host)
-      _ -> false
+      host when is_binary(host) -> SukhiFedi.Addons.Moderation.instance_policy(host)
+      _ -> :pass
     end
   end
 
-  defp blocked_domain?(_), do: false
+  defp actor_policy(_), do: :pass
 
   defp actor_uri(uri) when is_binary(uri), do: uri
   defp actor_uri(%{"id" => id}) when is_binary(id), do: id

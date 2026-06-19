@@ -85,6 +85,14 @@ export type Status = {
   poll?: Poll | null;
 };
 
+// A status carries protected media when it has a CW (spoiler_text) or is
+// flagged sensitive. The one place that answers "must this media stay
+// covered?" — Status.svelte collapses/blurs by these same two fields, and
+// the media grid covers a tile by this predicate (never auto-revealing).
+export function statusMediaProtected(s: Status): boolean {
+  return !!s.spoiler_text || s.sensitive === true;
+}
+
 export type PollOption = {
   title: string;
   votes_count?: number | null;
@@ -122,7 +130,7 @@ export type Relationship = {
   note?: string;
 };
 
-export type TimelineKind = 'home' | 'public' | 'tag';
+export type TimelineKind = 'home' | 'public' | 'bubble' | 'tag';
 
 // ── core ─────────────────────────────────────────────────────────────
 // Every call funnels through `req`. One place attaches the bearer (unless
@@ -266,6 +274,11 @@ export async function fetchTimeline(
       qs.set('local', '1');
       path = `/api/v1/timelines/public?${qs}`;
       break;
+    case 'bubble':
+      // ご近所: 信頼できるご近所のサーバの公開投稿だけ。public 経由で畳む。
+      qs.set('bubble', '1');
+      path = `/api/v1/timelines/public?${qs}`;
+      break;
     case 'tag':
       if (!opts.tag) throw new Error('tag required');
       path = `/api/v1/timelines/tag/${encodeURIComponent(opts.tag)}?${qs}`;
@@ -305,6 +318,9 @@ export type ComposeInput = {
   visibility?: Visibility;
   in_reply_to_id?: string | null;
   media_ids?: string[];
+  // ISO-8601 instant. When set, the server stores the post and publishes
+  // it then, returning a ScheduledStatus instead of a Status.
+  scheduled_at?: string | null;
 };
 
 export async function postStatus(input: ComposeInput): Promise<Status> {
@@ -316,6 +332,7 @@ export async function postStatus(input: ComposeInput): Promise<Status> {
   if (input.visibility) body.visibility = input.visibility;
   if (input.in_reply_to_id) body.in_reply_to_id = input.in_reply_to_id;
   if (input.media_ids && input.media_ids.length > 0) body.media_ids = input.media_ids;
+  if (input.scheduled_at) body.scheduled_at = input.scheduled_at;
 
   return json(await req('POST', '/api/v1/statuses', 'post', { json: body }));
 }
@@ -426,6 +443,9 @@ export type CredentialsUpdate = {
   avatar?: File | null;
   header?: File | null;
   locked?: boolean;
+  // Profile fields, sent as one JSON-encoded part. The server sanitizes
+  // and caps them; an empty array clears the rows.
+  fields?: { name: string; value: string }[];
 };
 
 export async function updateCredentials(input: CredentialsUpdate): Promise<Account> {
@@ -433,6 +453,7 @@ export async function updateCredentials(input: CredentialsUpdate): Promise<Accou
   if (input.display_name !== undefined) fd.set('display_name', input.display_name);
   if (input.note !== undefined) fd.set('note', input.note);
   if (input.locked !== undefined) fd.set('locked', input.locked ? 'true' : 'false');
+  if (input.fields !== undefined) fd.set('fields', JSON.stringify(input.fields));
   if (input.avatar) fd.set('avatar', input.avatar);
   if (input.header) fd.set('header', input.header);
 
@@ -471,12 +492,13 @@ export function getAccountCached(id: string): Promise<Account> {
 
 export async function getAccountStatuses(
   id: string,
-  opts: { maxId?: string | null; limit?: number; pinned?: boolean; articles?: boolean } = {}
+  opts: { maxId?: string | null; limit?: number; pinned?: boolean; articles?: boolean; onlyMedia?: boolean } = {}
 ): Promise<Page<Status>> {
   const qs = pageQs(opts, 20);
   if (opts.pinned) qs.set('pinned', 'true');
   // Sukhi extension: the profile's Articles tab (notes with a title).
   if (opts.articles) qs.set('only_articles', 'true');
+  if (opts.onlyMedia) qs.set('only_media', '1');
   const path = `/api/v1/accounts/${encodeURIComponent(id)}/statuses?${qs}`;
   // 'optional' so a logged-in viewer sees their own followers-only posts
   // (and accepted-follower posts) on the profile, plus fav/reaction flags.
