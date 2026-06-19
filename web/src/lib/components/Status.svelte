@@ -62,6 +62,17 @@
     };
   });
 
+  // ブーストが続くと元の投稿が埋もれる。長文と同じ「畳んでおいて開く」
+  // 作法で、ふだんは一行に畳む。設定ではなく、最初からこの静けさにして
+  // おく（畳む/開くの判断は §0 どおりここ一箇所）。クリックでいつもの
+  // 入れ子ノートをそのまま開く。
+  let boostExpanded = $state(false);
+  // 畳んだ行に出す、元の投稿の一行プレビュー。本文 HTML からタグを外して
+  // 素のテキストにし、名前と同じ作法（phrase で改行候補→絵文字）で出す。
+  let boostPreview = $derived(
+    status.reblog ? renderEmojis(phrase(toPlainText(status.reblog.content)), status.reblog.emojis) : ''
+  );
+
   // 長い本文（主に hackers.pub の Article）はタイムラインを埋めないよう
   // 数行で畳み、「続きを読む」で全文を出す。記事だと知らせるフラグは無い
   // ので、描画後の実際の高さで判断する（背が高ければ畳む）。
@@ -76,6 +87,16 @@
     // リーダーページでは畳まない。それ以外で背が高ければ畳む。
     collapsible = !full && !!contentEl && contentEl.scrollHeight > COLLAPSE_PX;
   });
+
+  // サーバで sanitize 済みの本文 HTML を、一行プレビュー用の素テキストに
+  // する。タグを落として空白を畳むだけ（phrase() がこのあと改行候補と
+  // エスケープを足す）。
+  function toPlainText(html: string): string {
+    return html
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
   function formatTime(
     iso: string,
@@ -98,14 +119,25 @@
 </script>
 
 {#if status.reblog}
-  <!-- ブースト: 上に「○○がブースト」を出し、中身は元の status をそのまま描く。
-       返信・ブースト等のアクションは入れ子側（本物のノート）に効く。 -->
-  <div class="boost">
-    <a class="boost-by" href={`/@${status.account.acct}`}>
-      <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} {$t('status.boostedBy')}
-    </a>
-    <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
-  </div>
+  <!-- ブースト: ふだんは一行に畳んでおく（元の投稿が埋もれないように）。
+       クリックで「○○がブースト」＋元の status をそのまま開く。返信・
+       ブースト等のアクションは入れ子側（本物のノート）に効く。 -->
+  {#if boostExpanded}
+    <div class="boost">
+      <a class="boost-by" href={`/@${status.account.acct}`}>
+        <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} {$t('status.boostedBy')}
+      </a>
+      <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
+    </div>
+  {:else}
+    <button class="boost-compact" onclick={() => (boostExpanded = true)} title={$t('status.expandBoost')}>
+      <Avatar class="quote-avatar" src={status.reblog.account.avatar} name={status.reblog.account.display_name || status.reblog.account.username} />
+      <span class="boost-compact-by">
+        <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} {$t('status.boostedBy')}
+      </span>
+      <span class="boost-compact-preview">{@html boostPreview}</span>
+    </button>
+  {/if}
 {:else}
 <article class="status">
   <Avatar class="avatar" src={avatar} {name} />
@@ -281,6 +313,40 @@
 
   .boost-by:hover {
     text-decoration: underline;
+  }
+
+  /* 畳んだブースト。アバター＋「○○がブースト」＋元の一行を、一行に
+     収める。主張せず、でも一行ぶんの気配は残す（quote-acct と同じ作法で
+     はみ出しは ellipsis）。 */
+  .boost-compact {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    font: inherit;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    /* 子（名前・プレビュー）が中身の幅で踏ん張らず行に収まるよう縮める。 */
+    min-width: 0;
+  }
+  .boost-compact:hover {
+    background: var(--fill-soft);
+  }
+  .boost-compact-by {
+    flex: none;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .boost-compact-preview {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--text-sm);
   }
 
   /* 「@x への返信」。本文の上に、名前より小さく薄く。主張しすぎず、でも

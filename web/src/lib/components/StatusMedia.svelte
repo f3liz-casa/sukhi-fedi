@@ -1,6 +1,13 @@
 <script lang="ts">
   import type { MediaAttachment } from '$lib/api';
+  import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
+
+  // 動きを控えめにしたい人の合図。base.css の view-transition と同じ
+  // prefers-reduced-motion を読んで、gifv の自動ループを止める。true の
+  // ときは poster + controls で出して、再生はタップした時だけ。
+  const calmMotion =
+    browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let {
     attachments,
@@ -37,12 +44,14 @@
         <img src={m.preview_url || m.url} alt={m.description || ''} loading="lazy" />
       </button>
     {:else if m.type === 'video' || m.type === 'gifv'}
-      <!-- gifv は無音ループ動画。ふつうの動画は controls を出す。 -->
+      <!-- gifv は無音ループ動画。ふつうの動画は controls を出す。動きを
+           控えめにしたい時は gifv も自動再生せず、poster + controls で
+           出して、タップした時だけ動く。 -->
       <video
         src={m.url}
         poster={m.preview_url || undefined}
-        controls={m.type === 'video'}
-        autoplay={m.type === 'gifv'}
+        controls={m.type === 'video' || calmMotion}
+        autoplay={m.type === 'gifv' && !calmMotion}
         loop={m.type === 'gifv'}
         muted={m.type === 'gifv'}
         playsinline

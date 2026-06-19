@@ -8,6 +8,11 @@
     type Visibility
   } from '$lib/api';
   import { clearToken } from '$lib/auth';
+  import {
+    loadComposeDraft,
+    saveComposeDraft,
+    clearComposeDraft
+  } from '$lib/compose-draft';
   import { goto } from '$app/navigation';
   import { t } from '$lib/i18n';
 
@@ -25,17 +30,24 @@
     oncancel?: () => void;
   } = $props();
 
+  // 書きかけの下書きは、トップの新規ノートだけ覚える。返信のときは
+  // 覚えない(replyTo があるとここは null)。初回マウントで一度だけ
+  // 拾う ─ untrack の中なので、あとのユーザ入力では読み直さない。
+  const restored = untrack(() => (replyTo ? null : loadComposeDraft()));
+
   // 初期値だけ prop を見たい(あとはユーザが書き換える)ので untrack で
   // 拾う。これがないと state_referenced_locally の warning が出る。
   let text = $state(
     untrack(() =>
-      prefillMention && replyTo ? `@${replyTo.account.acct} ` : ''
+      restored?.text ?? (prefillMention && replyTo ? `@${replyTo.account.acct} ` : '')
     )
   );
-  let spoiler = $state('');
-  let useSpoiler = $state(false);
-  let sensitive = $state(false);
-  let visibility = $state<Visibility>(untrack(() => replyTo?.visibility ?? 'public'));
+  let spoiler = $state(untrack(() => restored?.spoiler ?? ''));
+  let useSpoiler = $state(untrack(() => restored?.useSpoiler ?? false));
+  let sensitive = $state(untrack(() => restored?.sensitive ?? false));
+  let visibility = $state<Visibility>(
+    untrack(() => restored?.visibility ?? replyTo?.visibility ?? 'public')
+  );
   let media = $state<MediaAttachment[]>([]);
   let uploading = $state(false);
   let posting = $state(false);
@@ -54,6 +66,34 @@
       !uploading &&
       (text.trim().length > 0 || media.length > 0)
   );
+
+  // 復元したことを、一言だけそっと伝える。捨てるか、送ると消える。
+  let showRestored = $state(!!restored);
+
+  // 書きながら、すこし手が止まったら覚える。トップの新規ノート専用。
+  // 中身が空っぽになったら、覚えていたものは消す(空の下書きは残さない)。
+  $effect(() => {
+    if (replyTo) return;
+    const snapshot = { text, spoiler, useSpoiler, sensitive, visibility };
+    const id = setTimeout(() => {
+      if (snapshot.text.trim() === '' && snapshot.spoiler.trim() === '') {
+        clearComposeDraft();
+      } else {
+        saveComposeDraft(snapshot);
+      }
+    }, 800);
+    return () => clearTimeout(id);
+  });
+
+  // 「捨てる」。書いたものを空に戻して、覚えていた下書きも消す。
+  function discard() {
+    text = '';
+    spoiler = '';
+    useSpoiler = false;
+    sensitive = false;
+    showRestored = false;
+    clearComposeDraft();
+  }
 
   async function onFiles(ev: Event) {
     const input = ev.currentTarget as HTMLInputElement;
@@ -91,12 +131,14 @@
         in_reply_to_id: replyTo?.id ?? null,
         media_ids: media.map((m) => m.id)
       });
-      // 送れた。フォームを空に戻して親に渡す。
+      // 送れた。フォームを空に戻して親に渡す。覚えていた下書きも消す。
       text = '';
       spoiler = '';
       useSpoiler = false;
       sensitive = false;
       media = [];
+      showRestored = false;
+      clearComposeDraft();
       onposted?.(s);
     } catch (e) {
       error = handleErr(e, $t('compose.postFailed'));
@@ -127,6 +169,11 @@
     <p class="composer-reply">
       <span>{$t('compose.replyTo', { acct: replyTo.account.acct })}</span>
       <button type="button" class="chip" onclick={() => oncancel?.()}>{$t('compose.cancel')}</button>
+    </p>
+  {:else if showRestored}
+    <p class="composer-reply">
+      <span>{$t('compose.draftRestored')}</span>
+      <button type="button" class="chip" onclick={discard}>{$t('compose.discardDraft')}</button>
     </p>
   {/if}
 
