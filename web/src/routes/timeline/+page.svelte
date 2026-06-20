@@ -7,7 +7,13 @@
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
   import TimelineFilter from '$lib/components/TimelineFilter.svelte';
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
+
+  // フィードのいちばん下のフッター用。ja は素の /terms /privacy、ko は
+  // ?lang=ko を付ける。signup と同じ作りだが、こちらは signup=true を付け
+  // ない ── ただ読むためのリンクなので。
+  const termsHref = $derived($locale === 'ko' ? '/terms?lang=ko' : '/terms');
+  const privacyHref = $derived($locale === 'ko' ? '/privacy?lang=ko' : '/privacy');
 
   let replyTo = $state<Status | null>(null);
   let composerOpen = $state(false);
@@ -285,3 +291,32 @@
     <button class="load-more" onclick={showMore}>{$t('common.loadMore')}</button>
   {/if}
 </section>
+
+<footer class="timeline tl-foot">
+  <a href={termsHref}>{$t('signup.termsLink')}</a>
+  <span class="sep" aria-hidden="true">·</span>
+  <a href={privacyHref}>{$t('signup.privacyLink')}</a>
+</footer>
+
+<style>
+  /* フィードのいちばん下に、利用規約とプライバシーへの静かな入り口。
+     罫線でそっと feed と切って、字は muted・中央に。 */
+  .tl-foot {
+    margin-top: var(--space-8);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+  .tl-foot a {
+    color: var(--color-text-muted);
+  }
+  .tl-foot a:hover {
+    color: var(--color-text);
+  }
+  .tl-foot .sep {
+    margin-inline: var(--space-2);
+    color: var(--color-border-strong);
+  }
+</style>
