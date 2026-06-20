@@ -83,7 +83,7 @@
 {#if phase === 'ok'}
   <section class="section" style="text-align: center;">
     <p class="prose-small">{$t('invite.intro')}</p>
-    <button type="button" onclick={join} style="margin-top: var(--space-3);"
+    <button type="button" class="btn px-6 py-2" onclick={join} style="margin-top: var(--space-3);"
       >{$t('invite.join')}</button
     >
   </section>
@@ -99,7 +99,9 @@
   </p>
 {:else if phase === 'error'}
   <section class="section" style="text-align: center;">
-    <button type="button" onclick={() => location.reload()}>{$t('invite.retry')}</button>
+    <button type="button" class="btn px-6 py-2" onclick={() => location.reload()}
+      >{$t('invite.retry')}</button
+    >
   </section>
 {/if}
 
