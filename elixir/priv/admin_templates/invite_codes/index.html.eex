@@ -1,8 +1,19 @@
 <h1>Invite codes</h1>
 
 <div class="toolbar">
-  <form method="post" action="/admin/invite_codes" style="display: flex; gap: 8px;">
-    <input type="text" name="note" placeholder="Note (who is this for?)" style="flex: 1;" />
+  <form method="post" action="/admin/invite_codes" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+    <label style="flex: 1; min-width: 180px;">
+      <div class="muted" style="font-size: 12px;">Note (who is this for?)</div>
+      <input type="text" name="note" placeholder="optional note" style="width: 100%;" />
+    </label>
+    <label style="min-width: 150px;">
+      <div class="muted" style="font-size: 12px;">On behalf of (@handle)</div>
+      <input type="text" name="on_behalf" placeholder="optional" autocapitalize="none" style="width: 100%;" />
+    </label>
+    <label style="width: 84px;">
+      <div class="muted" style="font-size: 12px;">Max uses</div>
+      <input type="number" name="max_uses" value="1" min="1" step="1" style="width: 100%;" />
+    </label>
     <button type="submit">Issue new code</button>
   </form>
 </div>
@@ -12,39 +23,40 @@
   <thead>
     <tr>
       <th>Code</th>
-      <th>Issued</th>
+      <th>Issued by</th>
+      <th>On behalf of</th>
       <th>Note</th>
-      <th>Consumed by</th>
-      <th>Consumed at</th>
+      <th>Uses</th>
+      <th>Joined by</th>
     </tr>
   </thead>
   <tbody>
 <%= if codes == [] do %>
-    <tr><td colspan="5" class="muted" style="text-align: center; padding: 24px;">No codes yet.</td></tr>
+    <tr><td colspan="6" class="muted" style="text-align: center; padding: 24px;">No codes yet.</td></tr>
 <% else %>
 <%= for c <- codes do %>
     <tr>
       <td>
         <code><%= h(c.code) %></code>
-<%= if is_nil(c.consumed_at) do %>
+<%= if c.uses_count < c.max_uses do %>
         <button type="button" style="margin-left: 8px; font-size: 12px;"
           data-code="<%= h(c.code) %>"
           onclick="navigator.clipboard.writeText(location.origin + '/invite/' + this.dataset.code); this.textContent = 'Copied!';">Copy link</button>
 <% end %>
       </td>
-      <td><%= h(c.created_at) %></td>
-      <td><%= h(c.note) %></td>
       <td>
-<%= cond do %>
-<%   c.consumed_by -> %><%= h(c.consumed_by.username) %>
-<%   true -> %><span class="muted">—</span>
-<% end %>
+<%= if c.issued_by do %><%= h(c.issued_by.username) %><% else %><span class="muted">—</span><% end %>
       </td>
       <td>
-<%= if c.consumed_at do %>
-        <%= h(c.consumed_at) %>
-<% else %>
+<%= if c.on_behalf_of do %>@<%= h(c.on_behalf_of.username) %><% else %><span class="muted">—</span><% end %>
+      </td>
+      <td><%= h(c.note) %></td>
+      <td><%= c.uses_count %> / <%= c.max_uses %></td>
+      <td>
+<%= if c.uses == [] do %>
         <span class="muted">unused</span>
+<% else %>
+<%= for u <- c.uses do %><%= if u.account do %><%= h(u.account.username) %> <% else %><span class="muted">(deleted)</span> <% end %><% end %>
 <% end %>
       </td>
     </tr>

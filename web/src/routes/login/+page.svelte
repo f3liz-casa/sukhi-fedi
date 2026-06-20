@@ -130,133 +130,137 @@
   }
 </script>
 
-<section class="hero">
-  <h1>{$t('login.title')}</h1>
-  <p class="tagline">{$t('login.tagline')}</p>
-</section>
-
-{#if error}
-  <p class="error">{error}</p>
-{/if}
-
-{#if phase === 'totp'}
-  <section class="section">
-    <h2 style="font-size: var(--text-base);">{$t('login.totpTitle')}</h2>
-    <p class="prose-small">{$t('login.totpHelp')}</p>
+<div class="measure stack">
+  <section class="hero">
+    <h1>{$t('login.title')}</h1>
+    <p class="tagline">{$t('login.tagline')}</p>
   </section>
 
-  <form
-    class="form stack"
-    onsubmit={(e) => {
-      e.preventDefault();
-      void submitTotpCode();
-    }}
-  >
-    <label class="stack-tight">
-      <span>{$t('login.code')}</span>
-      <input
-        type="text"
-        bind:value={totpCode}
-        inputmode="numeric"
-        autocomplete="one-time-code"
-        pattern="[0-9]{'{6}'}"
-        required
-      />
-    </label>
-    <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.submit')}</button>
-  </form>
-{:else}
-  <div class="method-switch measure" role="tablist" aria-label={$t('login.methodLabel')}>
-    <button
-      type="button"
-      class="chip"
-      role="tab"
-      aria-selected={method === 'email'}
-      onclick={() => {
-        method = 'email';
-        error = null;
-      }}>{$t('login.methodEmail')}</button
-    >
-    <button
-      type="button"
-      class="chip"
-      role="tab"
-      aria-selected={method === 'password'}
-      onclick={() => {
-        method = 'password';
-        error = null;
-      }}>{$t('login.methodPassword')}</button
-    >
-  </div>
+  {#if error}
+    <p class="error">{error}</p>
+  {/if}
 
-  {#if method === 'password'}
+  {#if phase === 'totp'}
+    <section class="section">
+      <h2 style="font-size: var(--text-base);">{$t('login.totpTitle')}</h2>
+      <p class="prose-small">{$t('login.totpHelp')}</p>
+    </section>
+
     <form
       class="form stack"
       onsubmit={(e) => {
         e.preventDefault();
-        void submitPassword();
+        void submitTotpCode();
       }}
     >
       <label class="stack-tight">
-        <span>{$t('login.handle')}</span>
+        <span>{$t('login.code')}</span>
         <input
           type="text"
-          bind:value={username}
-          autocomplete="username"
-          autocapitalize="none"
-          autocorrect="off"
-          spellcheck="false"
+          bind:value={totpCode}
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          pattern="[0-9]{'{6}'}"
           required
         />
       </label>
-
-      <label class="stack-tight">
-        <span>{$t('login.password')}</span>
-        <input type="password" bind:value={password} autocomplete="current-password" required />
-      </label>
-
       <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.submit')}</button>
     </form>
   {:else}
-    <form
-      class="form stack"
-      onsubmit={(e) => {
-        e.preventDefault();
-        goEmailCheck();
-      }}
-    >
-      <label class="stack-tight">
-        <span>{$t('login.email')}</span>
-        <input
-          type="email"
-          bind:value={email}
-          autocomplete="email"
-          autocapitalize="none"
-          spellcheck="false"
-          required
-        />
-        <span class="help">{$t('login.emailHelp')}</span>
-      </label>
-
-      <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.sendCode')}</button>
-    </form>
-  {/if}
-
-  {#if canPasskey}
-    <p class="prose-small" style="margin-top: var(--space-4);">
-      <button type="button" class="chip" disabled={submitting} onclick={() => void passkey()}
-        >{$t('login.passkey')}</button
+    <div class="method-switch" role="tablist" aria-label={$t('login.methodLabel')}>
+      <button
+        type="button"
+        class="chip"
+        role="tab"
+        aria-selected={method === 'email'}
+        onclick={() => {
+          method = 'email';
+          error = null;
+        }}>{$t('login.methodEmail')}</button
       >
-    </p>
+      <button
+        type="button"
+        class="chip"
+        role="tab"
+        aria-selected={method === 'password'}
+        onclick={() => {
+          method = 'password';
+          error = null;
+        }}>{$t('login.methodPassword')}</button
+      >
+    </div>
+
+    {#if method === 'password'}
+      <form
+        class="form stack"
+        onsubmit={(e) => {
+          e.preventDefault();
+          void submitPassword();
+        }}
+      >
+        <label class="stack-tight">
+          <span>{$t('login.handle')}</span>
+          <input
+            type="text"
+            bind:value={username}
+            autocomplete="username"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            required
+          />
+        </label>
+
+        <label class="stack-tight">
+          <span>{$t('login.password')}</span>
+          <input type="password" bind:value={password} autocomplete="current-password" required />
+        </label>
+
+        <button type="submit" class="btn px-6 py-2" disabled={submitting}>{$t('login.submit')}</button>
+      </form>
+    {:else}
+      <form
+        class="form stack"
+        onsubmit={(e) => {
+          e.preventDefault();
+          goEmailCheck();
+        }}
+      >
+        <label class="stack-tight">
+          <span>{$t('login.email')}</span>
+          <input
+            type="email"
+            bind:value={email}
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
+            required
+          />
+          <span class="help">{$t('login.emailHelp')}</span>
+        </label>
+
+        <button type="submit" class="btn px-6 py-2" disabled={submitting}
+          >{$t('login.sendCode')}</button
+        >
+      </form>
+    {/if}
+
+    {#if canPasskey}
+      <p class="prose-small" style="margin-top: var(--space-4);">
+        <button type="button" class="chip" disabled={submitting} onclick={() => void passkey()}
+          >{$t('login.passkey')}</button
+        >
+      </p>
+    {/if}
+
+    <p class="prose-small"><a href="/signup">{$t('login.toSignup')}</a></p>
+    <p class="prose-small"><a href="/">{$t('signup.backToFront')}</a></p>
   {/if}
 
-  <p class="prose-small"><a href="/signup">{$t('login.toSignup')}</a></p>
-  <p class="prose-small"><a href="/">{$t('signup.backToFront')}</a></p>
-{/if}
-
-<section class="section" style="text-align: center; margin-top: var(--space-5);">
-  <LangSwitch />
-</section>
+  <section class="section" style="text-align: center; margin-top: var(--space-5);">
+    <LangSwitch />
+  </section>
+</div>
 
 <style>
   .method-switch {
