@@ -20,6 +20,10 @@ defmodule SukhiFedi.Schema.Note do
     field(:in_reply_to_ap_id, :string)
     field(:conversation_ap_id, :string)
     field(:quote_of_ap_id, :string)
+    # FEP-044f: the `QuoteAuthorization` stamp the quoted post's author
+    # granted us, echoed on our outbound note so third parties verify the
+    # quote. NULL until (and unless) their `Accept` arrives.
+    field(:quote_authorization_ap_id, :string)
     field(:mfm, :string)
     field(:emojis, {:array, :map}, default: [])
 
@@ -55,6 +59,7 @@ defmodule SukhiFedi.Schema.Note do
       :in_reply_to_ap_id,
       :conversation_ap_id,
       :quote_of_ap_id,
+      :quote_authorization_ap_id,
       :mfm,
       :emojis
     ])

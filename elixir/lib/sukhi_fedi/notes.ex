@@ -47,6 +47,7 @@ defmodule SukhiFedi.Notes do
   defdelegate create_note(attrs), to: Create
   defdelegate create_status(account, params), to: Create
   defdelegate delete_note(account, note_id), to: Create
+  defdelegate enqueue_update(note_id), to: Create
 
   # ── reads ────────────────────────────────────────────────────────────────
 

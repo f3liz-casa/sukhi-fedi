@@ -16,10 +16,12 @@
   const privacyHref = $derived($locale === 'ko' ? '/privacy?lang=ko' : '/privacy');
 
   let replyTo = $state<Status | null>(null);
+  let quoteOf = $state<Status | null>(null);
   let composerOpen = $state(false);
 
   function openCompose() {
     replyTo = null;
+    quoteOf = null;
     composerOpen = true;
   }
 
@@ -34,8 +36,16 @@
 
   function onReply(s: Status) {
     replyTo = s;
+    quoteOf = null;
     composerOpen = true;
     // 上に composer があるのでスクロール。
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function onQuote(s: Status) {
+    quoteOf = s;
+    replyTo = null;
+    composerOpen = true;
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -46,11 +56,13 @@
     }
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   function onCancel() {
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   function onDelete(s: Status) {
@@ -206,6 +218,7 @@
 {#if composerOpen}
   <Composer
     {replyTo}
+    {quoteOf}
     prefillMention={!!replyTo}
     onposted={onPosted}
     oncancel={onCancel}
@@ -280,7 +293,7 @@
   {/if}
 
   {#each items as s (s.id)}
-    <StatusCard status={s} canReply onreply={onReply} ondelete={onDelete} />
+    <StatusCard status={s} canReply onreply={onReply} onquote={onQuote} ondelete={onDelete} />
   {/each}
 
   {#if !initial && (loading || revealing)}

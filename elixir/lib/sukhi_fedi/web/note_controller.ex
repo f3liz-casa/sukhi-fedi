@@ -16,6 +16,28 @@ defmodule SukhiFedi.Web.NoteController do
   alias SukhiFedi.Repo
   alias SukhiFedi.Schema.{Account, Note}
 
+  @public_ns "https://www.w3.org/ns/activitystreams#Public"
+
+  # FEP-044f quote vocabulary, so a dereferenced note carries the same
+  # `quote` / `interactionPolicy` / `quoteAuthorization` as the delivered
+  # Create. `gotosocial.org/ns` supplies the interaction-policy terms.
+  @context [
+    "https://www.w3.org/ns/activitystreams",
+    "https://gotosocial.org/ns",
+    %{
+      "misskey" => "https://misskey-hub.net/ns#",
+      "quote" => %{"@id" => "https://w3id.org/fep/044f#quote", "@type" => "@id"},
+      "quoteUrl" => "as:quoteUrl",
+      "_misskey_quote" => "misskey:_misskey_quote",
+      "quoteAuthorization" => %{
+        "@id" => "https://w3id.org/fep/044f#quoteAuthorization",
+        "@type" => "@id"
+      }
+    }
+  ]
+
+  @quote_policy %{"canQuote" => %{"automaticApproval" => [@public_ns]}}
+
   def show(conn, _opts) do
     username = conn.path_params["name"]
     note_id_raw = conn.path_params["note_id"]
@@ -34,20 +56,36 @@ defmodule SukhiFedi.Web.NoteController do
   end
 
   defp note_to_ap(%Note{} = n, actor_uri) do
-    public_ns = "https://www.w3.org/ns/activitystreams#Public"
-
     %{
-      "@context" => "https://www.w3.org/ns/activitystreams",
+      "@context" => @context,
       "id" => "#{actor_uri}/notes/#{n.id}",
       "type" => "Note",
       "attributedTo" => actor_uri,
       "content" => n.content,
       "published" => DateTime.to_iso8601(n.created_at),
-      "to" => [public_ns],
-      "cc" => ["#{actor_uri}/followers"]
+      "to" => [@public_ns],
+      "cc" => ["#{actor_uri}/followers"],
+      # We let anyone quote our public posts with automatic approval.
+      "interactionPolicy" => @quote_policy
     }
+    |> put_quote(n)
     |> put_attachment(n.media)
   end
+
+  # FEP-044f canonical `quote` + the Misskey aliases, plus the
+  # authorization stamp once a quoted author granted us one.
+  defp put_quote(object, %Note{quote_of_ap_id: q} = n) when is_binary(q) and q != "" do
+    object
+    |> Map.put("quote", q)
+    |> Map.put("quoteUrl", q)
+    |> Map.put("_misskey_quote", q)
+    |> put_if("quoteAuthorization", n.quote_authorization_ap_id)
+  end
+
+  defp put_quote(object, _), do: object
+
+  defp put_if(object, _key, value) when value in [nil, ""], do: object
+  defp put_if(object, key, value), do: Map.put(object, key, value)
 
   defp put_attachment(object, media) when is_list(media) and media != [] do
     Map.put(object, "attachment", MediaSerialize.ap_attachments(media))

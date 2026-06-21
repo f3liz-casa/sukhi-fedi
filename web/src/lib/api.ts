@@ -327,6 +327,9 @@ export type ComposeInput = {
   sensitive?: boolean;
   visibility?: Visibility;
   in_reply_to_id?: string | null;
+  // 引用元の投稿 id。立てると、その投稿を引用したノートになる
+  // (サーバは quote_of_ap_id へ解決して連合に流す)。
+  quote_id?: string | null;
   media_ids?: string[];
   // ISO-8601 instant. When set, the server stores the post and publishes
   // it then, returning a ScheduledStatus instead of a Status.
@@ -341,6 +344,7 @@ export async function postStatus(input: ComposeInput): Promise<Status> {
   if (input.sensitive) body.sensitive = true;
   if (input.visibility) body.visibility = input.visibility;
   if (input.in_reply_to_id) body.in_reply_to_id = input.in_reply_to_id;
+  if (input.quote_id) body.quote_id = input.quote_id;
   if (input.media_ids && input.media_ids.length > 0) body.media_ids = input.media_ids;
   if (input.scheduled_at) body.scheduled_at = input.scheduled_at;
 

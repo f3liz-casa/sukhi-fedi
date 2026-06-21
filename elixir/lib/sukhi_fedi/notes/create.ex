@@ -127,6 +127,7 @@ defmodule SukhiFedi.Notes.Create do
       |> Repo.transaction()
       |> case do
         {:ok, %{note: note}} ->
+          maybe_request_quote(note)
           {:ok, Repo.preload(note, [:account, :media]) |> Read.with_refs()}
 
         {:error, :note, %Ecto.Changeset{} = cs, _} ->
@@ -138,6 +139,77 @@ defmodule SukhiFedi.Notes.Create do
         {:error, _step, reason, _} ->
           {:error, reason}
       end
+    end
+  end
+
+  @doc """
+  Re-deliver a note to our followers as an `Update(Note)` (FEP-044f).
+
+  Called when a quote authorization lands (`Accept`) or is withdrawn
+  (`Reject`) so already-delivered copies refresh the inline quote.
+  Best-effort: a missing note is a no-op.
+  """
+  def enqueue_update(note_id) do
+    case Repo.get(Note, note_id) do
+      %Note{} = note ->
+        note = Repo.preload(note, :media)
+
+        Outbox.enqueue("sns.outbox.note.updated", "note", to_string(note.id), %{
+          note_id: note.id,
+          account_id: note.account_id,
+          content: note.content,
+          cw: note.cw,
+          sensitive: note.sensitive,
+          published: DateTime.to_iso8601(note.created_at),
+          media: SukhiFedi.AP.MediaSerialize.descriptors(note.media),
+          quote_of_ap_id: note.quote_of_ap_id,
+          quote_authorization_ap_id: note.quote_authorization_ap_id,
+          in_reply_to_ap_id: note.in_reply_to_ap_id
+        })
+
+      _ ->
+        :ok
+    end
+  end
+
+  # FEP-044f: when we quote a *remote* post, ask its author for approval
+  # (a `QuoteRequest`) so the quote can render inline — not just as a
+  # legacy link — on their server and their followers'. A local quote
+  # needs no request. The quoted note was mirrored during `resolve_quote`,
+  # so its author's inbox is already on hand.
+  defp maybe_request_quote(%Note{quote_of_ap_id: q, id: note_id, account_id: account_id})
+       when is_binary(q) do
+    if Ids.local_note_id_from_uri(q) do
+      :ok
+    else
+      case quoted_author_inbox(q) do
+        nil ->
+          :ok
+
+        inbox ->
+          Outbox.enqueue("sns.outbox.quote.requested", "note", to_string(note_id), %{
+            note_id: note_id,
+            account_id: account_id,
+            quote_of_ap_id: q,
+            target_inbox: inbox
+          })
+      end
+    end
+  end
+
+  defp maybe_request_quote(_), do: :ok
+
+  defp quoted_author_inbox(quote_ap_id) do
+    case Repo.get_by(Note, ap_id: quote_ap_id) do
+      %Note{account_id: aid} ->
+        case Repo.get(Account, aid) do
+          %Account{inbox_url: inbox} when is_binary(inbox) and inbox != "" -> inbox
+          %Account{actor_uri: uri} when is_binary(uri) and uri != "" -> uri <> "/inbox"
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 

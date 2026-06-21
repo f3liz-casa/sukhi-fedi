@@ -64,6 +64,33 @@ defmodule SukhiFedi.Fedi.InboxTest do
     assert {:ok, %{"action" => "ignore"}} = Inbox.handle(%{"raw" => follow}, fetch)
   end
 
+  @quote_request %{
+    "@context" => "https://www.w3.org/ns/activitystreams",
+    "id" => "https://remote.test/quotes/1",
+    "type" => "QuoteRequest",
+    "actor" => "https://remote.test/users/friend",
+    "object" => "https://sukhi.test/users/shiro/notes/1",
+    "instrument" => "https://remote.test/users/friend/notes/9"
+  }
+
+  test "QuoteRequest resolves the requester and hands back the request + inbox" do
+    fetch = resolving_fetch(%{"inbox" => "https://remote.test/users/friend/inbox"})
+
+    assert {:ok,
+            %{
+              "action" => "quote_request",
+              "quoteRequest" => @quote_request,
+              "inbox" => "https://remote.test/users/friend/inbox"
+            }} = Inbox.handle(%{"raw" => @quote_request}, fetch)
+  end
+
+  test "QuoteRequest whose actor cannot be resolved is ignored, not failed" do
+    fetch = fn _uri, _sign_as -> {:error, {:http_status, 410}} end
+
+    assert {:ok, %{"action" => "ignore"}} =
+             Inbox.handle(%{"raw" => @quote_request}, fetch)
+  end
+
   test "known generic activities pass through as save with the raw activity" do
     raw = %{"type" => "Create", "id" => "https://remote.test/creates/1", "actor" => "x"}
     fetch = fn _, _ -> flunk("must not fetch for generic activities") end

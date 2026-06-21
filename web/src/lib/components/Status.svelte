@@ -4,6 +4,7 @@
   import Avatar from './Avatar.svelte';
   import CircleBadge from './CircleBadge.svelte';
   import StatusActions from './StatusActions.svelte';
+  import QuoteCard from './QuoteCard.svelte';
   import StatusMedia from './StatusMedia.svelte';
   import StatusPoll from './StatusPoll.svelte';
   import Twemoji from './Twemoji.svelte';
@@ -20,6 +21,7 @@
     // リーダーページ（記事ページ）では全文を出したいので、折りたたみを切る。
     full = false,
     onreply,
+    onquote,
     onupdate,
     ondelete
   }: {
@@ -27,6 +29,8 @@
     canReply?: boolean;
     full?: boolean;
     onreply?: (s: Status) => void;
+    // 引用ボタンが押されたとき。置き場ごとに Composer を引用付きで開く。
+    onquote?: (s: Status) => void;
     onupdate?: (s: Status) => void;
     // 自分のノートを削除したとき。置き場ごとに一覧から外したい。
     ondelete?: (s: Status) => void;
@@ -136,7 +140,7 @@
       <a class="boost-by" href={`/@${status.account.acct}`}>
         <Twemoji emoji="🔁" /> {@html renderEmojis(phrase(name), status.account.emojis)} {$t('status.boostedBy')}
       </a>
-      <Self status={status.reblog} {canReply} {onreply} {onupdate} {ondelete} />
+      <Self status={status.reblog} {canReply} {onreply} {onquote} {onupdate} {ondelete} />
     </div>
   {:else}
     <button class="boost-compact" onclick={() => (boostExpanded = true)} title={$t('status.expandBoost')}>
@@ -210,23 +214,10 @@
     {/if}
 
     {#if status.quote}
-      <a class="quote-card" href={`/@${status.quote.account.acct}/${status.quote.id}`}>
-        <div class="quote-head">
-          <Avatar
-            class="quote-avatar"
-            src={status.quote.account.avatar}
-            name={status.quote.account.display_name || status.quote.account.username}
-          />
-          <span class="quote-name"
-            >{@html renderEmojis(
-              phrase(status.quote.account.display_name || status.quote.account.username),
-              status.quote.account.emojis
-            )}</span
-          >
-          <span class="quote-acct">@{status.quote.account.acct}</span>
-        </div>
-        <div class="quote-content">{@html renderEmojis(status.quote.content, status.quote.emojis)}</div>
-      </a>
+      <QuoteCard
+        status={status.quote}
+        href={`/@${status.quote.account.acct}/${status.quote.id}`}
+      />
     {/if}
 
     {#if (!status.spoiler_text || cwOpen) && status.media_attachments.length > 0}
@@ -242,7 +233,7 @@
       <StatusPoll poll={status.poll} />
     {/if}
 
-    <StatusActions {status} {canReply} {onreply} {onupdate} {ondelete} />
+    <StatusActions {status} {canReply} {onreply} {onquote} {onupdate} {ondelete} />
   </div>
 </article>
 {/if}
@@ -401,45 +392,5 @@
   }
   a.reply-to:hover {
     text-decoration: underline;
-  }
-
-  .quote-card {
-    display: block;
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    text-decoration: none;
-    color: inherit;
-  }
-  .quote-card:hover {
-    background: var(--fill-soft);
-  }
-  .quote-head {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    margin-bottom: 0.25rem;
-    font-size: var(--text-sm);
-    /* 子(名前・ハンドル)が中身の幅で踏ん張らず、行に収まるよう縮める
-       のを許す。長い連合ハンドルがカードを突き破るのを止める。 */
-    min-width: 0;
-  }
-  .quote-name {
-    font-weight: 600;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .quote-acct {
-    color: var(--color-text-muted);
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .quote-content {
-    font-size: var(--text-sm);
   }
 </style>

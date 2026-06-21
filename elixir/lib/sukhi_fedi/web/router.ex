@@ -9,6 +9,7 @@ defmodule SukhiFedi.Web.Router do
   alias SukhiFedi.Web.FeaturedController
   alias SukhiFedi.Web.CollectionController
   alias SukhiFedi.Web.NoteController
+  alias SukhiFedi.Web.QuoteAuthorizationController
   alias SukhiFedi.Web.ViewerController
   alias SukhiFedi.Web.StatsController
   alias SukhiFedi.Web.MetricsController
@@ -272,6 +273,12 @@ defmodule SukhiFedi.Web.Router do
     else
       NoteController.show(conn, [])
     end
+  end
+
+  # FEP-044f: a quote authorization we granted, dereferenced by the
+  # quoter's followers to verify the quote was approved.
+  get "/users/:name/quote-auth/:id" do
+    QuoteAuthorizationController.show(conn, [])
   end
 
   post "/users/:name/inbox" do

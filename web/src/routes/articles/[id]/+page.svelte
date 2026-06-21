@@ -16,6 +16,7 @@
   let error = $state<string | null>(null);
 
   let replyTo = $state<Status | null>(null);
+  let quoteOf = $state<Status | null>(null);
   let composerOpen = $state(false);
 
   let id = $derived($page.params.id ?? '');
@@ -46,7 +47,15 @@
 
   function onReply(s: Status) {
     replyTo = s;
+    quoteOf = null;
     composerOpen = true;
+  }
+
+  function onQuote(s: Status) {
+    quoteOf = s;
+    replyTo = null;
+    composerOpen = true;
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function openReply() {
@@ -57,11 +66,13 @@
     descendants = [...descendants, s];
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   function onCancel() {
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   function onDelete(s: Status) {
@@ -84,11 +95,11 @@
   <p class="loading">{$t('common.loading')}</p>
 {:else if status}
   <article class="reader-page measure">
-    <StatusCard status={status} full canReply onreply={onReply} ondelete={onDelete} />
+    <StatusCard status={status} full canReply onreply={onReply} onquote={onQuote} ondelete={onDelete} />
   </article>
 
   {#if composerOpen}
-    <Composer {replyTo} prefillMention onposted={onPosted} oncancel={onCancel} />
+    <Composer {replyTo} {quoteOf} prefillMention onposted={onPosted} oncancel={onCancel} />
   {:else}
     <div class="measure">
       <button class="chip reply-open" onclick={openReply}>{$t('thread.reply')}</button>
@@ -98,7 +109,7 @@
   {#if descendants.length > 0}
     <section class="timeline replies">
       {#each descendants as s (s.id)}
-        <StatusCard status={s} canReply onreply={onReply} ondelete={onDelete} />
+        <StatusCard status={s} canReply onreply={onReply} onquote={onQuote} ondelete={onDelete} />
       {/each}
     </section>
   {/if}
