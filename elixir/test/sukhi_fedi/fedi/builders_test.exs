@@ -52,6 +52,10 @@ defmodule SukhiFedi.Fedi.BuildersTest do
     assert object["_misskey_content"] == "<p>hello</p>"
     assert object["quoteUrl"] == "https://remote.test/notes/9"
     assert object["_misskey_quote"] == "https://remote.test/notes/9"
+    # FEP-044f canonical quote (signed) rides alongside the aliases, and
+    # the note advertises that anyone may quote it with auto-approval.
+    assert object["quote"] == "https://remote.test/notes/9"
+    assert object["interactionPolicy"] == %{"canQuote" => %{"automaticApproval" => [@as_public]}}
 
     assert [%{"type" => "Link", "rel" => "https://misskey-hub.net/ns#_misskey_quote"}] =
              object["tag"]
@@ -129,6 +133,52 @@ defmodule SukhiFedi.Fedi.BuildersTest do
     assert follow["type"] == "Follow"
     # No post-sign injections on Follow, so the signature must hold.
     assert :ok = LdSignature.verify(follow, FediGolden.public_key())
+  end
+
+  test "quote_request: FEP-044f shape, LD signature round-trips" do
+    result =
+      build!("quote_request", %{
+        "actor" => FediGolden.actor(),
+        "object" => "https://remote.test/users/alice/notes/1",
+        "instrument" => "https://sukhi.test/users/shiro/notes/7",
+        "activityId" => "https://sukhi.test/users/shiro/notes/7/quote-request"
+      })
+
+    qr = result["quoteRequest"]
+    assert qr["type"] == "QuoteRequest"
+    # object = the post we quote; instrument = our quote post (by URI).
+    assert qr["object"] == "https://remote.test/users/alice/notes/1"
+    assert qr["instrument"] == "https://sukhi.test/users/shiro/notes/7"
+    # No post-sign injections on a QuoteRequest, so the signature holds.
+    assert :ok = LdSignature.verify(qr, FediGolden.public_key())
+  end
+
+  test "update: Update(Note) re-delivers the quote + authorization; proof covers them" do
+    result =
+      build!(
+        "update",
+        Map.merge(ed25519_creds(), %{
+          "actor" => FediGolden.actor(),
+          "content" => "<p>quoting</p>",
+          "recipientInboxes" => [],
+          "noteId" => "https://sukhi.test/notes/5",
+          "activityId" => "https://sukhi.test/notes/5#update-quote-auth",
+          "quoteUrl" => "https://remote.test/notes/1",
+          "quoteAuthorization" => "https://remote.test/users/a/quote-auth/3"
+        })
+      )
+
+    update = result["update"]
+    assert update["type"] == "Update"
+
+    object = update["object"]
+    assert object["type"] == "Note"
+    assert Map.has_key?(object, "updated")
+    assert object["quote"] == "https://remote.test/notes/1"
+    assert object["quoteUrl"] == "https://remote.test/notes/1"
+    assert object["quoteAuthorization"] == "https://remote.test/users/a/quote-auth/3"
+    # The proof attaches after the injections, so it covers the delivered doc.
+    assert :ok = Oip.verify(update, FediGolden.oip_public_key())
   end
 
   test "emoji_react: Like with content and Emoji tag" do

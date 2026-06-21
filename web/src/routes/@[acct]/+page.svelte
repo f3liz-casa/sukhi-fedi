@@ -59,10 +59,19 @@
   // Composer が引き継ぐ。送れたら自分のプロフィールを見ているとき(=自分への
   // 返信は稀)だけ先頭に足す、ということはせず、素直に閉じるだけにする。
   let replyTo = $state<Status | null>(null);
+  let quoteOf = $state<Status | null>(null);
   let composerOpen = $state(false);
 
   function onReply(s: Status) {
     replyTo = s;
+    quoteOf = null;
+    composerOpen = true;
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function onQuote(s: Status) {
+    quoteOf = s;
+    replyTo = null;
     composerOpen = true;
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -70,11 +79,13 @@
   function onPosted() {
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   function onCancel() {
     composerOpen = false;
     replyTo = null;
+    quoteOf = null;
   }
 
   // ピン留め欄でピンを外したら、その場で欄から外す。
@@ -354,7 +365,7 @@
   </header>
 
   {#if composerOpen}
-    <Composer {replyTo} prefillMention={!!replyTo} onposted={onPosted} oncancel={onCancel} />
+    <Composer {replyTo} {quoteOf} prefillMention={!!replyTo} onposted={onPosted} oncancel={onCancel} />
   {/if}
 
   {#if hasArticles}
@@ -376,6 +387,7 @@
           status={s}
           canReply
           onreply={onReply}
+          onquote={onQuote}
           ondelete={(d) => (articleItems = articleItems.filter((it) => it.id !== d.id))}
         />
       {/each}
@@ -416,6 +428,7 @@
               status={s}
               canReply
               onreply={onReply}
+              onquote={onQuote}
               onupdate={onPinUpdate}
               ondelete={(d) => (pinnedItems = pinnedItems.filter((it) => it.id !== d.id))}
             />
@@ -433,6 +446,7 @@
             status={s}
             canReply
             onreply={onReply}
+            onquote={onQuote}
             ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
           />
         {/each}

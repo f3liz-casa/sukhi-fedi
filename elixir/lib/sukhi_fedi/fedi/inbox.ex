@@ -20,14 +20,11 @@ defmodule SukhiFedi.Fedi.Inbox do
 
   alias SukhiFedi.Fedi.Fetcher
 
-  # Mirror of bun/fedify/activity_kinds.ts — Follow stays out of this
-  # list because of its special reply shape.
-  #
-  # TODO(FEP-044f): hackers.pub and Hollo send `QuoteRequest` when one
-  # of their users quotes a gated post, and expect a
-  # `QuoteAuthorization` (or Reject) back — shaped like the Follow →
-  # Accept flow below, so it belongs next to it. Until then their
-  # quotes of our posts fall back to legacy handling.
+  # Mirror of bun/fedify/activity_kinds.ts — Follow and QuoteRequest stay
+  # out of this list because of their special reply shapes (both resolve
+  # the requester's inbox here and hand back a reply for the executor to
+  # deliver). The matching `Accept`/`Reject` of *our* outbound
+  # QuoteRequest ride the generic `save` path (see AP.Instructions.Quotes).
   @generic_kinds ~w(Announce Create Update Delete Like EmojiReact Undo
                     Accept Reject Move Block Flag Add Remove)
 
@@ -43,6 +40,7 @@ defmodule SukhiFedi.Fedi.Inbox do
   def handle(%{"raw" => raw} = payload, fetch_fun) when is_map(raw) do
     case raw["type"] do
       "Follow" -> follow_instruction(raw, payload, fetch_fun)
+      "QuoteRequest" -> quote_request_instruction(raw, payload, fetch_fun)
       kind when kind in @generic_kinds -> {:ok, %{"action" => "save", "object" => raw}}
       _ -> {:ok, %{"action" => "ignore"}}
     end
@@ -89,6 +87,28 @@ defmodule SukhiFedi.Fedi.Inbox do
 
   defp accept_id(domain) do
     "https://#{domain}/activities/accept/#{Ecto.UUID.generate()}"
+  end
+
+  # A remote actor wants to quote one of our notes (FEP-044f). Like
+  # Follow, the requester is waiting on a reply — an `Accept` carrying a
+  # `QuoteAuthorization`, or a `Reject`. Resolve their inbox here; the
+  # decision (and minting the stamp, which needs the DB) is the
+  # executor's job (`AP.Instructions.Quotes.handle_quote_request/2`).
+  defp quote_request_instruction(raw, payload, fetch_fun) do
+    actor_uri = reference_uri(raw["actor"])
+
+    with true <- is_binary(actor_uri),
+         {:ok, %{"document" => actor}} <- fetch_fun.(actor_uri, payload["signAs"]),
+         inbox when is_binary(inbox) <- actor["inbox"] do
+      {:ok,
+       %{
+         "action" => "quote_request",
+         "quoteRequest" => raw,
+         "inbox" => inbox
+       }}
+    else
+      _ -> {:ok, %{"action" => "ignore"}}
+    end
   end
 
   # AP object references arrive as a bare IRI or an embedded object.

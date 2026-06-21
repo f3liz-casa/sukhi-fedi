@@ -9,6 +9,8 @@ defmodule SukhiFedi.AP.Instructions do
 
     * `Instructions.Follows`   — Follow / Accept(Follow) / relay accepts
       / Undo(Follow)
+    * `Instructions.Quotes`    — FEP-044f QuoteRequest (auto-approve →
+      QuoteAuthorization) + Accept/Reject of our outbound request
     * `Instructions.DMs`       — non-public Create(Note) → conversations
     * `Instructions.Mirror`    — Create(Note) mirroring + Delete
     * `Instructions.Reactions` — Like / EmojiReact + their Undos
@@ -28,6 +30,7 @@ defmodule SukhiFedi.AP.Instructions do
     Migrations,
     Mirror,
     Pins,
+    Quotes,
     Reactions
   }
 
@@ -52,6 +55,11 @@ defmodule SukhiFedi.AP.Instructions do
       Follows.maybe_handle_relay_accept(object_data)
       Follows.maybe_handle_follow_accept(object_data)
       Mirror.maybe_mirror_create_note(object_data)
+      # FEP-044f: the quoted author accepted (or rejected) our outbound
+      # QuoteRequest. Accept carries the stamp we echo on the note; Reject
+      # means we must drop the quote.
+      Quotes.maybe_handle_quote_accept(object_data)
+      Quotes.maybe_handle_quote_reject(object_data)
       Reactions.maybe_handle_reaction(object_data)
       # A reblog notification should come from the booster's own server
       # (it delivers the Announce directly: signer == booster). We do not
@@ -86,6 +94,20 @@ defmodule SukhiFedi.AP.Instructions do
       ) do
     if trusted_inline_origin?(save_data["follow"], signer_host) do
       Follows.handle_accepted_follow(save_data, reply, inbox_url)
+    end
+
+    :ok
+  end
+
+  def execute(
+        %{"action" => "quote_request", "quoteRequest" => quote_request, "inbox" => inbox_url},
+        signer_host
+      ) do
+    # Trust the inline request only from the requester's own server — the
+    # `instrument` (their quote post) is theirs to assert. The target note
+    # is resolved from our own DB, never from their claim.
+    if trusted_inline_origin?(quote_request, signer_host) do
+      Quotes.handle_quote_request(quote_request, inbox_url)
     end
 
     :ok

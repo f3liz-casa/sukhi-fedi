@@ -10,6 +10,7 @@ defmodule SukhiDelivery.Outbox.Consumer do
       sns.outbox.note.deleted       → Bun `delete` translator → fan out
       sns.outbox.dm.created         → Bun `dm` translator     → direct recipient inboxes
       sns.outbox.follow.requested   → Bun `follow` translator → followee inbox
+      sns.outbox.quote.requested    → `quote_request` (FEP-044f)→ quoted author inbox
       sns.outbox.follow.undone      → Bun `undo` (Follow)     → followee inbox
       sns.outbox.like.created       → Bun `like` translator   → note author + relays
       sns.outbox.like.undone        → Bun `undo` (Like)       → note author
@@ -82,9 +83,11 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   @doc false
   def dispatch("sns.outbox.note.created", p), do: handle_note_created(p)
+  def dispatch("sns.outbox.note.updated", p), do: handle_note_updated(p)
   def dispatch("sns.outbox.note.deleted", p), do: handle_note_deleted(p)
   def dispatch("sns.outbox.vote.created", p), do: handle_vote(p)
   def dispatch("sns.outbox.dm.created", p), do: handle_dm(p)
+  def dispatch("sns.outbox.quote.requested", p), do: handle_quote_requested(p)
   def dispatch("sns.outbox.follow.requested", p), do: handle_follow(p, :create)
   def dispatch("sns.outbox.follow.undone", p), do: handle_follow(p, :undo)
   def dispatch("sns.outbox.like.created", p), do: handle_like(p, :create)
@@ -144,6 +147,49 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp handle_note_created(_), do: :missing_account
+
+  # FEP-044f re-delivery: a quote authorization landed (or was withdrawn),
+  # so push an `Update(Note)` to followers + relays. The activity id is
+  # deterministic per state — distinct between an accept (stamp present)
+  # and a reject (quote removed) so neither suppresses the other on the
+  # receiver, while a retry of the same state stays idempotent.
+  defp handle_note_updated(%{"account_id" => account_id} = p) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        recipients = followers_inboxes(actor_uri) ++ relay_inboxes()
+        ap_id = note_ap_id(actor_uri, p["note_id"])
+        activity_id = "#{ap_id}#update-#{update_tag(p)}"
+
+        translator_payload =
+          %{
+            actor: actor_uri,
+            content: p["content"] || "",
+            recipientInboxes: recipients,
+            noteId: ap_id,
+            activityId: activity_id,
+            published: p["published"],
+            inReplyToId: p["in_reply_to_ap_id"]
+          }
+          |> maybe_put_quote(p["quote_of_ap_id"])
+          |> maybe_put_quote_authorization(p["quote_authorization_ap_id"])
+          |> maybe_put_attachments(p["media"])
+          |> maybe_put_cw(p["cw"])
+          |> maybe_put_sensitive(p["sensitive"])
+
+        translate_and_fanout("update", translator_payload, actor_uri, activity_id, recipients,
+          extract: "update"
+        )
+    end
+  end
+
+  defp handle_note_updated(_), do: :missing_account
+
+  defp update_tag(%{"quote_authorization_ap_id" => stamp}) when is_binary(stamp), do: "quote-auth"
+  defp update_tag(%{"quote_of_ap_id" => q}) when is_binary(q), do: "quote"
+  defp update_tag(_), do: "quote-removed"
 
   defp handle_note_deleted(%{"account_id" => account_id, "ap_id" => ap_id} = _p) do
     case actor_for(account_id) do
@@ -494,6 +540,40 @@ defmodule SukhiDelivery.Outbox.Consumer do
 
   defp handle_follow_backfill(_), do: :missing_fields
 
+  # FEP-044f: deliver our `QuoteRequest` to the quoted post's author (the
+  # gateway resolved their inbox into `target_inbox`). `instrument` is our
+  # quote post's URI — dereferenceable, so it need not be inlined.
+  defp handle_quote_requested(
+         %{
+           "account_id" => account_id,
+           "note_id" => note_id,
+           "quote_of_ap_id" => quoted_uri,
+           "target_inbox" => inbox
+         }
+       )
+       when is_binary(quoted_uri) and is_binary(inbox) do
+    case actor_for(account_id) do
+      nil ->
+        :no_actor
+
+      %{actor_uri: actor_uri} ->
+        our_note_uri = note_ap_id(actor_uri, note_id)
+        activity_id = "#{our_note_uri}/quote-request"
+
+        payload = %{
+          actor: actor_uri,
+          object: quoted_uri,
+          instrument: our_note_uri,
+          activityId: activity_id,
+          recipientInboxes: [inbox]
+        }
+
+        translate_and_fanout("quote_request", payload, actor_uri, activity_id, [inbox])
+    end
+  end
+
+  defp handle_quote_requested(_), do: :missing_fields
+
   # Account migration. Fan a Move out to the migrating account's followers
   # so their servers re-point the follow to `target` (the new identity).
   defp handle_move(%{"account_id" => account_id, "target" => target} = p)
@@ -568,10 +648,12 @@ defmodule SukhiDelivery.Outbox.Consumer do
   # Bun translator results carry the payload under different keys per
   # type. Pick the right one — fall back to the whole result.
   defp extract_body(result, "note", _opts), do: Map.get(result, "note", result)
+  defp extract_body(result, "update", _opts), do: Map.get(result, "update", result)
   defp extract_body(result, "vote", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "dm", _opts), do: Map.get(result, "note", result)
   defp extract_body(result, "delete", _opts), do: Map.get(result, "delete", result)
   defp extract_body(result, "follow", _opts), do: Map.get(result, "follow", result)
+  defp extract_body(result, "quote_request", _opts), do: Map.get(result, "quoteRequest", result)
   defp extract_body(result, "announce", _opts), do: Map.get(result, "announce", result)
   defp extract_body(result, "like", _opts), do: Map.get(result, "like", result)
   defp extract_body(result, "emoji_react", _opts), do: Map.get(result, "emojiReact", result)
@@ -823,6 +905,14 @@ defmodule SukhiDelivery.Outbox.Consumer do
   end
 
   defp maybe_put_quote(payload, _), do: payload
+
+  # FEP-044f: the authorization stamp we were granted for quoting a remote
+  # post. Carried on the re-delivered Update so receivers verify the quote.
+  defp maybe_put_quote_authorization(payload, stamp) when is_binary(stamp) and stamp != "" do
+    Map.put(payload, :quoteAuthorization, stamp)
+  end
+
+  defp maybe_put_quote_authorization(payload, _), do: payload
 
   # The content warning rides as AP `summary`; only send it when present.
   defp maybe_put_cw(payload, cw) when is_binary(cw) and cw != "" do

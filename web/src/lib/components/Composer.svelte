@@ -16,9 +16,13 @@
   } from '$lib/compose-draft';
   import { goto } from '$app/navigation';
   import { t } from '$lib/i18n';
+  import QuoteCard from './QuoteCard.svelte';
 
   let {
     replyTo = null,
+    // 引用する投稿。立てると、その投稿を引用したノートになる。
+    // 返信と同じく一時的な文脈なので、下書きには覚えさせない。
+    quoteOf = null,
     // 返信のとき、返信先 acct をテキスト先頭に入れたい場合に使う
     // (Mastodon 互換クライアントは「@user@host 」を頭につけて出す慣習)
     prefillMention = false,
@@ -31,6 +35,7 @@
     oncancel
   }: {
     replyTo?: Status | null;
+    quoteOf?: Status | null;
     prefillMention?: boolean;
     prefillRecipients?: string[] | null;
     onposted?: (s: Status) => void;
@@ -40,7 +45,7 @@
   // 書きかけの下書きは、トップの新規ノートだけ覚える。返信のときは
   // 覚えない(replyTo があるとここは null)。初回マウントで一度だけ
   // 拾う ─ untrack の中なので、あとのユーザ入力では読み直さない。
-  const restored = untrack(() => (replyTo ? null : loadComposeDraft()));
+  const restored = untrack(() => (replyTo || quoteOf ? null : loadComposeDraft()));
 
   // 初期値だけ prop を見たい(あとはユーザが書き換える)ので untrack で
   // 拾う。これがないと state_referenced_locally の warning が出る。
@@ -193,6 +198,7 @@
         sensitive: sensitive || (useSpoiler && !!spoiler) || undefined,
         visibility,
         in_reply_to_id: replyTo?.id ?? null,
+        quote_id: quoteOf?.id ?? null,
         media_ids: media.map((m) => m.id),
         scheduled_at: scheduledAt
       });
@@ -235,7 +241,17 @@
     void submit();
   }}
 >
-  {#if replyTo && oncancel}
+  {#if quoteOf}
+    <p class="composer-reply">
+      <span>{$t('compose.quoting', { acct: quoteOf.account.acct })}</span>
+      {#if oncancel}
+        <button type="button" class="chip" onclick={() => oncancel?.()}
+          >{$t('compose.cancel')}</button
+        >
+      {/if}
+    </p>
+    <QuoteCard status={quoteOf} />
+  {:else if replyTo && oncancel}
     <p class="composer-reply">
       <span>{$t('compose.replyTo', { acct: replyTo.account.acct })}</span>
       <button type="button" class="chip" onclick={() => oncancel?.()}>{$t('compose.cancel')}</button>

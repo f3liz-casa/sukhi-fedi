@@ -36,6 +36,12 @@ defmodule SukhiFedi.Fedi.Builders do
     # being dropped — and is therefore covered by the LD signature when
     # the proof is attached before signing.
     "https://w3id.org/security/data-integrity/v1",
+    # FEP-044f quote posts ride a GtS-flavoured interaction policy:
+    # `interactionPolicy`, `canQuote`, `automaticApproval`,
+    # `manualApproval`, `interactingObject`, `interactionTarget`. This
+    # context is vendored by Canon.ContextLoader, so expansion (and
+    # therefore LD-signing) never reaches for the network.
+    "https://gotosocial.org/ns",
     %{
       "toot" => "http://joinmastodon.org/ns#",
       "misskey" => "https://misskey-hub.net/ns#",
@@ -43,10 +49,28 @@ defmodule SukhiFedi.Fedi.Builders do
       "Hashtag" => "as:Hashtag",
       "Emoji" => "toot:Emoji",
       "_misskey_content" => "misskey:_misskey_content",
+      # FEP-044f canonical quote vocabulary. Defined *after*
+      # gotosocial.org/ns so these win over its gts: aliases — Mastodon
+      # and fedify read the fep/044f terms.
+      "quote" => %{"@id" => "https://w3id.org/fep/044f#quote", "@type" => "@id"},
+      "quoteUrl" => "as:quoteUrl",
       "_misskey_quote" => "misskey:_misskey_quote",
-      "quoteUrl" => "as:quoteUrl"
+      "QuoteAuthorization" => "https://w3id.org/fep/044f#QuoteAuthorization",
+      "QuoteRequest" => "https://w3id.org/fep/044f#QuoteRequest",
+      "quoteAuthorization" => %{
+        "@id" => "https://w3id.org/fep/044f#quoteAuthorization",
+        "@type" => "@id"
+      }
     }
   ]
+
+  # We let anyone quote our public posts, and approve their requests
+  # automatically (FEP-044f). Advertising the policy is what tells a
+  # Mastodon-family peer it may send us a `QuoteRequest` and expect a
+  # `QuoteAuthorization` back, so the quote renders inline rather than
+  # as a bare link.
+  @as_public "https://www.w3.org/ns/activitystreams#Public"
+  @quote_policy %{"canQuote" => %{"automaticApproval" => [@as_public]}}
 
   @doc """
   Dispatches a `fedify.translate.v1` request. Returns the same result
@@ -54,9 +78,11 @@ defmodule SukhiFedi.Fedi.Builders do
   """
   @spec build(String.t(), map()) :: {:ok, map()} | {:error, String.t()}
   def build("note", p), do: note(p)
+  def build("update", p), do: update(p)
   def build("vote", p), do: vote(p)
   def build("dm", p), do: dm(p)
   def build("follow", p), do: follow(p)
+  def build("quote_request", p), do: quote_request(p)
   def build("announce", p), do: announce(p)
   def build("like", p), do: like(p)
   def build("emoji_react", p), do: emoji_react(p)
@@ -71,25 +97,60 @@ defmodule SukhiFedi.Fedi.Builders do
 
   defp note(p) do
     audience = Audience.public(p["actor"])
+    activity = wrap_create(p, note_object(p, audience), audience)
+    finalize_note(activity, p, "note")
+  end
 
-    object =
-      %{
-        "id" => p["noteId"],
-        "type" => "Note",
-        "attributedTo" => p["actor"],
-        "content" => p["content"],
-        "published" => now(),
-        "to" => audience.to,
-        "cc" => audience.cc
-      }
-      |> put_if("inReplyTo", p["inReplyToId"])
-      # The author's content warning (AP `summary`) and sensitive flag were
-      # never carried before, so remotes rendered CW'd / NSFW posts unwarned.
-      |> put_if("summary", p["summary"])
-      |> put_if("sensitive", p["sensitive"])
+  # FEP-044f: re-deliver a note as an `Update` once a quote authorization
+  # lands (or is withdrawn), so followers' servers refresh the inline
+  # quote. Same object + post-sign injections as a fresh note; only the
+  # envelope and the `updated` stamp differ.
+  defp update(p) do
+    audience = Audience.public(p["actor"])
+    object = Map.put(note_object(p, audience), "updated", now())
 
-    activity = wrap_create(p, object, audience)
+    activity = %{
+      "@context" => @context,
+      "id" => p["activityId"],
+      "type" => "Update",
+      "actor" => p["actor"],
+      "to" => audience.to,
+      "cc" => audience.cc,
+      "object" => object
+    }
 
+    finalize_note(activity, p, "update")
+  end
+
+  # The Note object shared by `note/1` (Create) and `update/1` (Update).
+  defp note_object(p, audience) do
+    %{
+      "id" => p["noteId"],
+      "type" => "Note",
+      "attributedTo" => p["actor"],
+      "content" => p["content"],
+      "published" => p["published"] || now(),
+      "to" => audience.to,
+      "cc" => audience.cc
+    }
+    |> put_if("inReplyTo", p["inReplyToId"])
+    # The author's content warning (AP `summary`) and sensitive flag were
+    # never carried before, so remotes rendered CW'd / NSFW posts unwarned.
+    |> put_if("summary", p["summary"])
+    |> put_if("sensitive", p["sensitive"])
+    # FEP-044f canonical `quote` (signed), plus the authorization stamp
+    # once the quoted author granted it. The Misskey aliases + FEP-e232
+    # tag are still injected post-sign (`inject_quote`).
+    |> put_if("quote", p["quoteUrl"])
+    |> put_if("quoteAuthorization", p["quoteAuthorization"])
+    |> Map.put("interactionPolicy", @quote_policy)
+  end
+
+  # Sign → post-sign compatibility injections → FEP-8b32 proof, then wrap
+  # under `key` ("note" for Create, "update" for Update). The injections
+  # land after the LD signature (parity with the historical Bun path); the
+  # proof covers them because it attaches last.
+  defp finalize_note(activity, p, key) do
     with {:ok, signed} <- sign(p, activity),
          injected =
            signed
@@ -97,7 +158,7 @@ defmodule SukhiFedi.Fedi.Builders do
            |> inject_quote(p["quoteUrl"])
            |> inject_attachments(p["attachments"]),
          {:ok, proved} <- attach_proof(injected, p) do
-      {:ok, %{"note" => proved, "recipientInboxes" => p["recipientInboxes"]}}
+      {:ok, %{key => proved, "recipientInboxes" => p["recipientInboxes"]}}
     end
   end
 
@@ -168,6 +229,25 @@ defmodule SukhiFedi.Fedi.Builders do
 
     with {:ok, signed} <- sign_and_prove(p, activity) do
       {:ok, %{"follow" => signed}}
+    end
+  end
+
+  # FEP-044f: ask a remote author for permission to quote their post.
+  # `object` is the quoted post; `instrument` is our quote post — sent as
+  # its URI (dereferenceable via NoteController), which the spec allows in
+  # place of inlining it.
+  defp quote_request(p) do
+    activity = %{
+      "@context" => @context,
+      "id" => p["activityId"],
+      "type" => "QuoteRequest",
+      "actor" => p["actor"],
+      "object" => p["object"],
+      "instrument" => p["instrument"]
+    }
+
+    with {:ok, signed} <- sign_and_prove(p, activity) do
+      {:ok, %{"quoteRequest" => signed}}
     end
   end
 
@@ -361,15 +441,11 @@ defmodule SukhiFedi.Fedi.Builders do
   defp inject_misskey_content(activity, content),
     do: update_object(activity, &Map.put(&1, "_misskey_content", content))
 
-  # TODO(FEP-044f): we emit the Misskey-style aliases (`quoteUrl`,
-  # `_misskey_quote`) and the FEP-e232 tag Link below, but not the
-  # FEP-044f `quote` property — Mastodon treats alias-only quotes as
-  # "legacy" and renders them without the inline preview, and Hollo
-  # gates quoting on its interaction policy. Full support means: add
-  # `"quote" => quote_uri` (+ `@context` entry
-  # `{"quote": {"@id": "https://w3id.org/fep/044f#quote", "@type": "@id"}}`)
-  # before signing, and handle the QuoteRequest → QuoteAuthorization
-  # round trip (see the matching TODO in Fedi.Inbox).
+  # The Misskey-style aliases + the FEP-e232 tag Link, injected post-sign
+  # (parity with the historical Bun path). The FEP-044f canonical `quote`
+  # and the `interactionPolicy` ride *inside* the signed object (see
+  # `note/1`); these aliases widen reach to Misskey-family and older
+  # forks that don't read `quote`.
   defp inject_quote(activity, quote_uri) when is_binary(quote_uri) and quote_uri != "" do
     update_object(activity, fn object ->
       tags = List.wrap(object["tag"] || [])

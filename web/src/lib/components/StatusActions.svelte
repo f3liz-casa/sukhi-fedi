@@ -9,12 +9,14 @@
     status,
     canReply = false,
     onreply,
+    onquote,
     onupdate,
     ondelete
   }: {
     status: Status;
     canReply?: boolean;
     onreply?: (s: Status) => void;
+    onquote?: (s: Status) => void;
     onupdate?: (s: Status) => void;
     ondelete?: (s: Status) => void;
   } = $props();
@@ -36,6 +38,9 @@
   // ⋯ メニュー。低頻度・破壊的な操作（ピン留め・通報・削除）をしまっておく。
   let menuOpen = $state(false);
   let reported = $state(false);
+  // 🔁 を押すと、ブーストと引用の二択をそっと開く。即ブーストではなく、
+  // 一拍おいて選んでもらう（Misskey/Fedibird と同じ作法）。
+  let boostMenuOpen = $state(false);
 
   $effect(() => {
     reactions = status.reactions ?? [];
@@ -139,6 +144,16 @@
     }
   }
 
+  function boostFromMenu() {
+    boostMenuOpen = false;
+    void toggleReblog();
+  }
+
+  function quoteFromMenu() {
+    boostMenuOpen = false;
+    onquote?.(status);
+  }
+
   async function toggleBookmark() {
     const was = bookmarked;
     bookmarked = !was;
@@ -219,8 +234,9 @@
     type="button"
     class="chip"
     class:active={reblogged}
-    onclick={toggleReblog}
-    aria-pressed={reblogged}
+    onclick={() => (boostMenuOpen = !boostMenuOpen)}
+    aria-haspopup="menu"
+    aria-expanded={boostMenuOpen}
     aria-label={$t('status.boost')}
   >
     <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
@@ -255,6 +271,23 @@
     <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
   </button>
 </footer>
+
+{#if boostMenuOpen}
+  <div class="menu" role="menu">
+    <button
+      type="button"
+      class="menu-item"
+      class:active={reblogged}
+      role="menuitem"
+      onclick={boostFromMenu}
+    >
+      <Twemoji emoji="🔁" /> {$t('status.boost')}
+    </button>
+    <button type="button" class="menu-item" role="menuitem" onclick={quoteFromMenu}>
+      <Twemoji emoji="💬" /> {$t('status.quote')}
+    </button>
+  </div>
+{/if}
 
 {#if pickerOpen}
   <div class="picker-anchor">
@@ -364,6 +397,9 @@
   }
   .menu-item:hover:not(:disabled) {
     background: var(--fill-hover);
+  }
+  .menu-item.active {
+    background: var(--fill-active);
   }
   .menu-item.danger:hover:not(:disabled) {
     background: var(--fill-danger);
