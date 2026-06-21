@@ -1,4 +1,4 @@
-.PHONY: preflight check push-static push-styles test-pglite
+.PHONY: preflight check push-static push-styles test-pglite test-e2e
 
 # Run the DB-only integration tests against an embedded PGlite Postgres —
 # no Docker. Extra args pass through to `mix test`:
@@ -6,6 +6,13 @@
 #   make test-pglite ARGS="test/integration/social_test.exs:97"
 test-pglite:
 	@bash scripts/test-pglite.sh $(ARGS)
+
+# Cross-browser smoke for the SPA (Chromium + Firefox) via Playwright.
+# Builds the SPA and runs the flow in web/e2e against `vite preview`.
+#   make test-e2e
+#   make test-e2e ARGS="--project=firefox"
+test-e2e:
+	cd web && npx playwright test $(ARGS)
 
 DEPLOY_HOST ?= 217.142.242.103
 DEPLOY_USER ?= rocky

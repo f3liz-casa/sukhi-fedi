@@ -6,3 +6,7 @@ static/twemoji
 .env
 .env.*
 !.env.example
+# Playwright (cross-browser smoke) artifacts.
+test-results
+playwright-report
+/playwright/.cache
