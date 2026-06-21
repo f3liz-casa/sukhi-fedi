@@ -446,6 +446,64 @@ defmodule SukhiFedi.Addons.Moderation do
     end
   end
 
+  @doc """
+  The bubble allow-list as full rows (domain + when it was added), newest
+  first — for the admin page. `bubble_domains/0` stays the lean string-only
+  read the timeline hot path uses.
+  """
+  @spec list_bubble_instances() :: [BubbleInstance.t()]
+  def list_bubble_instances do
+    Repo.all(from b in BubbleInstance, order_by: [desc: b.id])
+  end
+
+  @doc """
+  Remote hosts we've already talked to — the distinct domains of the remote
+  accounts we've stored. Powers the bubble admin's "pick from a host you
+  already federate with" search: `query` is a light case-insensitive
+  substring match over the domain (blank → the first `:limit` alphabetically).
+  Local accounts (`domain IS NULL`) are excluded by construction.
+  """
+  @spec known_domains(String.t() | nil, keyword()) :: [String.t()]
+  def known_domains(query \\ nil, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 50)
+
+    base =
+      from a in Account,
+        where: not is_nil(a.domain),
+        distinct: true,
+        select: a.domain,
+        order_by: a.domain,
+        limit: ^limit
+
+    query
+    |> trimmed()
+    |> case do
+      nil -> base
+      q -> from a in base, where: ilike(a.domain, ^("%" <> escape_like(q) <> "%"))
+    end
+    |> Repo.all()
+  end
+
+  defp trimmed(s) when is_binary(s) do
+    case String.trim(s) do
+      "" -> nil
+      v -> v
+    end
+  end
+
+  defp trimmed(_), do: nil
+
+  # Neutralise LIKE wildcards in user input so a search for "a_b" or "50%"
+  # is a literal substring, not a pattern. Backslash is the default LIKE
+  # escape character in Postgres — escape it first so we don't double-escape
+  # the backslashes we add for % and _.
+  defp escape_like(s) do
+    s
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
+
   # ── account suspension ───────────────────────────────────────────────────
 
   @spec suspend_account(integer() | binary(), integer(), String.t() | nil) ::

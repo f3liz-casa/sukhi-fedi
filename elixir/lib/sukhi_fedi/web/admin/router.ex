@@ -13,9 +13,10 @@ defmodule SukhiFedi.Web.Admin.Router do
 
   use Plug.Router
 
-  alias SukhiFedi.Web.Admin.{Auth, DashboardController, InstanceBlocksController,
-                              InviteCodesController, LoginController,
-                              ReportsController, SystemController, UsersController}
+  alias SukhiFedi.Web.Admin.{Auth, BubbleInstancesController, DashboardController,
+                              InstanceBlocksController, InviteCodesController,
+                              LoginController, ReportsController, SystemController,
+                              UsersController}
 
   plug :put_secret_key_base
 
@@ -108,6 +109,18 @@ defmodule SukhiFedi.Web.Admin.Router do
 
   post "/instance_blocks/:domain/remove" do
     Auth.with_admin(conn, &InstanceBlocksController.remove(&1, domain))
+  end
+
+  get "/bubble_instances" do
+    Auth.with_admin(conn, &BubbleInstancesController.index/1)
+  end
+
+  post "/bubble_instances" do
+    Auth.with_admin(conn, &BubbleInstancesController.create/1)
+  end
+
+  post "/bubble_instances/:domain/remove" do
+    Auth.with_admin(conn, &BubbleInstancesController.remove(&1, domain))
   end
 
   match _ do
