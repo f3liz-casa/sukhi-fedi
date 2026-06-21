@@ -4,6 +4,7 @@
   import {
     verifyCredentials,
     updateCredentials,
+    setCurrentAccount,
     getBlocks,
     getMutes,
     unblockAccount,
@@ -195,6 +196,9 @@
         header: headerFile
       });
       me = updated;
+      // Refresh the memoised account too, so the nav avatar updates on the
+      // next read instead of lingering on the pre-save image.
+      setCurrentAccount(updated);
       avatarFile = null;
       headerFile = null;
       saved = true;

@@ -40,6 +40,8 @@ async function mockJoinBackend(
   await page.route('**/signup/email/confirm', (route) =>
     route.fulfill(json({ email_proof: 'test-proof' }))
   );
+  // Post-signup the SPA trades the proof for a first-party session cookie.
+  await page.route('**/signup/session', (route) => route.fulfill(json({ ok: true })));
   await page.route('**/api/v1/apps', (route) =>
     route.fulfill(json({ client_id: 'test-client', client_secret: 'test-secret' }))
   );

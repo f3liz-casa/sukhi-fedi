@@ -432,6 +432,20 @@ export async function signup(
   return body as TokenSet;
 }
 
+// 加入直後、署名つき email_proof を first-party セッション(cookie)に替える。
+// メール加入を、パスワードログインと同じ地位に立たせる ─ cookie 専用の
+// 管理面(パスキー・2FA・メール変更)が、二度目のログイン無しで使える。
+// best-effort: ここで失敗しても、その画面に来たときメールの道で入りなおせる。
+export async function establishSignupSession(emailProof: string): Promise<void> {
+  const res = await fetch('/signup/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email_proof: emailProof })
+  });
+  if (!res.ok) throw new Error(`signup_session_failed_${res.status}`);
+}
+
 // 一段目(パスワード or メールコード)が通ったあとのサーバの返事。
 // cookie が立って終わりか、アプリ 2FA の二段目が要るかの二択。
 export type FirstFactorResult = { ok: true } | { second_factor: 'totp'; pending: string };

@@ -16,7 +16,7 @@
   import {
     startLogin,
     signup,
-    loginWithPassword,
+    establishSignupSession,
     loginWithEmailCode,
     requestEmailLoginCode,
     requestSignupEmailCode,
@@ -296,16 +296,14 @@
       throw e;
     }
 
-    // あいことばを設定した人は、その場で一人称の戸も開けておく
-    // (settings の管理面は session cookie 専用)。あいことば無しの
-    // 人はメール確認済みで生まれるので、必要になったらメールの道で
-    // /login を通ればいい。
-    if (payload.password) {
-      try {
-        await loginWithPassword(payload.username, payload.password);
-      } catch {
-        /* best-effort */
-      }
+    // 加入直後に first-party セッション(cookie)を立てる ─ メール加入を、
+    // パスワードログインと同じ地位に。これで settings の管理面(パスキー・
+    // 2FA・メール変更、どれも session cookie 専用)が、二度目のログイン
+    // 無しでそのまま開ける。proof は本人が今証明したメールボックスの通行証。
+    try {
+      await establishSignupSession(proof);
+    } catch {
+      /* best-effort: 失敗しても、その画面に来たときメールの道で入りなおせる */
     }
 
     clearSignupDraft();

@@ -125,6 +125,12 @@ defmodule SukhiFedi.Web.Router do
     SignupEmailController.confirm(conn)
   end
 
+  # Right after the account exists, trade the proof for a first-party
+  # session — email signup gets the same standing as a password login.
+  post "/signup/session" do
+    SignupEmailController.session(conn)
+  end
+
   # ── Password set / change / remove (session_token cookie required) ─────
   # Form in the SPA (`web/src/routes/settings/password`), POST is JSON.
   # Same cookie auth surface as /login (not the OAuth bearer).

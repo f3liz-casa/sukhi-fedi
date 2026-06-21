@@ -484,6 +484,14 @@ export function currentAccountId(): Promise<string | null> {
   return currentAccount().then((a) => a?.id ?? null);
 }
 
+// Overwrite the memoised account. Call after a profile save so the nav
+// avatar (and "is this mine?" checks) pick up the new image on the next
+// read — otherwise the memo keeps serving the pre-save account and the old
+// avatar lingers as an afterimage until a full reload.
+export function setCurrentAccount(account: Account): void {
+  mePromise = Promise.resolve(account);
+}
+
 export type CredentialsUpdate = {
   display_name?: string;
   note?: string;

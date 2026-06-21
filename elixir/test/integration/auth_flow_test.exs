@@ -309,6 +309,49 @@ defmodule SukhiFedi.Integration.AuthFlowTest do
     assert conn.status == 200
   end
 
+  test "signup/session mints a first-party session from the proof (email signup = password login)" do
+    email = "pwsess_#{System.unique_integer([:positive])}@example.test"
+
+    conn = post_json("/signup/email/request", %{email: email})
+    assert conn.status == 200
+    %{body: mail} = Mailer.Capture.last_to(email)
+    [_, code] = Regex.run(~r/\n\s+(\d{6})\n/, mail)
+
+    conn = post_json("/signup/email/confirm", %{email: email, code: code})
+    %{"email_proof" => proof} = body!(conn)
+
+    {:ok, issuer} =
+      LocalAccounts.create_admin("flowinv_#{System.unique_integer([:positive])}", "long-enough-pass")
+
+    {:ok, invite} = SukhiFedi.InviteCodes.issue(issuer.id)
+
+    {:ok, _account} =
+      LocalAccounts.create(%{
+        "username" => "pwsess_#{System.unique_integer([:positive])}",
+        "email_proof" => proof,
+        "invite_code" => invite.code
+      })
+
+    # The same proof now trades for a session cookie — no second login.
+    conn = post_json("/signup/session", %{email_proof: proof})
+    assert conn.status == 200
+    cookie = session_cookie!(conn)
+
+    # And that cookie reaches the cookie-only management surface: setting up a
+    # factor (the passkey/2FA screen) works straight away.
+    conn = get_json("/auth/state", [{"cookie", "session_token=#{cookie}"}])
+    assert %{"email_verified" => true} = body!(conn)
+
+    conn = post_json("/settings/totp/setup", %{}, cookie)
+    assert conn.status == 200
+  end
+
+  test "signup/session refuses a bad proof" do
+    conn = post_json("/signup/session", %{email_proof: "not-a-real-proof"})
+    assert conn.status == 422
+    assert %{"error" => "email_proof_invalid"} = body!(conn)
+  end
+
   test "password lifecycle: set without current, use, remove, email door stays" do
     email = "pwlife_#{System.unique_integer([:positive])}@example.test"
     account = create_passwordless!(email)
