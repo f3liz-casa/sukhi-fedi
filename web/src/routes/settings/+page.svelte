@@ -14,6 +14,7 @@
   import { clearToken, isLoggedIn, loadToken } from '$lib/auth';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
+  import ImageCrop from '$lib/components/ImageCrop.svelte';
   import LangSwitch from '$lib/components/LangSwitch.svelte';
   import { t } from '$lib/i18n';
 
@@ -117,14 +118,41 @@
       .replace(/&#39;/g, "'");
   }
 
+  // 画像を選ぶと、まず切り抜きの窓を開く。アバターは正方形(1:1)、
+  // ヘッダーは横長(3:1、Mastodon の慣習)で切る。窓が返した File を
+  // avatarFile / headerFile に入れれば、プレビューも保存も既存の流れに乗る。
+  let cropTarget = $state<'avatar' | 'header' | null>(null);
+  let cropSource = $state<File | null>(null);
+
   function onAvatar(ev: Event) {
     const input = ev.currentTarget as HTMLInputElement;
-    avatarFile = input.files?.[0] ?? null;
+    const f = input.files?.[0] ?? null;
+    // 同じ画像をもう一度選んでも change が鳴るように、値は空に戻す。
+    input.value = '';
+    if (!f) return;
+    cropSource = f;
+    cropTarget = 'avatar';
   }
 
   function onHeader(ev: Event) {
     const input = ev.currentTarget as HTMLInputElement;
-    headerFile = input.files?.[0] ?? null;
+    const f = input.files?.[0] ?? null;
+    input.value = '';
+    if (!f) return;
+    cropSource = f;
+    cropTarget = 'header';
+  }
+
+  function onCropDone(f: File) {
+    if (cropTarget === 'avatar') avatarFile = f;
+    else if (cropTarget === 'header') headerFile = f;
+    cropTarget = null;
+    cropSource = null;
+  }
+
+  function onCropCancel() {
+    cropTarget = null;
+    cropSource = null;
   }
 
   // ── ブロック / ミュート管理 ──────────────────────────────────────────
@@ -361,6 +389,32 @@
         <button type="submit" class="chip">{$t('settings.adminEnter')}</button>
       </form>
     </section>
+  {/if}
+{/if}
+
+{#if cropTarget && cropSource}
+  {#if cropTarget === 'avatar'}
+    <ImageCrop
+      file={cropSource}
+      aspect={1}
+      outWidth={512}
+      outHeight={512}
+      outMime="image/png"
+      title={$t('crop.avatarTitle')}
+      ondone={onCropDone}
+      oncancel={onCropCancel}
+    />
+  {:else}
+    <ImageCrop
+      file={cropSource}
+      aspect={3}
+      outWidth={1500}
+      outHeight={500}
+      outMime="image/jpeg"
+      title={$t('crop.headerTitle')}
+      ondone={onCropDone}
+      oncancel={onCropCancel}
+    />
   {/if}
 {/if}
 

@@ -167,6 +167,14 @@ export const ja = {
   'settings.emojiCreditParenOpen': '（',
   'settings.emojiCreditParenClose': '）。',
 
+  // ── 画像の切り抜き（crop）────────────────────────────
+  'crop.avatarTitle': 'アイコンを切り抜く',
+  'crop.headerTitle': 'ヘッダ画像を切り抜く',
+  'crop.zoom': '大きさ',
+  'crop.hint': 'ドラッグで位置、つまみで大きさを合わせてね。',
+  'crop.cancel': 'やめる',
+  'crop.confirm': 'これにする',
+
   // ── はじめる（signup）────────────────────────────────
   'signup.title': 'はじめる',
   'signup.tagline': 'メールと、なまえと、招待コードを、おしえてください。',

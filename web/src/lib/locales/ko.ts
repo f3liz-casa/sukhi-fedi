@@ -170,6 +170,14 @@ export const ko: Dict = {
   'settings.emojiCreditParenOpen': ' (',
   'settings.emojiCreditParenClose': ').',
 
+  // ── 이미지 자르기(crop)──────────────────────────────
+  'crop.avatarTitle': '아이콘 자르기',
+  'crop.headerTitle': '헤더 이미지 자르기',
+  'crop.zoom': '크기',
+  'crop.hint': '드래그로 위치, 슬라이더로 크기를 맞춰 주세요.',
+  'crop.cancel': '그만두기',
+  'crop.confirm': '이걸로 할게요',
+
   // ── 시작하기(signup)──────────────────────────────────
   'signup.title': '시작하기',
   'signup.tagline': '메일과 이름과 초대 코드를 알려 주세요.',
