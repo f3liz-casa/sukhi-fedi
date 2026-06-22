@@ -230,17 +230,38 @@
   >
     <Twemoji emoji="⭐" label={$t('status.favourite')} /> {favCount > 0 ? favCount : ''}
   </button>
-  <button
-    type="button"
-    class="chip"
-    class:active={reblogged}
-    onclick={() => (boostMenuOpen = !boostMenuOpen)}
-    aria-haspopup="menu"
-    aria-expanded={boostMenuOpen}
-    aria-label={$t('status.boost')}
-  >
-    <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
-  </button>
+  <!-- 🔁 を押すと、ブースト/引用の小メニューがこのボタンの真下に吊るされる
+       (相対ラッパ + 絶対配置)。行全体の下ではなくボタン直下に出すことで、
+       どのボタンの選択肢かが目で追いやすい。 -->
+  <span class="boost-wrap">
+    <button
+      type="button"
+      class="chip"
+      class:active={reblogged}
+      onclick={() => (boostMenuOpen = !boostMenuOpen)}
+      aria-haspopup="menu"
+      aria-expanded={boostMenuOpen}
+      aria-label={$t('status.boost')}
+    >
+      <Twemoji emoji="🔁" /> {reblogCount > 0 ? reblogCount : ''}
+    </button>
+    {#if boostMenuOpen}
+      <div class="menu boost-menu" role="menu">
+        <button
+          type="button"
+          class="menu-item"
+          class:active={reblogged}
+          role="menuitem"
+          onclick={boostFromMenu}
+        >
+          <Twemoji emoji="🔁" /> {$t('status.boost')}
+        </button>
+        <button type="button" class="menu-item" role="menuitem" onclick={quoteFromMenu}>
+          <Twemoji emoji="💬" /> {$t('status.quote')}
+        </button>
+      </div>
+    {/if}
+  </span>
   {#if canReply}
     <button type="button" class="chip" onclick={() => onreply?.(status)}>
       {$t('status.reply')}
@@ -271,23 +292,6 @@
     <Twemoji emoji={bookmarked ? '🔖' : '🏷'} />
   </button>
 </footer>
-
-{#if boostMenuOpen}
-  <div class="menu" role="menu">
-    <button
-      type="button"
-      class="menu-item"
-      class:active={reblogged}
-      role="menuitem"
-      onclick={boostFromMenu}
-    >
-      <Twemoji emoji="🔁" /> {$t('status.boost')}
-    </button>
-    <button type="button" class="menu-item" role="menuitem" onclick={quoteFromMenu}>
-      <Twemoji emoji="💬" /> {$t('status.quote')}
-    </button>
-  </div>
-{/if}
 
 {#if pickerOpen}
   <div class="picker-anchor">
@@ -371,6 +375,19 @@
   .picker-anchor {
     position: relative;
     margin-top: 0.25rem;
+  }
+
+  /* 🔁 ボタンとその小メニューの入れもの。メニューをこのボタンの
+     真下に絶対配置で吊るすための基準。 */
+  .boost-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .boost-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 10;
   }
 
   .menu {
