@@ -7,7 +7,14 @@
     clearNotifications,
     type Notification
   } from '$lib/api';
-  import { DIRECT_TYPES, markSeen, clearCounts, type Tier } from '$lib/notify';
+  import {
+    DIRECT_TYPES,
+    markAllSeen,
+    clearCounts,
+    seenId,
+    isNewer,
+    type Tier
+  } from '$lib/notify';
   import { isLoggedIn, clearToken } from '$lib/auth';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
@@ -27,11 +34,23 @@
   let error = $state<string | null>(null);
   let initial = $state(true);
 
+  // 入ってきた時点の「見た」位置を層ごとに控える。仕切り棒(新着の境い目)は
+  // これを基準に引く ── このすぐあと markAllSeen で気配は消すが、棒は
+  // 「来たとき何が新しかったか」を指すので、控えた値で描く。
+  let seenEntry = $state<Record<Tier, string | null>>({ direct: null, ambient: null });
+
+  // いま見えている層で、上から何件が新着か(新しい順なので新着は先頭に
+  // 固まる)。0 なら棒は出さない。
+  let newCount = $derived(items.filter((n) => isNewer(n.id, seenEntry[tier])).length);
+
   onMount(() => {
     if (!isLoggedIn()) {
       goto('/');
       return;
     }
+    seenEntry = { direct: seenId('direct'), ambient: seenId('ambient') };
+    // ベルを開いた = 通知を見に来た。両方の層をそっと既読にして気配を戻す。
+    void markAllSeen();
     void load(true);
   });
 
@@ -55,9 +74,6 @@
       });
       items = reset ? page.items : [...items, ...page.items];
       nextMaxId = page.nextMaxId;
-      // 見せたところまでが「見た」。開いたタブの分だけ既読が進む —
-      // もう片方のタブの景色は、まだ動かさない。
-      if (reset) markSeen(target, page.items[0]?.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -161,7 +177,7 @@
     </p>
   {/if}
 
-  {#each items as n (n.id)}
+  {#each items as n, i (n.id)}
     <article class="notif">
       <header class="notif-head">
         <a class="notif-who" href={`/@${n.account.acct}`}>
@@ -187,6 +203,11 @@
         <StatusCard status={n.status} />
       {/if}
     </article>
+
+    <!-- 新着の境い目。ここまでが、前に見てから来たぶん。 -->
+    {#if newCount > 0 && i === newCount - 1}
+      <div class="notif-divider" role="separator">{$t('notif.newUpToHere')}</div>
+    {/if}
   {/each}
 
   {#if !initial && loading}
@@ -222,5 +243,22 @@
   }
   .notif-dismiss {
     margin-left: auto;
+  }
+
+  /* 新着の境い目の棒。「──── 新しい通知は、ここまで ────」。 */
+  .notif-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 var(--space-3);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .notif-divider::before,
+  .notif-divider::after {
+    content: '';
+    flex: 1 1 0;
+    height: 1px;
+    background: var(--color-border);
   }
 </style>

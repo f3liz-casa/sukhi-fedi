@@ -12,8 +12,8 @@
 //             誰も見ないことが「景色」の条件だから。
 //
 // 「どこまで見たか」は層ごとに localStorage で覚える(この端末の
-// 景色は、この端末のもの)。通知ページの該当タブを開いたとき
-// markSeen で進む。
+// 景色は、この端末のもの)。通知ページ(ベル)を開いたとき markAllSeen で
+// 両方とも最新まで進める ── 見に来たら気配は消える。
 import { writable } from 'svelte/store';
 import { getNotifications, type Notification, type NotificationType } from './api';
 import { loadToken } from './auth';
@@ -77,10 +77,42 @@ export async function refreshUnseen(): Promise<void> {
   ambientUnseen.set(counts.ambient);
 }
 
-/** 通知ページがタブを見せたとき。そこまでは見た、と覚えて数を戻す。 */
-export function markSeen(tier: Tier, newestId?: string): void {
-  if (newestId) localStorage.setItem(SEEN_KEY[tier], newestId);
-  (tier === 'direct' ? directUnseen : ambientUnseen).set(0);
+/** 仕切り棒のために、いまの「見た」位置を読む(進める前に控える)。 */
+export function seenId(tier: Tier): string | null {
+  return localStorage.getItem(SEEN_KEY[tier]);
+}
+
+/** id が seen より新しいか。seen が無い(初回)ときは新着扱いにしない。 */
+export function isNewer(id: string, seen: string | null): boolean {
+  return seen !== null && newerThan(id, seen);
+}
+
+/**
+ * ベルを開いたとき。反応タブをわざわざ開かなくても、通知を見に来たら
+ * 両方の層を「いまの最新まで見た」にして気配を戻す。最新 id は直近の
+ * 一ページから層ごとに拾う ── refreshUnseen と同じ見方なので、「来て
+ * いないのに、がつく」ズレも起きない。
+ */
+export async function markAllSeen(): Promise<void> {
+  let items: Notification[];
+  try {
+    items = (await getNotifications({ limit: 40 })).items;
+  } catch {
+    // 取れなくても、表示だけはそっと戻す(次の遷移で数えなおす)。
+    directUnseen.set(0);
+    ambientUnseen.set(0);
+    return;
+  }
+
+  const newest: Partial<Record<Tier, string>> = {};
+  for (const n of items) newest[tierOf(n.type)] ??= n.id;
+  for (const tier of ['direct', 'ambient'] as const) {
+    const id = newest[tier];
+    if (id) localStorage.setItem(SEEN_KEY[tier], id);
+  }
+
+  directUnseen.set(0);
+  ambientUnseen.set(0);
 }
 
 /** 「すべて消す」のあと。サーバ側が空なので、両方の数も空に。 */

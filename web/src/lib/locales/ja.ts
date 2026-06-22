@@ -445,6 +445,7 @@ export const ja = {
   'notif.emptyToYou': 'まだ、あなた宛の通知は、ありません。',
   'notif.emptyReactions': 'まだ、反応は、ありません。',
   'notif.dismiss': 'この通知を消す',
+  'notif.newUpToHere': '新しい通知は、ここまで',
   'notif.favourited': 'がお気に入りにしました',
   'notif.reblogged': 'がブーストしました',
   'notif.followed': 'にフォローされました',

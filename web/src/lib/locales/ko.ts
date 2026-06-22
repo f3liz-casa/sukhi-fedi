@@ -448,6 +448,7 @@ export const ko: Dict = {
   'notif.emptyToYou': '아직 나에게 온 알림은 없어요.',
   'notif.emptyReactions': '아직 반응은 없어요.',
   'notif.dismiss': '이 알림 지우기',
+  'notif.newUpToHere': '새 알림은 여기까지',
   'notif.favourited': '님이 즐겨찾기에 담았어요',
   'notif.reblogged': '님이 부스트했어요',
   'notif.followed': '님이 팔로우했어요',
