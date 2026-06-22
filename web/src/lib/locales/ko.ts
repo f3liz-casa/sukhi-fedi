@@ -8,6 +8,7 @@ export const ko: Dict = {
   // ── 공통 ─────────────────────────────────────────────
   'common.loading': '읽고 있어요…',
   'common.loadMore': '더 보기',
+  'common.reconnecting': '연결을 기다리고 있어요…',
   'common.backToTimeline': '타임라인으로 돌아가기',
   'common.backToTop': '처음으로 돌아가기',
   'common.sending': '보내고 있어요…',

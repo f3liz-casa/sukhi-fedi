@@ -98,8 +98,35 @@ export function clearCounts(): void {
 
 let streamAbort: AbortController | null = null;
 
+// 切れたあとの待ち時間。最初は短く、繰り返し失敗するほど伸ばし、
+// つながった瞬間にまた短く戻す ── reboot のときは数秒で戻り、本当に
+// 落ちているときだけ間隔があく。
+const BASE_BACKOFF = 1_000;
+const MAX_BACKOFF = 30_000;
+
+// 「いますぐ繋ぎ直して」の合図。オンライン復帰やタブ復帰のとき、
+// バックオフの待ちを途中で起こすために使う。
+const wake = new EventTarget();
+let wakeWired = false;
+
+function pokeReconnect(): void {
+  wake.dispatchEvent(new Event('wake'));
+}
+
+function wireWake(): void {
+  if (wakeWired || typeof window === 'undefined') return;
+  wakeWired = true;
+  // オフライン→オンラインに戻った瞬間。
+  window.addEventListener('online', pokeReconnect);
+  // 寝ていたタブに戻ってきた瞬間 ── 裏にいる間に切れていることが多い。
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) pokeReconnect();
+  });
+}
+
 export function startStream(): void {
   if (streamAbort) return;
+  wireWake();
   const ac = new AbortController();
   streamAbort = ac;
   void run(ac);
@@ -111,6 +138,8 @@ export function stopStream(): void {
 }
 
 async function run(ac: AbortController): Promise<void> {
+  let backoff = BASE_BACKOFF;
+
   while (!ac.signal.aborted) {
     const t = loadToken();
     if (!t) break;
@@ -127,12 +156,22 @@ async function run(ac: AbortController): Promise<void> {
       // 通常リクエスト側が気づいて片づける。
       if (res.status === 401) break;
       if (!res.ok || !res.body) throw new Error(`stream_${res.status}`);
+
+      // つながった。待ち時間を最短に戻し、切れている間に来たぶんを
+      // 数えなおす ── live の増分は切断中は届かないので、ここで
+      // サーバの真値に合わせる(取りこぼしの回収)。
+      backoff = BASE_BACKOFF;
+      void refreshUnseen();
+
       await readEvents(res.body, ac.signal);
     } catch {
       // 切れたら下でひと呼吸おいて、つなぎなおす。
     }
 
-    await sleep(30_000, ac.signal);
+    if (ac.signal.aborted) break;
+    // ひと呼吸。online/タブ復帰の合図が来たら待たずに起きる。
+    await sleep(backoff, ac.signal);
+    backoff = Math.min(backoff * 2, MAX_BACKOFF);
   }
 
   // break で出たとき(token 切れなど)、死んだ controller を握った
@@ -182,17 +221,20 @@ function onEvent(event: string, data: string): void {
   }
 }
 
+// タイマー満了・abort・「いますぐ繋ぎ直して」のどれかで起きる待ち。
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
-    const id = setTimeout(resolve, ms);
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(id);
-        resolve();
-      },
-      { once: true }
-    );
+
+    const done = () => {
+      clearTimeout(id);
+      signal.removeEventListener('abort', done);
+      wake.removeEventListener('wake', done);
+      resolve();
+    };
+
+    const id = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+    wake.addEventListener('wake', done, { once: true });
   });
 }

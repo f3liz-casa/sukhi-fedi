@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { fetchTimeline, type Status, type TimelineKind } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { autoRetry, isConnectivityError } from '$lib/connection';
   import { composeRequest } from '$lib/compose';
   import StatusCard from '$lib/components/Status.svelte';
   import Composer from '$lib/components/Composer.svelte';
@@ -77,6 +78,10 @@
   let nextMaxId = $state<string | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  // 「繋がらなくて失敗した」状態。エラー文ではなく静かな待ち表示を出し、
+  // つながりが戻ったら自動で読み直す(retry が裏で叩いている)。
+  let offline = $state(false);
+  let retry: ReturnType<typeof autoRetry> | null = null;
   let initial = $state(true);
 
   // 次のページを裏で先に取っておく置き場。クリックを待たずに用意して
@@ -96,7 +101,9 @@
       goto('/');
       return;
     }
+    retry = autoRetry(() => load(true));
     void load(true);
+    return () => retry?.stop();
   });
 
   // いまのタブ・フィルターでの 1 ページ取得。load と先読みで共有する。
@@ -116,6 +123,7 @@
     error = null;
 
     if (reset) {
+      offline = false;
       items = [];
       nextMaxId = null;
       prefetched = null;
@@ -127,6 +135,7 @@
       // 0 件が返ったら、Link が次を匂わせていても終わり扱いにする。
       nextMaxId = page.items.length === 0 ? null : page.nextMaxId;
       if (nextMaxId) void prefetchNext(nextMaxId);
+      retry?.ok();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -134,7 +143,15 @@
         goto('/');
         return;
       }
-      error = $t('common.deliverFailedRetry');
+      // 本体の読み込みが「繋がらなくて」失敗したときは、エラー文ではなく
+      // 静かな待ち表示にして、戻ったら自動で読み直す。それ以外(本当の
+      // エラー / もっと読むの失敗)は従来どおり一言だす。
+      if (reset && isConnectivityError(e)) {
+        offline = true;
+        retry?.fail();
+      } else {
+        error = $t('common.deliverFailedRetry');
+      }
     } finally {
       loading = false;
       initial = false;
@@ -272,7 +289,9 @@
 {/if}
 
 <section class="timeline">
-  {#if error}
+  {#if offline && items.length === 0}
+    <p class="loading">{$t('common.reconnecting')}</p>
+  {:else if error}
     <p class="error">{error}</p>
   {:else if initial && loading}
     <p class="loading">{$t('common.loading')}</p>

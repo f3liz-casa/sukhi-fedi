@@ -5,6 +5,7 @@ export const ja = {
   // ── 共有 ─────────────────────────────────────────────
   'common.loading': '読んでいます…',
   'common.loadMore': 'もっと読む',
+  'common.reconnecting': 'つながりを待っています…',
   'common.backToTimeline': 'タイムラインへ戻る',
   'common.backToTop': 'トップにもどる',
   'common.sending': '送っています…',
