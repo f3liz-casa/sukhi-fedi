@@ -17,6 +17,7 @@
     type Status
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import StatusCard from '$lib/components/Status.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import FollowButton from '$lib/components/FollowButton.svelte';
@@ -32,9 +33,7 @@
   let account = $state<Account | null>(null);
   let me = $state<Account | null>(null);
   let rel = $state<Relationship | null>(null);
-  let items = $state<Status[]>([]);
   let pinnedItems = $state<Status[]>([]);
-  let nextMaxId = $state<string | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let initial = $state(true);
@@ -42,15 +41,22 @@
   // 記事（Article）を持つ人にだけ、プロフィールに「記事」タブを出す。
   // 読み込み時に一度だけ記事を引いて、あればタブを立てる。
   let tab = $state<'posts' | 'articles'>('posts');
-  let articleItems = $state<Status[]>([]);
-  let articleNextMaxId = $state<string | null>(null);
-  let hasArticles = $derived(articleItems.length > 0);
 
   // 投稿タブの表示フィルター。「画像・メディアのみ」を入れると only_media で
   // 読み直し、そのとき「写真」を選ぶとサムネの壁(MediaGrid)に切り替わる。
   // viewMode は描き分けるだけなので読み直さない。
   let onlyMedia = $state(false);
   let viewMode = $state<'list' | 'photo'>('list');
+
+  // 投稿と記事、それぞれの先読みページャ。closure は今の account / onlyMedia
+  // を見る(フィルタ変更や別ユーザは reset で入れ替わる)。
+  const postsPager = createPager<Status>((maxId) =>
+    getAccountStatuses(account!.id, { maxId, onlyMedia })
+  );
+  const articlesPager = createPager<Status>((maxId) =>
+    getAccountStatuses(account!.id, { maxId, articles: true })
+  );
+  let hasArticles = $derived(articlesPager.items.length > 0);
 
   let acct = $derived($page.params.acct ?? '');
   let isSelf = $derived(!!account && !!me && me.id === account.id);
@@ -169,17 +175,13 @@
         }
       }
       const empty = { items: [] as Status[], nextMaxId: null };
-      const [page1, pins, articles] = await Promise.all([
-        getAccountStatuses(account.id, { onlyMedia }),
-        // ピン留めは featured collection。取れなくてもプロフィール本体は出す。
-        getAccountStatuses(account.id, { pinned: true }).catch(() => empty),
-        // 記事タブの種。あればタブを出す。無ければ静かに空のまま。
-        getAccountStatuses(account.id, { articles: true }).catch(() => empty)
+      // 投稿・記事・ピン留めを一度に。記事とピンは取れなくてもプロフィール
+      // 本体は出す(投稿の失敗だけは下の catch でエラーにする)。
+      const [, , pins] = await Promise.all([
+        postsPager.reset(),
+        articlesPager.reset().catch(() => {}),
+        getAccountStatuses(account.id, { pinned: true }).catch(() => empty)
       ]);
-      items = page1.items;
-      nextMaxId = page1.nextMaxId;
-      articleItems = articles.items;
-      articleNextMaxId = articles.nextMaxId;
       // featured 由来＝定義上ピン留め済み。サーバの viewer flag を待たず
       // フラグを立て、メニューが「外す」を出せるようにする。
       pinnedItems = pins.items.map((s) => ({ ...s, pinned: true }));
@@ -205,9 +207,7 @@
     if (!account || loading) return;
     loading = true;
     try {
-      const p = await getAccountStatuses(account.id, { maxId: nextMaxId, onlyMedia });
-      items = [...items, ...p.items];
-      nextMaxId = p.nextMaxId;
+      await postsPager.more();
     } catch {
       // 続きが取れなかったら静かに止める。
     } finally {
@@ -220,9 +220,7 @@
     if (!account || loading) return;
     loading = true;
     try {
-      const p = await getAccountStatuses(account.id, { onlyMedia });
-      items = p.items;
-      nextMaxId = p.nextMaxId;
+      await postsPager.reset();
     } catch {
       // 取れなければ静かに、いまの一覧のまま。
     } finally {
@@ -234,9 +232,7 @@
     if (!account || loading) return;
     loading = true;
     try {
-      const p = await getAccountStatuses(account.id, { articles: true, maxId: articleNextMaxId });
-      articleItems = [...articleItems, ...p.items];
-      articleNextMaxId = p.nextMaxId;
+      await articlesPager.more();
     } catch {
       // 同上、静かに止める。
     } finally {
@@ -382,17 +378,18 @@
 
   {#if tab === 'articles'}
     <section class="timeline">
-      {#each articleItems as s (s.id)}
+      {#each articlesPager.items as s (s.id)}
         <StatusCard
           status={s}
           canReply
           onreply={onReply}
           onquote={onQuote}
-          ondelete={(d) => (articleItems = articleItems.filter((it) => it.id !== d.id))}
+          ondelete={(d) =>
+            (articlesPager.items = articlesPager.items.filter((it) => it.id !== d.id))}
         />
       {/each}
 
-      {#if articleNextMaxId && !loading}
+      {#if articlesPager.hasMore && !loading && !articlesPager.revealing}
         <button class="load-more" onclick={loadMoreArticles}>{$t('common.loadMore')}</button>
       {/if}
     </section>
@@ -405,17 +402,17 @@
       <!-- 写真モード: メディアを持つ投稿をサムネの壁で。ピン留めは一覧の作法
            なのでここでは出さない。 -->
       <section class="timeline">
-        {#if items.length === 0 && !loading}
+        {#if postsPager.items.length === 0 && !loading}
           <p class="prose-small">{$t('profile.empty')}</p>
         {/if}
 
-        <MediaGrid {items} />
+        <MediaGrid items={postsPager.items} />
 
-        {#if !initial && loading}
+        {#if !initial && (loading || postsPager.revealing)}
           <p class="loading">{$t('common.loading')}</p>
         {/if}
 
-        {#if nextMaxId && !loading}
+        {#if postsPager.hasMore && !loading && !postsPager.revealing}
           <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
         {/if}
       </section>
@@ -437,25 +434,25 @@
       {/if}
 
       <section class="timeline">
-        {#if items.length === 0 && !loading}
+        {#if postsPager.items.length === 0 && !loading}
           <p class="prose-small">{$t('profile.empty')}</p>
         {/if}
 
-        {#each items as s (s.id)}
+        {#each postsPager.items as s (s.id)}
           <StatusCard
             status={s}
             canReply
             onreply={onReply}
             onquote={onQuote}
-            ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
+            ondelete={(d) => (postsPager.items = postsPager.items.filter((it) => it.id !== d.id))}
           />
         {/each}
 
-        {#if !initial && loading}
+        {#if !initial && (loading || postsPager.revealing)}
           <p class="loading">{$t('common.loading')}</p>
         {/if}
 
-        {#if nextMaxId && !loading}
+        {#if postsPager.hasMore && !loading && !postsPager.revealing}
           <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
         {/if}
       </section>

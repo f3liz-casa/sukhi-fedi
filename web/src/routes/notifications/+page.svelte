@@ -16,6 +16,7 @@
     type Tier
   } from '$lib/notify';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
@@ -28,8 +29,16 @@
   //              だけ中身が見える。
   let tier = $state<Tier>('direct');
 
-  let items = $state<Notification[]>([]);
-  let nextMaxId = $state<string | null>(null);
+  // fetchPage は今の tier を見て types/exclude を切り替える。タブを変える
+  // たびに reset するので、先読みが古い tier のままになることはない
+  // (cursor が合わなくなって捨てられる)。
+  const pager = createPager<Notification>((maxId) =>
+    getNotifications({
+      maxId,
+      types: tier === 'direct' ? DIRECT_TYPES : undefined,
+      excludeTypes: tier === 'ambient' ? DIRECT_TYPES : undefined
+    })
+  );
   let loading = $state(false);
   let error = $state<string | null>(null);
   let initial = $state(true);
@@ -41,7 +50,7 @@
 
   // いま見えている層で、上から何件が新着か(新しい順なので新着は先頭に
   // 固まる)。0 なら棒は出さない。
-  let newCount = $derived(items.filter((n) => isNewer(n.id, seenEntry[tier])).length);
+  let newCount = $derived(pager.items.filter((n) => isNewer(n.id, seenEntry[tier])).length);
 
   onMount(() => {
     if (!isLoggedIn()) {
@@ -56,24 +65,10 @@
 
   async function load(reset: boolean) {
     if (loading) return;
-    // 読んでいる途中でタブが切り替わっても、この一回はこのタブの分。
-    const target = tier;
     loading = true;
     error = null;
-
-    if (reset) {
-      items = [];
-      nextMaxId = null;
-    }
-
     try {
-      const page = await getNotifications({
-        maxId: reset ? null : nextMaxId,
-        types: target === 'direct' ? DIRECT_TYPES : undefined,
-        excludeTypes: target === 'ambient' ? DIRECT_TYPES : undefined
-      });
-      items = reset ? page.items : [...items, ...page.items];
-      nextMaxId = page.nextMaxId;
+      await (reset ? pager.reset() : pager.more());
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -98,18 +93,18 @@
   async function dismiss(n: Notification) {
     try {
       await dismissNotification(n.id);
-      items = items.filter((x) => x.id !== n.id);
+      pager.items = pager.items.filter((x) => x.id !== n.id);
     } catch {
       // そっとしておく。
     }
   }
 
   async function clearAll() {
-    if (items.length === 0) return;
+    if (pager.items.length === 0) return;
     if (!confirm($t('notif.confirmClear'))) return;
     try {
       await clearNotifications();
-      items = [];
+      pager.items = [];
       // サーバ側は両方のタブとも空になったので、ヘッダーの数も空に。
       clearCounts();
     } catch {
@@ -146,7 +141,7 @@
 
 <header class="timeline page-head">
   <h1>{$t('notif.title')}</h1>
-  {#if items.length > 0}
+  {#if pager.items.length > 0}
     <span class="page-nav">
       <button class="chip" onclick={clearAll}>{$t('notif.clearAll')}</button>
     </span>
@@ -171,13 +166,13 @@
     <p class="error">{error}</p>
   {:else if initial && loading}
     <p class="loading">{$t('common.loading')}</p>
-  {:else if items.length === 0 && !loading}
+  {:else if pager.items.length === 0 && !loading}
     <p class="prose-small">
       {tier === 'direct' ? $t('notif.emptyToYou') : $t('notif.emptyReactions')}
     </p>
   {/if}
 
-  {#each items as n, i (n.id)}
+  {#each pager.items as n, i (n.id)}
     <article class="notif">
       <header class="notif-head">
         <a class="notif-who" href={`/@${n.account.acct}`}>
@@ -210,11 +205,11 @@
     {/if}
   {/each}
 
-  {#if !initial && loading}
+  {#if !initial && (loading || pager.revealing)}
     <p class="loading">{$t('common.loading')}</p>
   {/if}
 
-  {#if nextMaxId && !loading}
+  {#if pager.hasMore && !loading && !pager.revealing}
     <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>

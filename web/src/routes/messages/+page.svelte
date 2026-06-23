@@ -7,14 +7,14 @@
     type Conversation
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import { renderEmojis } from '$lib/emoji';
   import { phrase } from '$lib/phrase';
   import StatusCard from '$lib/components/Status.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import { t } from '$lib/i18n';
 
-  let items = $state<Conversation[]>([]);
-  let nextMaxId = $state<string | null>(null);
+  const pager = createPager<Conversation>((maxId) => getConversations({ maxId }));
   let loading = $state(false);
   let error = $state<string | null>(null);
   let initial = $state(true);
@@ -31,16 +31,8 @@
     if (loading) return;
     loading = true;
     error = null;
-
-    if (reset) {
-      items = [];
-      nextMaxId = null;
-    }
-
     try {
-      const page = await getConversations({ maxId: reset ? null : nextMaxId });
-      items = reset ? page.items : [...items, ...page.items];
-      nextMaxId = page.nextMaxId;
+      await (reset ? pager.reset() : pager.more());
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -63,7 +55,7 @@
     if (c.unread) {
       try {
         await markConversationRead(c.id);
-        items = items.map((x) => (x.id === c.id ? { ...x, unread: false } : x));
+        pager.items = pager.items.map((x) => (x.id === c.id ? { ...x, unread: false } : x));
       } catch {
         // 既読の同期失敗はそっとしておく。
       }
@@ -87,13 +79,13 @@
     <p class="error">{error}</p>
   {:else if initial && loading}
     <p class="loading">{$t('common.loading')}</p>
-  {:else if items.length === 0 && !loading}
+  {:else if pager.items.length === 0 && !loading}
     <p class="prose-small">
       {$t('messages.empty')}
     </p>
   {/if}
 
-  {#each items as c (c.id)}
+  {#each pager.items as c (c.id)}
     <article class="conversation" class:unread={c.unread}>
       <header class="conversation-with">
         <span class="conversation-people">
@@ -117,11 +109,11 @@
     </article>
   {/each}
 
-  {#if !initial && loading}
+  {#if !initial && (loading || pager.revealing)}
     <p class="loading">{$t('common.loading')}</p>
   {/if}
 
-  {#if nextMaxId && !loading}
+  {#if pager.hasMore && !loading && !pager.revealing}
     <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>

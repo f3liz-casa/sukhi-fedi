@@ -4,14 +4,15 @@
   import { goto } from '$app/navigation';
   import { fetchTimeline, type Status } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import StatusCard from '$lib/components/Status.svelte';
   import { t } from '$lib/i18n';
 
   // ルートパラメータ。本文中のハッシュタグ（rel="tag"）はここに飛んでくる。
   let tag = $derived(decodeURIComponent($page.params.tag ?? ''));
 
-  let items = $state<Status[]>([]);
-  let nextMaxId = $state<string | null>(null);
+  // fetchPage は今の tag を見る。タグが変わると下の $effect が reset する。
+  const pager = createPager<Status>((maxId) => fetchTimeline('tag', { tag, maxId }));
   let loading = $state(false);
   let error = $state<string | null>(null);
   let initial = $state(true);
@@ -33,17 +34,9 @@
     if (loading || !tag) return;
     loading = true;
     error = null;
-
-    if (reset) {
-      items = [];
-      nextMaxId = null;
-      initial = true;
-    }
-
+    if (reset) initial = true;
     try {
-      const p = await fetchTimeline('tag', { tag, maxId: reset ? null : nextMaxId });
-      items = reset ? p.items : [...items, ...p.items];
-      nextMaxId = p.items.length === 0 ? null : p.nextMaxId;
+      await (reset ? pager.reset() : pager.more());
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       if (msg === 'unauthorized') {
@@ -68,22 +61,22 @@
     <p class="error">{error}</p>
   {:else if initial && loading}
     <p class="loading">{$t('common.loading')}</p>
-  {:else if items.length === 0 && !loading}
+  {:else if pager.items.length === 0 && !loading}
     <p class="prose-small">{$t('timeline.emptyTag', { tag })}</p>
   {/if}
 
-  {#each items as s (s.id)}
+  {#each pager.items as s (s.id)}
     <StatusCard
       status={s}
-      ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
+      ondelete={(d) => (pager.items = pager.items.filter((it) => it.id !== d.id))}
     />
   {/each}
 
-  {#if !initial && loading}
+  {#if !initial && (loading || pager.revealing)}
     <p class="loading">{$t('common.loading')}</p>
   {/if}
 
-  {#if nextMaxId && !loading}
+  {#if pager.hasMore && !loading && !pager.revealing}
     <button class="load-more" onclick={() => load(false)}>{$t('common.loadMore')}</button>
   {/if}
 </section>

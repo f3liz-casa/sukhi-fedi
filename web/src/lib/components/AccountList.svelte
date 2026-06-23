@@ -7,6 +7,7 @@
     type Relationship
   } from '$lib/api';
   import { clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import { loadAccountList, type AccountKind } from '$lib/relations';
   import AccountRow from './AccountRow.svelte';
   import { t } from '$lib/i18n';
@@ -14,13 +15,23 @@
   let { acct, kind }: { acct: string; kind: AccountKind } = $props();
 
   let owner = $state<Account | null>(null);
-  let items = $state<Account[]>([]);
   let relations = $state(new Map<string, Relationship>());
   let meId = $state<string | null>(null);
-  let nextMaxId = $state<string | null>(null);
   let loading = $state(false);
   let initial = $state(true);
   let error = $state<string | null>(null);
+
+  // 一覧と一緒に届く relations / meId は、取得のたびに取り込んでから page を
+  // 返す。先頭から読み直すとき(maxId なし)は relations も入れ替え、続きの
+  // ときは重ねる。
+  const pager = createPager<Account>(async (maxId) => {
+    const r = await loadAccountList(kind, owner!.id, maxId ? { maxId } : undefined);
+    const next = maxId === null ? new Map<string, Relationship>() : new Map(relations);
+    for (const [k, v] of r.relations) next.set(k, v);
+    relations = next;
+    meId = r.meId;
+    return r.page;
+  });
 
   onMount(() => {
     void start();
@@ -31,11 +42,7 @@
     error = null;
     try {
       owner = await lookupAccount(acct);
-      const r = await loadAccountList(kind, owner.id);
-      items = r.page.items;
-      nextMaxId = r.page.nextMaxId;
-      relations = r.relations;
-      meId = r.meId;
+      await pager.reset();
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg === 'unauthorized') {
@@ -56,10 +63,7 @@
     if (!owner || loading) return;
     loading = true;
     try {
-      const r = await loadAccountList(kind, owner.id, { maxId: nextMaxId });
-      items = [...items, ...r.page.items];
-      nextMaxId = r.page.nextMaxId;
-      for (const [k, v] of r.relations) relations.set(k, v);
+      await pager.more();
     } catch {
       // 静かに止める
     } finally {
@@ -83,22 +87,22 @@
   </header>
 
   <section class="account-list">
-    {#if items.length === 0}
+    {#if pager.items.length === 0}
       <p class="prose-small">{$t('accountList.empty')}</p>
     {/if}
 
-    {#each items as a (a.id)}
+    {#each pager.items as a (a.id)}
       <AccountRow
         account={a}
         relationship={a.id === meId ? null : relations.get(a.id) ?? null}
       />
     {/each}
 
-    {#if !initial && loading}
+    {#if !initial && (loading || pager.revealing)}
       <p class="loading">{$t('common.loading')}</p>
     {/if}
 
-    {#if nextMaxId && !loading}
+    {#if pager.hasMore && !loading && !pager.revealing}
       <button class="load-more" onclick={more}>{$t('common.loadMore')}</button>
     {/if}
   </section>

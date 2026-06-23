@@ -19,6 +19,7 @@
     type Relationship
   } from '$lib/api';
   import { isLoggedIn, clearToken } from '$lib/auth';
+  import { createPager } from '$lib/pager.svelte';
   import StatusCard from '$lib/components/Status.svelte';
   import TimelineFilter from '$lib/components/TimelineFilter.svelte';
   import AccountActionRow from '$lib/components/AccountActionRow.svelte';
@@ -28,8 +29,10 @@
   let id = $derived($page.params.id ?? '');
 
   let list = $state<List | null>(null);
-  let items = $state<Status[]>([]);
-  let nextMaxId = $state<string | null>(null);
+  // タイムライン部分の先読みページャ。closure は今の id / フィルタを見る。
+  const pager = createPager<Status>((maxId) =>
+    fetchListTimeline(id, { maxId, onlyMedia, hideSensitive })
+  );
   let loading = $state(false);
   let initial = $state(true);
   let error = $state<string | null>(null);
@@ -72,9 +75,7 @@
     try {
       list = await getList(id);
       keyword = list.filter_keyword;
-      const p = await fetchListTimeline(id, { onlyMedia, hideSensitive });
-      items = p.items;
-      nextMaxId = p.nextMaxId;
+      await pager.reset();
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg === 'unauthorized') {
@@ -93,9 +94,7 @@
     if (loading) return;
     loading = true;
     try {
-      const p = await fetchListTimeline(id, { maxId: nextMaxId, onlyMedia, hideSensitive });
-      items = [...items, ...p.items];
-      nextMaxId = p.nextMaxId;
+      await pager.more();
     } catch {
       // 続きが取れなかったら静かに止める。
     } finally {
@@ -307,25 +306,25 @@
   <section class="timeline">
     {#if initial && loading}
       <p class="loading">{$t('common.loading')}</p>
-    {:else if items.length === 0 && !loading}
+    {:else if pager.items.length === 0 && !loading}
       <p class="prose-small">
         {$t('listDetail.empty')}
       </p>
     {/if}
 
-    {#each items as s (s.id)}
+    {#each pager.items as s (s.id)}
       <StatusCard
         status={s}
         canReply
-        ondelete={(d) => (items = items.filter((it) => it.id !== d.id))}
+        ondelete={(d) => (pager.items = pager.items.filter((it) => it.id !== d.id))}
       />
     {/each}
 
-    {#if !initial && loading}
+    {#if !initial && (loading || pager.revealing)}
       <p class="loading">{$t('common.loading')}</p>
     {/if}
 
-    {#if nextMaxId && !loading}
+    {#if pager.hasMore && !loading && !pager.revealing}
       <button class="load-more" onclick={loadMore}>{$t('common.loadMore')}</button>
     {/if}
   </section>
